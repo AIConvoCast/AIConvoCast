@@ -35,3 +35,15 @@
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Environment variables
+.env
+
+# Generated files
+*.xlsx
+*.mp3
+
+# Python cache
+__pycache__/
+venv/
+*.pyc

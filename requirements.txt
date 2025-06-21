@@ -1,0 +1,8 @@
+pandas
+gspread
+oauth2client
+requests
+openai
+pydub
+XlsxWriter
+python-dotenv 
