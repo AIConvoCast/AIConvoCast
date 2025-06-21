@@ -1,8 +1,8 @@
 pandas
-gspread
-oauth2client
+gspread>=5.10.0
 requests
 openai
 pydub
 XlsxWriter
-python-dotenv 
+python-dotenv
+google-auth-oauthlib 

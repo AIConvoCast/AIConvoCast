@@ -4,7 +4,6 @@ import gspread
 import requests
 import openai
 from pydub import AudioSegment
-from oauth2client.service_account import ServiceAccountCredentials
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -15,25 +14,56 @@ load_dotenv()
 # -----------------------------------------
 EXCEL_FILENAME = 'ai_podcast_workflow.xlsx'
 EXCEL_BACKUP = 'backup_ai_podcast_workflow.xlsx'
-GOOGLE_CREDS_JSON = 'path/to/your/credentials.json'
+GOOGLE_CREDS_JSON = 'jmio-google-api.json'
 GOOGLE_SHEET_NAME = 'AI Podcast Workflow'
+GOOGLE_DRIVE_FOLDER_ID = '17XAnga8MC1o23rFhiQ7fcrrqDNhz_-oB'  # Folder to create the sheet in
+SHARE_SHEET_WITH_EMAIL = 'ianeoconnell@gmail.com' # <--- CHANGE THIS TO YOUR EMAIL
+
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', 'your-openai-key')
 ELEVENLABS_API_KEY = os.getenv('ELEVENLABS_API_KEY', 'your-elevenlabs-key')
 
 # -----------------------------------------
 # GOOGLE SHEET SUPPORT
 # -----------------------------------------
-def connect_to_google_sheet(sheet_name):
-    credentials = ServiceAccountCredentials.from_json_keyfile_name(GOOGLE_CREDS_JSON, [
+def create_and_setup_google_sheet(gc, sheet_name, folder_id, user_email):
+    """Creates and populates a new Google Sheet with the required structure."""
+    print(f"✨ Creating new Google Sheet '{sheet_name}'...")
+    spreadsheet = gc.create(sheet_name, folder_id=folder_id)
+    spreadsheet.share(user_email, perm_type='user', role='writer')
+
+    # Use the same structure as the Excel template
+    template_dfs = get_template_dataframes()
+
+    for sheet_title, df in template_dfs.items():
+        if sheet_title == "Episode Tracker":
+             ws = spreadsheet.worksheet("Sheet1")
+             ws.update_title(sheet_title)
+        else:
+            ws = spreadsheet.add_worksheet(title=sheet_title, rows=100, cols=20)
+
+        ws.update([df.columns.values.tolist()] + df.values.tolist())
+        print(f"  - Created and formatted sheet: {sheet_title}")
+
+    print(f"✅ Google Sheet created and shared with {user_email}.")
+    return spreadsheet
+
+
+def connect_to_google_sheet():
+    """Connects to Google Sheets using service account credentials."""
+    scopes = [
         'https://spreadsheets.google.com/feeds',
         'https://www.googleapis.com/auth/drive'
-    ])
-    gc = gspread.authorize(credentials)
-    return gc.open(sheet_name)
+    ]
+    return gspread.service_account(filename=GOOGLE_CREDS_JSON, scopes=scopes)
 
 def try_load_google_sheet():
     try:
-        spreadsheet = connect_to_google_sheet(GOOGLE_SHEET_NAME)
+        gc = connect_to_google_sheet()
+        try:
+            spreadsheet = gc.open(GOOGLE_SHEET_NAME)
+        except gspread.exceptions.SpreadsheetNotFound:
+            spreadsheet = create_and_setup_google_sheet(gc, GOOGLE_SHEET_NAME, GOOGLE_DRIVE_FOLDER_ID, SHARE_SHEET_WITH_EMAIL)
+
         return {ws.title: pd.DataFrame(ws.get_all_records()) for ws in spreadsheet.worksheets()}
     except Exception as e:
         print(f"⚠ Google Sheets not accessible: {e}")
@@ -42,7 +72,8 @@ def try_load_google_sheet():
 # -----------------------------------------
 # EXCEL FALLBACK STRUCTURE
 # -----------------------------------------
-def generate_excel_template(file_path):
+def get_template_dataframes():
+    """Returns a dictionary of DataFrames for the template structure."""
     episode_tracker = pd.DataFrame(columns=[
         "Episode ID", "Episode Date", "Type", "Topic Title", "Manual Prompt",
         "Model: Story Selection", "Model: Research", "Model: Script Gen", "Model: Title Desc",
@@ -75,25 +106,37 @@ def generate_excel_template(file_path):
     ]
     settings = pd.DataFrame(settings_data, columns=["Setting Key", "Value"])
 
-    with pd.ExcelWriter(file_path, engine='xlsxwriter') as writer:
-        episode_tracker.to_excel(writer, sheet_name="Episode Tracker", index=False)
-        manual_ideas.to_excel(writer, sheet_name="Manual Episode Ideas", index=False)
-        prompts_used.to_excel(writer, sheet_name="Prompts Used", index=False)
-        settings.to_excel(writer, sheet_name="Settings", index=False)
+    return {
+        "Episode Tracker": episode_tracker,
+        "Manual Episode Ideas": manual_ideas,
+        "Prompts Used": prompts_used,
+        "Settings": settings
+    }
 
+
+def generate_excel_template(file_path):
+    template_dfs = get_template_dataframes()
+    with pd.ExcelWriter(file_path, engine='xlsxwriter') as writer:
+        for sheet_name, df in template_dfs.items():
+            df.to_excel(writer, sheet_name=sheet_name, index=False)
     print(f"✅ Excel template created at: {file_path}")
 
 # -----------------------------------------
 # DATA LOADING FROM FILE OR GOOGLE
 # -----------------------------------------
 def load_workbook():
+    # Google Sheets is now the primary, with automated creation
     data = try_load_google_sheet()
     if data:
         return data
+
+    print("Falling back to local Excel file.")
     if os.path.exists(EXCEL_FILENAME):
         return pd.read_excel(EXCEL_FILENAME, sheet_name=None)
     if os.path.exists(EXCEL_BACKUP):
         return pd.read_excel(EXCEL_BACKUP, sheet_name=None)
+
+    # Generate Excel only if Google Sheets fails and no local file exists
     generate_excel_template(EXCEL_FILENAME)
     return pd.read_excel(EXCEL_FILENAME, sheet_name=None)
 
@@ -179,22 +222,12 @@ def merge_audio(intro_path, main_path, outro_path, final_path):
 if __name__ == '__main__':
     print("🚀 Starting AI Podcast Pipeline")
 
-    # If the workbook doesn't exist, it will be created by load_workbook.
-    # We check for its existence first to determine if this is the initial run.
-    excel_file_path = EXCEL_FILENAME
-    file_existed_before = os.path.exists(excel_file_path)
-
     dfs = load_workbook()
     if not dfs:
         print("❌ Failed to load or create workbook. Please check file permissions or configuration.")
         exit(1)
 
-    # If the file was just created, exit so the user can populate it first.
-    if not file_existed_before:
-        print(f"✅ Excel template created at '{excel_file_path}'.")
-        print("Please populate the 'Episode Tracker' sheet with your ideas and run the script again.")
-        exit(0)
-
+    # The logic to exit on first run is no longer needed with Google Sheets auto-creation
     print("✅ Workbook loaded. Starting episode processing...")
     episode_tracker = dfs.get("Episode Tracker")
     settings = dfs.get("Settings")

@@ -39,6 +39,9 @@ Thumbs.db
 # Environment variables
 .env
 
+# Credentials
+*.json
+
 # Generated files
 *.xlsx
 *.mp3
