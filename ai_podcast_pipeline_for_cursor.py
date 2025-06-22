@@ -38,7 +38,7 @@ def create_and_setup_google_sheet(gc, sheet_name, folder_id, user_email):
     spreadsheet.share(user_email, perm_type='user', role='writer')
 
     template_dfs = get_template_dataframes()
-    sheet_order = ["Workflows", "Outputs", "Requests", "Prompts", "Models", "Workflow Steps"]
+    sheet_order = ["Workflows", "Outputs", "Requests", "Prompts", "Models", "Workflow Steps", "Locations"]
 
     # Rename the initial "Sheet1" and populate it
     ws = spreadsheet.worksheet("Sheet1")
@@ -94,7 +94,15 @@ def get_template_dataframes():
     """Returns a dictionary of DataFrames for the new simplified template structure."""
     workflow = pd.DataFrame([
         [1, "Generate Daily Script", "P1,P2&R1,P3&R2", "gpt-4o"],
-        [2, "Test Daily News", "P1", "gpt-4o"]
+        [2, "Test Daily News", "P1", "gpt-4o"],
+        [3, "Test Daily News", "P1", "gpt-4o-mini"],
+        [4, "Test Daily News", "P1M4", ""],
+        [5, "Test Daily News", "P1M2", ""],
+        [6, "Test Daily News", "P1M2,P2&R1M4", ""],
+        [7, "Test Daily News", "P1M2,P2&R1M4,P3&R2M2", ""],
+        [8, "Test Daily News", "P1M2,P2&R1M4,P3&R2M2,P4&R3M3", ""],
+        [9, "Test Daily News", "P1M2,P2&R1M4,P3&R2M2,P4&R3M3,P5&R4M3", ""],
+        [10, "Test Daily News", "P1M2,P6&R1M2,P3&R2M2,P4&R3M3,P5&R4M3", ""]
     ], columns=["Workflow ID", "Workflow Title", "Workflow Code", "Model Default"])
 
     outputs = pd.DataFrame(columns=[
@@ -163,13 +171,24 @@ def get_template_dataframes():
         "Workflow Steps ID", "Triggered Date", "Workflow ID", "Request ID", "Workflow Steps All", "Workflow Step", "Input", "Output", "Log Messages"
     ])
 
+    locations = pd.DataFrame([
+        [1, "Intro MP3 File", "File", "intro.mp3", "https://drive.google.com/file/d/1Q4DIYnk_E19_-2yqqm4j8ss8XplWXKd_/view?usp=drive_link"],
+        [2, "Outro MP3 File", "File", "outro.mp3", "https://drive.google.com/file/d/1gbSFlbxpmgowth-bmngsSzoN1utT9sL2/view?usp=drive_link"],
+        [3, "Podcast Folder Location", "Folder", "Podcasts/", "https://drive.google.com/drive/folders/1Vk-KziEUAVSIxL2_Sh5nCxySoZc_XBVj?usp=drive_link"],
+        [4, "Eleven Labs Generated Audio", "Folder", "Podcasts/Eleven Labs/", "https://drive.google.com/drive/folders/167wtw8GA9-c6tfcplWy5b5SauL2MAuRR?usp=drive_link"],
+        [5, "Latest MP3 File in Folder", "mp3", "Podcasts/", "https://drive.google.com/drive/folders/1Vk-KziEUAVSIxL2_Sh5nCxySoZc_XBVj?usp=drive_link"],
+        [6, "Latest MP3 File in Folder", "mp3", "Podcasts/Eleven Labs/", "https://drive.google.com/drive/folders/167wtw8GA9-c6tfcplWy5b5SauL2MAuRR?usp=drive_link"],
+        [7, "Scripts Folder Location", "Folder", "Scripts/", "https://drive.google.com/drive/folders/1KTGRQ3lkdTYNwkr_0UmG3bup6joj0oGn?usp=drive_link"]
+    ], columns=["Location ID", "Location Description", "Type", "File Or Folder", "Location"])
+
     return {
         "Workflows": workflow,
         "Outputs": outputs,
         "Requests": requests,
         "Prompts": prompts,
         "Models": models,
-        "Workflow Steps": workflow_steps
+        "Workflow Steps": workflow_steps,
+        "Locations": locations
     }
 
 
@@ -355,6 +374,7 @@ if __name__ == '__main__':
     prompts_ws = spreadsheet.worksheet("Prompts")
     models_ws = spreadsheet.worksheet("Models")
     workflow_steps_ws = spreadsheet.worksheet("Workflow Steps")
+    locations_ws = spreadsheet.worksheet("Locations")
 
     workflow_df = pd.DataFrame(workflow_ws.get_all_records())
     outputs_df = pd.DataFrame(outputs_ws.get_all_records())
@@ -362,6 +382,7 @@ if __name__ == '__main__':
     prompts_df = pd.DataFrame(prompts_ws.get_all_records())
     models_df = pd.DataFrame(models_ws.get_all_records())
     workflow_steps_df = pd.DataFrame(workflow_steps_ws.get_all_records())
+    locations_df = pd.DataFrame(locations_ws.get_all_records()) if locations_ws is not None else pd.DataFrame(columns=["Location ID", "Location Description", "Type", "File Or Folder", "Location"])
 
     logs_ws = None
     try:
@@ -433,6 +454,29 @@ if __name__ == '__main__':
     def get_workflow_default_model(workflow_row):
         return workflow_row['Model Default'] if 'Model Default' in workflow_row else 'gpt-4o'
 
+    # Helper to extract Google Drive folder ID from URL
+    def extract_drive_folder_id(url):
+        match = re.search(r"/folders/([a-zA-Z0-9_-]+)", url)
+        if match:
+            return match.group(1)
+        return None
+
+    # Helper to upload a text file to Google Drive folder and return the file link
+    def upload_text_to_drive(service_account_json, folder_id, filename, text):
+        from googleapiclient.discovery import build
+        from googleapiclient.http import MediaInMemoryUpload
+        from google.oauth2 import service_account
+        creds = service_account.Credentials.from_service_account_file(service_account_json, scopes=["https://www.googleapis.com/auth/drive"])
+        drive_service = build('drive', 'v3', credentials=creds)
+        file_metadata = {
+            'name': filename,
+            'parents': [folder_id],
+            'mimeType': 'text/plain'
+        }
+        media = MediaInMemoryUpload(text.encode('utf-8'), mimetype='text/plain')
+        file = drive_service.files().create(body=file_metadata, media_body=media, fields='id,webViewLink').execute()
+        return file.get('webViewLink')
+
     # Parse workflow code step (e.g. P2&R1M8)
     def parse_step(step, prev_outputs, custom_topic):
         # Find model override (M#)
@@ -451,9 +495,12 @@ if __name__ == '__main__':
                 prompt_id = part[1:]
                 input_text += get_prompt_desc(prompt_id) or ''
             elif part.startswith('R'):
-                resp_idx = int(part[1:]) - 1
-                if 0 <= resp_idx < len(prev_outputs):
-                    input_text += prev_outputs[resp_idx]
+                # Extract only the leading digits after 'R'
+                match = re.match(r'R(\d+)', part)
+                if match:
+                    resp_idx = int(match.group(1)) - 1
+                    if 0 <= resp_idx < len(prev_outputs):
+                        input_text += prev_outputs[resp_idx]
             elif part == 'C':
                 input_text += custom_topic or ''
         return input_text, model_override, model_id_override
@@ -482,6 +529,52 @@ if __name__ == '__main__':
             'Triggered Date': pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')
         }
         for i, step in enumerate(steps):
+            # Check for save-only step (e.g., R4SL7)
+            save_only_match = re.fullmatch(r'R(\d+)SL(\d+)', step)
+            if save_only_match:
+                print(f"  - Step {i+1}: {step} (Save-Only Step)")
+                resp_idx = int(save_only_match.group(1)) - 1
+                location_id = save_only_match.group(2)
+                response_to_save = None
+                log_msg = ''
+                if 0 <= resp_idx < len(prev_outputs):
+                    response_to_save = prev_outputs[resp_idx]
+                    loc_row = locations_df[locations_df['Location ID'].astype(str) == location_id]
+                    if not loc_row.empty:
+                        folder_url = loc_row.iloc[0]['Location']
+                        folder_id = extract_drive_folder_id(folder_url)
+                        if folder_id:
+                            filename = f'workflow_{request_id}_step_{i+1}.txt'
+                            try:
+                                file_link = upload_text_to_drive(GOOGLE_CREDS_JSON, folder_id, filename, response_to_save)
+                                log_msg = f"Saved response to Google Drive: {file_link}"
+                            except Exception as e:
+                                log_msg = f"Failed to save response to Google Drive: {e}"
+                        else:
+                            log_msg = f"Invalid Google Drive folder ID for location {location_id}."
+                    else:
+                        log_msg = f"Location ID {location_id} not found in Locations sheet."
+                else:
+                    log_msg = f"Response index {resp_idx+1} not found in previous outputs."
+                
+                print(f"    > {log_msg}")
+
+                # Always append a workflow step record for save-only steps
+                workflow_steps_records.append([
+                    get_next_workflow_steps_id() + i + 0.1,  # fractional ID to keep order
+                    output_record['Triggered Date'],
+                    workflow_id,
+                    request_id,
+                    workflow_code,
+                    step,
+                    response_to_save if response_to_save is not None else '',
+                    '',  # No new output
+                    log_msg
+                ])
+                # Only append to prev_outputs if response_to_save is defined
+                if response_to_save is not None:
+                    prev_outputs.append(response_to_save)
+                continue  # Skip model call for this step
             # Parse the step for prompt, model override, and model ID override
             input_text, model_override, model_id_override = parse_step(step, prev_outputs, custom_topic)
             if model_override and model_id_override:
@@ -504,18 +597,33 @@ if __name__ == '__main__':
             output_col_out = f'Output {2*i+2}'
             output_record[output_col_in] = input_text
             output_record[output_col_out] = response
-            # Log in Workflow Steps
-            workflow_steps_records.append([
-                get_next_workflow_steps_id() + i,
-                output_record['Triggered Date'],
-                workflow_id,
-                request_id,
-                workflow_code,
-                step,
-                input_text,
-                response,
-                "API Response Successfully Returned" if response else "API Error"
-            ])
+            # Check for SL# pattern in step (e.g., R4SL7)
+            sl_match = re.search(r'SL(\d+)', step)
+            if sl_match:
+                location_id = sl_match.group(1)
+                loc_row = locations_df[locations_df['Location ID'].astype(str) == location_id]
+                if not loc_row.empty:
+                    folder_url = loc_row.iloc[0]['Location']
+                    folder_id = extract_drive_folder_id(folder_url)
+                    if folder_id:
+                        filename = f'workflow_{request_id}_step_{i+1}.txt'
+                        try:
+                            file_link = upload_text_to_drive(GOOGLE_CREDS_JSON, folder_id, filename, response)
+                            log_msg = f"Saved response to Google Drive: {file_link}"
+                        except Exception as e:
+                            log_msg = f"Failed to save response to Google Drive: {e}"
+                        # Add file link or error to Workflow Steps log message
+                        workflow_steps_records.append([
+                            get_next_workflow_steps_id() + i + 0.1,  # fractional ID to keep order
+                            output_record['Triggered Date'],
+                            workflow_id,
+                            request_id,
+                            workflow_code,
+                            step,
+                            input_text,
+                            response,
+                            log_msg
+                        ])
         # Write to Outputs tab
         def to_native(val):
             if hasattr(val, 'item'):
