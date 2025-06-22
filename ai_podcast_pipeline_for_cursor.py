@@ -6,6 +6,7 @@ import openai
 from openai import OpenAI
 from pydub import AudioSegment
 from dotenv import load_dotenv
+import time
 
 # Load environment variables from .env file
 load_dotenv()
@@ -36,15 +37,15 @@ def create_and_setup_google_sheet(gc, sheet_name, folder_id, user_email):
     spreadsheet.share(user_email, perm_type='user', role='writer')
 
     template_dfs = get_template_dataframes()
-    sheet_order = ["Episode Tracker", "Instructions", "Prompts", "Manual Episode Ideas", "Prompts Used", "Settings"]
+    # Define the order of the tabs
+    sheet_order = ["Episode Tracker", "Instructions", "Prompts", "Prompts Used", "Settings"]
 
     # Rename the initial "Sheet1" and populate it
     ws = spreadsheet.worksheet("Sheet1")
     ws.update_title(sheet_order[0])
     df = template_dfs.get(sheet_order[0])
-    if df is not None:
-        ws.update([df.columns.values.tolist()] + df.values.tolist())
-        print(f"  - Created and formatted sheet: {sheet_order[0]}")
+    ws.update([df.columns.values.tolist()] + df.values.tolist())
+    print(f"  - Created and formatted sheet: {sheet_order[0]}")
 
     # Add and populate the remaining sheets in the correct order
     for title in sheet_order[1:]:
@@ -52,8 +53,9 @@ def create_and_setup_google_sheet(gc, sheet_name, folder_id, user_email):
         if df is not None:
             ws = spreadsheet.add_worksheet(title=title, rows=100, cols=20)
             ws.update([df.columns.values.tolist()] + df.values.tolist())
+            # Auto-wrap the text in description columns for readability
             if title in ["Instructions", "Prompts"]:
-                ws.format('C:C', {'wrapStrategy': 'WRAP'}) # Make long text readable
+                ws.format('C:C', {'wrapStrategy': 'WRAP'})
             print(f"  - Created and formatted sheet: {title}")
 
     print(f"✅ Google Sheet created and shared with {user_email}.")
@@ -73,38 +75,15 @@ def try_load_google_sheet():
         gc = connect_to_google_sheet()
         try:
             spreadsheet = gc.open(GOOGLE_SHEET_NAME)
-
-            # --- Retrofit existing sheets with new structure ---
-            existing_worksheets = [ws.title for ws in spreadsheet.worksheets()]
-            template_dfs = get_template_dataframes()
-
-            # Add Instructions sheet if missing
-            if "Instructions" not in existing_worksheets:
-                print("📝 Adding 'Instructions' sheet to existing workbook...")
-                df = template_dfs.get("Instructions")
-                ws = spreadsheet.add_worksheet(title="Instructions", rows=20, cols=5, index=1)
-                ws.update([df.columns.values.tolist()] + df.values.tolist())
-                ws.format('C:C', {'wrapStrategy': 'WRAP'})
-                print("  - 'Instructions' sheet added.")
-
-            # Add Prompts sheet if missing
-            if "Prompts" not in existing_worksheets:
-                print("📝 Adding 'Prompts' sheet to existing workbook...")
-                df = template_dfs.get("Prompts")
-                ws = spreadsheet.add_worksheet(title="Prompts", rows=20, cols=5, index=2)
-                ws.update([df.columns.values.tolist()] + df.values.tolist())
-                ws.format('C:C', {'wrapStrategy': 'WRAP'})
-                print("  - 'Prompts' sheet added.")
-
-            # Add 'Prompt ID' column to 'Episode Tracker' if it's missing
+            # --- Check if sheet has the new structure. If not, archive and create new. ---
             ep_tracker_ws = spreadsheet.worksheet("Episode Tracker")
             headers = ep_tracker_ws.row_values(1)
-            if "Prompt ID" not in headers:
-                print("📝 Adding 'Prompt ID' column to 'Episode Tracker' sheet...")
-                col_index = len(headers) + 1
-                ep_tracker_ws.update_cell(1, col_index, "Prompt ID")
-                print("  - 'Prompt ID' column added.")
-            # --- End retrofit ---
+            if "Prompt 1 ID" not in headers:
+                print("⚠️ Old sheet structure detected. Archiving and creating a new one.")
+                archive_name = f"{GOOGLE_SHEET_NAME} (Archived {int(time.time())})"
+                gc.rename(spreadsheet, archive_name)
+                print(f"  - Old sheet renamed to '{archive_name}'")
+                spreadsheet = create_and_setup_google_sheet(gc, GOOGLE_SHEET_NAME, GOOGLE_DRIVE_FOLDER_ID, SHARE_SHEET_WITH_EMAIL)
 
         except gspread.exceptions.SpreadsheetNotFound:
             spreadsheet = create_and_setup_google_sheet(gc, GOOGLE_SHEET_NAME, GOOGLE_DRIVE_FOLDER_ID, SHARE_SHEET_WITH_EMAIL)
@@ -120,61 +99,52 @@ def try_load_google_sheet():
 def get_template_dataframes():
     """Returns a dictionary of DataFrames for the template structure."""
     episode_tracker = pd.DataFrame(columns=[
-        "Episode ID", "Episode Date", "Type", "Topic Title", "Prompt ID", "Manual Prompt",
-        "Model: Story Selection", "Model: Research", "Model: Script Gen", "Model: Title Desc",
-        "Intro File Name", "Outro File Name",
-        "Story 1 Title", "Story 2 Title", "Story 3 Title",
-        "Research 1", "Research 2", "Research 3",
-        "Script", "Episode Title", "Episode Description",
-        "Audio File URL", "Status", "Error Log"
-    ])
-    manual_ideas = pd.DataFrame(columns=[
-        "ID", "Episode Title (Idea)", "Topic Prompt",
-        "Model: Research", "Model: Script",
-        "Intro File Name", "Outro File Name",
-        "Expanded Research", "Script Generated?", "Final Script", "Episode Ready?"
+        "Episode ID", "Topic", "Status", "Final Audio Path",
+        "Prompt 1 ID", "Response 1",
+        "Prompt 2 ID", "Response 2",
+        "Prompt 3 ID", "Response 3"
     ])
     prompts_used = pd.DataFrame(columns=[
         "Prompt Step", "Model Used", "Prompt Text", "Tokens Used", "Cost (USD)", "Timestamp"
     ])
     instructions_data = [
         [
-            "Workflow", "1. Use the 'Prompts' Tab", "Create and manage your reusable prompts in the 'Prompts' tab. Each prompt needs a unique 'Prompt ID'."
+            "Workflow", "1. Define Prompts", "In the 'Prompts' tab, create reusable prompts. Give each a unique ID."
         ],
         [
-            "", "2. Plan in 'Episode Tracker'", "Add a new episode row. To use a standard prompt, enter its 'Prompt ID' in the 'Prompt ID' column."
+            "", "2. Design an Episode", "In 'Episode Tracker', add a row for a new episode. Give it an ID and a 'Topic'."
         ],
         [
-            "", "3. For One-Off Tasks", "If you have a unique, one-time task, leave 'Prompt ID' blank and write the full prompt in the 'Manual Prompt' column."
+            "", "3. Create a Prompt Chain", "Fill in the 'Prompt 1 ID', 'Prompt 2 ID', etc. to define the sequence of steps for your episode."
         ],
         [
-            "", "4. Run the Script", "Execute the Python script. It will find the right prompt, generate the content, and produce the audio."
+            "", "4. Run the Script", "The script will execute the steps in order. It uses the 'Topic' as input for the first prompt, and the response from step N as input for step N+1."
+        ],
+        [
+            "Audio Generation", "How it Works", "If the title of the LAST prompt in your chain includes the word 'script', the script will automatically use that response to generate the final audio file."
         ]
     ]
     instructions = pd.DataFrame(instructions_data, columns=["Category", "Step", "Description"])
 
     prompts_data = [
         [
-            1, "Daily News",
-            ("Please provide a comprehensive overview of the most important news in AI that occurred in the last 24-48 hours "
-             "and mention dates of when the news items or recent updates occurred to confirm occurrence in the last 24-48 hours. "
-             "AI news can be in relation to AI model releases, Expected tool releases, New enhancements released for AI tools or other "
-             "interesting topics related to AI technology, AI company announcements, models, tool releases, enhancements, etc. "
-             "Please be sure to summarize as many sources as possible and also provide numerous quotes from both company representatives, "
-             "reporters as well as user feedback on social media.")
+            1, "Daily AI News Summary",
+            ("Please provide a comprehensive overview of the most important news in AI that occurred in the last 24-48 hours. "
+             "The topic for today is: ")
         ],
         [
-            2, "Generate All On Appended Topic",
-            ("Generate all details related to the news stories below from the last 24-48 hours. Please make sure to include "
-             "any and all quotes from participants, companies or even social media reactions that have received significant "
-             "engagement. Please also include technical specifications if required. Please ensure complete coverage provided  "
-             "details to ensure comprehensive coverage of story. Stories to retrieve all relevant details on: ")
+            2, "Generate Podcast Script from Summary",
+            ("Based on the news summary below, please write an engaging and informative podcast script. The script should be conversational. "
+             "Start with a hook, introduce the topics, discuss each one in detail, and end with a concluding thought. Here is the summary:\n\n")
+        ],
+        [
+            3, "Generate 5 Podcast Titles from Script",
+            "Based on the following podcast script, generate 5 compelling and SEO-friendly titles for the episode. Here is the script:\n\n"
         ]
     ]
     prompts = pd.DataFrame(prompts_data, columns=["Prompt ID", "Prompt Title", "Prompt Description"])
 
     settings_data = [
-        ["default_model_story_select", "gpt-4o"],
         ["default_model_research", "gpt-4o"],
         ["default_model_script", "gpt-4o"],
         ["default_model_title_desc", "claude-3-haiku"],
@@ -189,7 +159,6 @@ def get_template_dataframes():
 
     return {
         "Episode Tracker": episode_tracker,
-        "Manual Episode Ideas": manual_ideas,
         "Instructions": instructions,
         "Prompts": prompts,
         "Prompts Used": prompts_used,
@@ -323,53 +292,92 @@ if __name__ == '__main__':
         exit(1)
 
     print("✅ Workbook loaded. Starting episode processing...")
-    episode_tracker = dfs.get("Episode Tracker")
-    settings = dfs.get("Settings")
-    prompts_df = dfs.get("Prompts")
-    if prompts_df is not None:
-        prompts_df['Prompt ID'] = prompts_df['Prompt ID'].astype(str) # For reliable matching
+    # It's safer to get fresh copies of the sheets each time we might modify them
+    gc = connect_to_google_sheet()
+    spreadsheet = gc.open(GOOGLE_SHEET_NAME)
+    episode_tracker_ws = spreadsheet.worksheet("Episode Tracker")
+    episode_tracker_df = pd.DataFrame(episode_tracker_ws.get_all_records())
+    prompts_df = pd.DataFrame(spreadsheet.worksheet("Prompts").get_all_records())
+    settings = pd.DataFrame(spreadsheet.worksheet("Settings").get_all_records())
 
-    for _, row in episode_tracker.iterrows():
-        episode_id = row.get("Episode ID", "unknown")
-        prompt_id = str(row.get("Prompt ID", "")).strip()
+    for index, row in episode_tracker_df.iterrows():
+        episode_id = row.get("Episode ID")
+        if not episode_id:
+            continue
 
         print(f"🎙️ Processing Episode: {episode_id}")
+        last_response = row.get("Topic", "") # Start the chain with the topic
+        last_successful_step = 0
 
-        prompt = ""
-        # Priority 1: Use Prompt ID
-        if prompt_id and prompts_df is not None:
-            # Find the prompt in the Prompts DataFrame
-            prompt_row = prompts_df[prompts_df['Prompt ID'] == prompt_id]
-            if not prompt_row.empty:
-                prompt = prompt_row.iloc[0]['Prompt Description']
-                prompt_title = prompt_row.iloc[0]['Prompt Title']
-                print(f"  - Found prompt by ID '{prompt_id}': '{prompt_title}'")
-            else:
-                print(f"  - ⚠ Warning: Prompt ID '{prompt_id}' not found in 'Prompts' tab. Skipping.")
+        # Loop through prompt steps (1, 2, 3...)
+        for i in range(1, 10): # Process up to 9 steps
+            prompt_id_col = f"Prompt {i} ID"
+            response_col = f"Response {i}"
+
+            if prompt_id_col not in row or response_col not in row:
+                # We've reached the end of the defined prompt columns
+                if last_successful_step > 0:
+                    print(f"  ✅ Chain complete for Episode {episode_id}.")
+                break
+
+            prompt_id = str(row.get(prompt_id_col, "")).strip()
+            response = str(row.get(response_col, "")).strip()
+
+            # If this step is already done, move to the next
+            if prompt_id and response:
+                last_response = response # Keep track of the last valid response
+                last_successful_step = i
                 continue
-        # Priority 2: Fallback to Manual Prompt
-        elif row.get("Manual Prompt") and str(row.get("Manual Prompt")).strip():
-            prompt = row.get("Manual Prompt")
-            print("  - Using 'Manual Prompt' from sheet.")
-        # Otherwise, no prompt is available
-        else:
-            print("  - ⚠ Skipping episode: No 'Prompt ID' or 'Manual Prompt' provided.")
-            continue
 
-        model = get_model_for_step(row, "Research", settings)
-        script = call_openai_model(prompt, model)
+            # If there's a prompt but no response, execute it
+            if prompt_id and not response:
+                print(f"  - Executing Step {i} with Prompt ID '{prompt_id}'...")
+                prompt_row = prompts_df[prompts_df['Prompt ID'].astype(str) == prompt_id]
+                if prompt_row.empty:
+                    print(f"    - ⚠ Error: Prompt ID '{prompt_id}' not found in 'Prompts' tab.")
+                    break # Stop processing this episode chain
 
-        if not script:
-            print("  - ⚠ Skipping episode due to script generation failure.")
-            continue
+                prompt_template = prompt_row.iloc[0]['Prompt Description']
+                full_prompt = f"{prompt_template}{last_response}"
 
-        voice_id = settings.loc[settings['Setting Key'] == 'elevenlabs_voice_id', 'Value'].values[0]
-        tts_output = f"{episode_id}_main.mp3"
-        final_output = f"{episode_id}_final.mp3"
+                # Call the model
+                model = get_model_for_step(row, "Research", settings)
+                model_response = call_openai_model(full_prompt, model)
 
-        if generate_voice_audio(script, voice_id, tts_output):
-            intro_path, outro_path = get_intro_outro_paths(row, settings)
-            merge_audio(intro_path, tts_output, outro_path, final_output)
+                if model_response:
+                    # Save response to sheet
+                    # Adding 2 because sheet is 1-indexed and has a header row
+                    episode_tracker_ws.update_cell(index + 2, episode_tracker_df.columns.get_loc(response_col) + 1, model_response)
+                    print(f"    - ✅ Success. Response saved to '{response_col}'.")
+                    last_response = model_response
+                    last_successful_step = i
 
-        print("✅ Episode complete")
+                    # CHECK FOR AUDIO GENERATION
+                    # If this was the last prompt in the chain, check if it was a script
+                    next_prompt_col = f"Prompt {i+1} ID"
+                    is_last_prompt = str(row.get(next_prompt_col, "")).strip() == ""
+                    prompt_title = prompt_row.iloc[0]['Prompt Title'].lower()
+
+                    if is_last_prompt and "script" in prompt_title:
+                        print("  - 🎤 'script' prompt detected as final step. Generating audio...")
+                        intro_path, outro_path = get_intro_outro_paths(row, settings)
+                        voice_id = settings.loc[settings['Setting Key'] == 'elevenlabs_voice_id', 'Value'].values[0]
+                        tts_output = f"{episode_id}_main.mp3"
+                        final_output = f"{episode_id}_final.mp3"
+
+                        if generate_voice_audio(last_response, voice_id, tts_output):
+                             merge_audio(intro_path, tts_output, outro_path, final_output)
+                             episode_tracker_ws.update_cell(index + 2, episode_tracker_df.columns.get_loc("Final Audio Path") + 1, final_output)
+                             episode_tracker_ws.update_cell(index + 2, episode_tracker_df.columns.get_loc("Status") + 1, "Complete")
+                else:
+                    print(f"    - ❌ Failure. Halting chain for Episode {episode_id}.")
+                    episode_tracker_ws.update_cell(index + 2, episode_tracker_df.columns.get_loc("Status") + 1, f"Error on Step {i}")
+                    break # Stop processing this episode chain
+            
+            # If there's no prompt ID, the chain is done
+            elif not prompt_id:
+                if last_successful_step > 0:
+                     print(f"  ✅ Chain complete for Episode {episode_id}.")
+                break
+
         print("---")
