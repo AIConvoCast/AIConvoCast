@@ -113,47 +113,51 @@ def get_template_dataframes():
     ], columns=["Prompt ID", "Prompt Title", "Prompt Description"])
 
     models = pd.DataFrame([
-        [1, "chatgpt-4o-latest", "N"],
-        [2, "codex-mini-latest", "N"],
-        [3, "dall-e-2", "N"],
-        [4, "dall-e-3", "N"],
-        [5, "gpt-3.5-turbo-instruct", "N"],
-        [6, "gpt-4", "N"],
-        [7, "gpt-4.1", "N"],
-        [8, "gpt-4.1-mini", "N"],
-        [9, "gpt-4.1-mini-2025-04-14", "N"],
-        [10, "gpt-4.1-nano", "N"],
-        [11, "gpt-4.1-nano-2025-04-14", "N"],
-        [12, "gpt-4.5-preview", "N"],
-        [13, "gpt-4.5-preview-2025-02-27", "N"],
-        [14, "gpt-4o", "Y"],
-        [15, "gpt-4o-audio-preview", "N"],
-        [16, "gpt-4o-mini", "N"],
-        [17, "gpt-4o-mini-audio-preview", "N"],
-        [18, "gpt-4o-mini-search-preview", "N"],
-        [19, "gpt-4o-mini-search-preview-2025-03-11", "N"],
-        [20, "gpt-4o-mini-transcribe", "N"],
-        [21, "gpt-4o-mini-tts", "N"],
-        [22, "gpt-4o-realtime-preview", "N"],
-        [23, "gpt-4o-search-preview", "N"],
-        [24, "gpt-4o-search-preview-2025-03-11", "N"],
-        [25, "gpt-4o-transcribe", "N"],
-        [26, "gpt-image-1", "N"],
-        [27, "o1", "N"],
-        [28, "o1-mini", "N"],
-        [29, "o1-preview", "N"],
-        [30, "o1-pro", "N"],
-        [31, "o3-mini", "N"],
-        [32, "o3-mini-2025-01-31", "N"],
-        [33, "o4-mini", "N"],
-        [34, "omni-moderation-latest", "N"],
-        [35, "text-embedding-3-large", "N"],
-        [36, "text-embedding-3-small", "N"],
-        [37, "tts-1", "N"],
-        [38, "tts-1-1106", "N"],
-        [39, "tts-1-hd", "N"],
-        [40, "whisper-1", "N"]
-    ], columns=["Model ID", "Model Name", "Model Default"])
+        [1, "gpt-4o", "N", "Y"],
+        [2, "gpt-4o-mini", "N", "Y"],
+        [3, "gpt-4o", "N", "N"],
+        [4, "gpt-4o-mini", "Y", "N"],
+        [5, "gpt-4o-mini-search-preview", "N", "Y"],
+        [6, "gpt-4o-search-preview", "N", "Y"],
+        [7, "chatgpt-4o-latest", "N", "N"],
+        [8, "codex-mini-latest", "N", "N"],
+        [9, "dall-e-2", "N", "N"],
+        [10, "dall-e-3", "N", "N"],
+        [11, "gpt-3.5-turbo-instruct", "N", "N"],
+        [12, "gpt-4", "N", "N"],
+        [13, "gpt-4.1", "N", "N"],
+        [14, "gpt-4.1-mini", "N", "N"],
+        [15, "gpt-4.1-mini-2025-04-14", "N", "N"],
+        [16, "gpt-4.1-nano", "N", "N"],
+        [17, "gpt-4.1-nano-2025-04-14", "N", "N"],
+        [18, "gpt-4.5-preview", "N", "N"],
+        [19, "gpt-4.5-preview-2025-02-27", "N", "N"],
+        [20, "gpt-4o-audio-preview", "N", "N"],
+        [21, "gpt-4o-mini-audio-preview", "N", "N"],
+        [22, "gpt-4o-mini-search-preview", "N", "N"],
+        [23, "gpt-4o-mini-search-preview-2025-03-11", "N", "N"],
+        [24, "gpt-4o-mini-transcribe", "N", "N"],
+        [25, "gpt-4o-mini-tts", "N", "N"],
+        [26, "gpt-4o-realtime-preview", "N", "N"],
+        [27, "gpt-4o-search-preview", "N", "N"],
+        [28, "gpt-4o-search-preview-2025-03-11", "N", "N"],
+        [29, "gpt-4o-transcribe", "N", "N"],
+        [30, "gpt-image-1", "N", "N"],
+        [31, "o1", "N", "N"],
+        [32, "o1-mini", "N", "N"],
+        [33, "o1-preview", "N", "N"],
+        [34, "o1-pro", "N", "N"],
+        [35, "o3-mini", "N", "N"],
+        [36, "o3-mini-2025-01-31", "N", "N"],
+        [37, "o4-mini", "N", "N"],
+        [38, "omni-moderation-latest", "N", "N"],
+        [39, "text-embedding-3-large", "N", "N"],
+        [40, "text-embedding-3-small", "N", "N"],
+        [41, "tts-1", "N", "N"],
+        [42, "tts-1-1106", "N", "N"],
+        [43, "tts-1-hd", "N", "N"],
+        [44, "whisper-1", "N", "N"]
+    ], columns=["Model ID", "Model Name", "Model Default", "Web Search"])
 
     workflow_steps = pd.DataFrame(columns=[
         "Workflow Steps ID", "Triggered Date", "Workflow ID", "Request ID", "Workflow Steps All", "Workflow Step", "Input", "Output", "Log Messages"
@@ -212,29 +216,86 @@ def get_intro_outro_paths(row, settings_df):
 # -----------------------------------------
 # API CALLS
 # -----------------------------------------
-def call_openai_model(prompt, model="gpt-4o", temperature=0.7):
-    """Calls the OpenAI Chat Completion API with the new v1.x syntax."""
+def call_openai_model(prompt, model="gpt-4o", temperature=0.7, web_search=False):
+    """Calls the OpenAI API, using the correct endpoint for web search and model type. Logs all errors and unexpected responses."""
     if not client.api_key:
-        print("❌ OpenAI API key is not configured. Please check your .env file.")
+        msg = "❌ OpenAI API key is not configured. Please check your .env file."
+        log_error(msg)
         return ""
     try:
-        response = client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=temperature
-        )
-        return response.choices[0].message.content.strip()
-    except openai.APIConnectionError as e:
-        print(f"❌ OpenAI API Connection Error: {e.__cause__}")
-        return ""
-    except openai.RateLimitError as e:
-        print(f"❌ OpenAI Rate Limit Exceeded: {e.status_code} {e.response}")
-        return ""
-    except openai.APIStatusError as e:
-        print(f"❌ OpenAI API Status Error: {e.status_code} {e.response}")
-        return ""
+        # Case 1: Chat Completions with always-on search-preview model
+        if web_search and (model.endswith("-search-preview")):
+            response = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                web_search_options={
+                    "user_location": {"type": "approximate", "approximate": {"country": "US"}},
+                    "search_context_size": "high"
+                },
+                temperature=temperature
+            )
+            # Robust error logging for chat completions
+            if hasattr(response, 'error') and response.error:
+                log_error(f"OpenAI ChatCompletions error: {response.error}\nFull response: {response}")
+                return ""
+            if hasattr(response, 'choices') and response.choices:
+                return response.choices[0].message.content.strip()
+            log_error(f"OpenAI ChatCompletions: Unexpected empty or malformed response. Full response: {response}")
+            return ""
+        # Case 2: Responses API with web_search_preview tool (base models)
+        elif web_search:
+            if not hasattr(client, 'responses'):
+                msg = "❌ Web search requested but your OpenAI Python package does not support responses.create. Please upgrade openai to the latest version."
+                log_error(msg)
+                return "[Web search not supported by your OpenAI Python package version]"
+            response = client.responses.create(
+                model=model,
+                tools=[{"type": "web_search_preview",
+                        "search_context_size": "high",
+                        "user_location": {"type": "approximate", "country": "US"}}],
+                input=[{"role": "user",
+                        "content": [{"type": "input_text", "text": prompt}]}],
+                text={"format": {"type": "text"}}
+            )
+            # Robust error logging for responses.create
+            if hasattr(response, 'error') and response.error:
+                log_error(f"OpenAI Responses error: {response.error}\nFull response: {response}")
+                return ""
+            try:
+                for msg in getattr(response, 'output', []):
+                    # Handle both dict and object
+                    role = getattr(msg, 'role', None) or (msg.get('role') if isinstance(msg, dict) else None)
+                    if role == "assistant":
+                        content_list = getattr(msg, 'content', None) or (msg.get('content') if isinstance(msg, dict) else None)
+                        if content_list:
+                            for content in content_list:
+                                # Handle both object and dict
+                                ctype = getattr(content, 'type', None) or (content.get('type') if isinstance(content, dict) else None)
+                                text = getattr(content, 'text', None) or (content.get('text') if isinstance(content, dict) else None)
+                                if ctype == "output_text" and text:
+                                    return text.strip()
+                log_error(f"OpenAI Responses: Unexpected empty or malformed response. Full response: {response}")
+                return ""
+            except Exception as e:
+                log_error(f"Error parsing OpenAI web search response: {e}\nRaw response: {response}")
+                return ""
+        # Case 3: Standard Chat Completions
+        else:
+            response = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=temperature
+            )
+            # Robust error logging for chat completions
+            if hasattr(response, 'error') and response.error:
+                log_error(f"OpenAI ChatCompletions error: {response.error}\nFull response: {response}")
+                return ""
+            if hasattr(response, 'choices') and response.choices:
+                return response.choices[0].message.content.strip()
+            log_error(f"OpenAI ChatCompletions: Unexpected empty or malformed response. Full response: {response}")
+            return ""
     except Exception as e:
-        print(f"❌ An unexpected OpenAI error occurred: {e}")
+        log_error(f"OpenAI error: {e}")
         return ""
 
 def generate_voice_audio(text, voice_id, output_path):
@@ -302,6 +363,25 @@ if __name__ == '__main__':
     models_df = pd.DataFrame(models_ws.get_all_records())
     workflow_steps_df = pd.DataFrame(workflow_steps_ws.get_all_records())
 
+    logs_ws = None
+    try:
+        logs_ws = spreadsheet.worksheet("Logs")
+    except Exception:
+        pass  # If the Logs tab doesn't exist, skip logging
+
+    logs_df = pd.DataFrame(logs_ws.get_all_records()) if logs_ws else pd.DataFrame(columns=["Log ID", "Log Timestamp", "Log Message"])
+
+    def get_next_log_id():
+        if logs_df.empty or 'Log ID' not in logs_df.columns:
+            return 1
+        return int(logs_df['Log ID'].astype(int).max()) + 1
+
+    def log_error(message):
+        if logs_ws is not None:
+            log_row = [get_next_log_id(), pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S'), str(message)]
+            logs_ws.append_row(log_row)
+        print(f"[LOGGED ERROR] {message}")
+
     # Helper to get next Output ID
     def get_next_output_id():
         if outputs_df.empty:
@@ -321,9 +401,26 @@ if __name__ == '__main__':
             return row.iloc[0]['Model Name']
         return None
 
-    # Helper to get default model for workflow
-    def get_workflow_default_model(workflow_row):
-        return workflow_row['Model Default'] if 'Model Default' in workflow_row else 'gpt-4o'
+    # Helper to get Model ID by model name (returns the first match)
+    def get_model_id_by_name(model_name):
+        row = models_df[models_df['Model Name'] == model_name]
+        if not row.empty:
+            return str(row.iloc[0]['Model ID'])
+        return None
+
+    # Helper to get web search flag for a model by Model ID
+    def get_model_web_search_by_id(model_id):
+        row = models_df[models_df['Model ID'].astype(str) == str(model_id)]
+        if not row.empty:
+            return str(row.iloc[0].get('Web Search', 'N')).strip().upper() == 'Y'
+        return False
+
+    # Helper to get web search flag for a model by name (first match)
+    def get_model_web_search_by_name(model_name):
+        row = models_df[models_df['Model Name'] == model_name]
+        if not row.empty:
+            return str(row.iloc[0].get('Web Search', 'N')).strip().upper() == 'Y'
+        return False
 
     # Helper to get prompt description by Prompt ID
     def get_prompt_desc(prompt_id):
@@ -332,13 +429,19 @@ if __name__ == '__main__':
             return row.iloc[0]['Prompt Description']
         return None
 
+    # Helper to get default model for workflow
+    def get_workflow_default_model(workflow_row):
+        return workflow_row['Model Default'] if 'Model Default' in workflow_row else 'gpt-4o'
+
     # Parse workflow code step (e.g. P2&R1M8)
     def parse_step(step, prev_outputs, custom_topic):
         # Find model override (M#)
         model_override = None
+        model_id_override = None
         m_match = re.search(r'M(\d+)', step)
         if m_match:
-            model_override = get_model_name(m_match.group(1))
+            model_id_override = m_match.group(1)
+            model_override = get_model_name(model_id_override)
             step = re.sub(r'M\d+', '', step)
         # Split by & for combining
         parts = [p.strip() for p in step.split('&')]
@@ -353,7 +456,7 @@ if __name__ == '__main__':
                     input_text += prev_outputs[resp_idx]
             elif part == 'C':
                 input_text += custom_topic or ''
-        return input_text, model_override
+        return input_text, model_override, model_id_override
 
     # Main workflow loop
     for req_idx, req_row in requests_df.iterrows():
@@ -370,6 +473,7 @@ if __name__ == '__main__':
         workflow_row = workflow_row.iloc[0]
         workflow_code = workflow_row['Workflow Code']
         default_model = get_workflow_default_model(workflow_row)
+        default_model_id = get_model_id_by_name(default_model)
         steps = [s.strip() for s in workflow_code.split(',') if s.strip()]
         prev_outputs = []
         workflow_steps_records = []
@@ -378,11 +482,23 @@ if __name__ == '__main__':
             'Triggered Date': pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')
         }
         for i, step in enumerate(steps):
-            input_text, model_override = parse_step(step, prev_outputs, custom_topic)
-            model_to_use = model_override or default_model
-            print(f"  - Step {i+1}: {step} (Model: {model_to_use})")
+            # Parse the step for prompt, model override, and model ID override
+            input_text, model_override, model_id_override = parse_step(step, prev_outputs, custom_topic)
+            if model_override and model_id_override:
+                model_to_use = model_override
+                web_search_enabled = get_model_web_search_by_id(model_id_override)
+            else:
+                model_to_use = default_model
+                web_search_enabled = get_model_web_search_by_id(default_model_id)
+            print(f"  - Step {i+1}: {step} (Model: {model_to_use}, Web Search: {web_search_enabled})")
             print(f"    Input: {input_text[:100]}{'...' if len(input_text) > 100 else ''}")
-            response = call_openai_model(input_text, model_to_use)
+            # Fallback for OpenAI client if responses.create is not available
+            if web_search_enabled and not hasattr(client, 'responses'):
+                msg = "❌ Web search requested but your OpenAI Python package does not support responses.create. Please upgrade openai to the latest version."
+                log_error(msg)
+                response = "[Web search not supported by your OpenAI Python package version]"
+            else:
+                response = call_openai_model(input_text, model_to_use, web_search=web_search_enabled)
             prev_outputs.append(response)
             output_col_in = f'Output {2*i+1}'
             output_col_out = f'Output {2*i+2}'
