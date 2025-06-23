@@ -103,8 +103,9 @@ def get_template_dataframes():
         [7, "Test Daily News", "P1M2,P2&R1M4,P3&R2M2", ""],
         [8, "Test Daily News", "P1M2,P2&R1M4,P3&R2M2,P4&R3M3", ""],
         [9, "Test Daily News", "P1M2,P2&R1M4,P3&R2M2,P4&R3M3,P5&R4M3", ""],
-        [10, "Test Daily News", "P1M2,P6&R1M2,P3&R2M2,P4&R3M3,P5&R4M3", ""],
-        [11, "Eleven Labs Audio Generation", "L8E1SL4", "gpt-4o"]
+        [10, "Test Daily News and Script Save", "P1M2,P6&R1M2,P3&R2M2,P4&R3M3,P5&R4M3,R4SL7", ""],
+        [11, "Send latest script to Eleven Labs", "L8E1SL4", ""],
+        [12, "Combine intro mp3 with latest mp3 with outro mp3", "L1&L9&L2SL3", ""]
     ], columns=["Workflow ID", "Workflow Title", "Workflow Code", "Model Default"])
 
     outputs = pd.DataFrame(columns=[
@@ -112,10 +113,19 @@ def get_template_dataframes():
     ])
 
     requests = pd.DataFrame([
-        [1, 1, "", "N"],
-        [2, 2, "", "Y"],
-        [3, 11, "", "Y"]
-    ], columns=["Request ID", "Workflow ID", "Custom Topic If Required", "Active"])
+        [1, 1, "", "N", ""],
+        [2, 2, "", "N", ""],
+        [3, 3, "", "N", "*used to work"],
+        [4, 4, "", "N", "*works"],
+        [5, 5, "", "N", "*works"],
+        [6, 6, "", "N", "*works"],
+        [7, 7, "", "N", "*works"],
+        [8, 8, "", "N", "*works"],
+        [9, 9, "", "N", "*works but some incorrect news stories"],
+        [10, 10, "", "N", "*works outputs Script to folder"],
+        [11, 11, "", "N", "*works to generate eleven labs based on latest file"],
+        [12, 12, "", "Y", ""]
+    ], columns=["Request ID", "Workflow ID", "Custom Topic If Required", "Active", "Comments"])
 
     prompts = pd.DataFrame([
         [1, "Daily News", "Please provide a comprehensive overview of the most important news in AI that occurred in the last 24-48 hours and mention dates of when the news items or recent updates occurred to confirm occurrence in the last 24-48 hours. AI news can be in relation to AI model releases, Expected tool releases, New enhancements released for AI tools or other interesting topics related to AI technology, AI company announcements, models, tool releases, enhancements, etc. Please be sure to summarize as many sources as possible and also provide numerous quotes from both company representatives, reporters as well as user feedback on social media."],
@@ -182,7 +192,8 @@ def get_template_dataframes():
         [5, "Latest MP3 File in Folder", "mp3", "Podcasts/", "https://drive.google.com/drive/folders/1Vk-KziEUAVSIxL2_Sh5nCxySoZc_XBVj?usp=drive_link"],
         [6, "Latest MP3 File in Folder", "mp3", "Podcasts/Eleven Labs/", "https://drive.google.com/drive/folders/167wtw8GA9-c6tfcplWy5b5SauL2MAuRR?usp=drive_link"],
         [7, "Scripts Folder Location", "Folder", "Scripts/", "https://drive.google.com/drive/folders/1KTGRQ3lkdTYNwkr_0UmG3bup6joj0oGn?usp=drive_link"],
-        [8, "Latest Text File in Scripts Folder", "Text", "Scripts/", "https://drive.google.com/drive/folders/1KTGRQ3lkdTYNwkr_0UmG3bup6joj0oGn?usp=drive_link", "Y"]
+        [8, "Latest Text File in Scripts Folder", "Text", "Scripts/", "https://drive.google.com/drive/folders/1KTGRQ3lkdTYNwkr_0UmG3bup6joj0oGn?usp=drive_link", "Y"],
+        [9, "Latest mp3 in Eleven lab Folder", "mp3", "Podcasts/Eleven Labs/", "https://drive.google.com/drive/folders/167wtw8GA9-c6tfcplWy5b5SauL2MAuRR?usp=drive_link", "Y"]
     ], columns=["Location ID", "Location Description", "Type", "File Or Folder", "Location", "Latest"])
 
     eleven = pd.DataFrame([
@@ -510,6 +521,141 @@ def merge_audio(intro_path, main_path, outro_path, final_path):
         print(f"✅ Merged audio saved: {final_path}")
     except Exception as e:
         print(f"❌ Merge failed: {e}")
+
+def download_latest_mp3_from_drive(service_account_json, folder_id):
+    """Downloads the latest MP3 file from a Google Drive folder."""
+    from googleapiclient.discovery import build
+    from google.oauth2 import service_account
+    from googleapiclient.http import MediaIoBaseDownload
+    import io
+    
+    try:
+        creds = service_account.Credentials.from_service_account_file(
+            service_account_json, 
+            scopes=["https://www.googleapis.com/auth/drive"]
+        )
+        drive_service = build('drive', 'v3', credentials=creds)
+        
+        # List MP3 files in the folder, sorted by modified time (newest first)
+        results = drive_service.files().list(
+            q=f"'{folder_id}' in parents and mimeType='audio/mpeg'",
+            orderBy='modifiedTime desc',
+            pageSize=1,
+            fields='files(id,name,modifiedTime)'
+        ).execute()
+        
+        files = results.get('files', [])
+        if not files:
+            print(f"❌ No MP3 files found in folder {folder_id}")
+            return None
+            
+        latest_file = files[0]
+        file_id = latest_file['id']
+        file_name = latest_file['name']
+        
+        print(f"📥 Downloading latest MP3 file: {file_name}")
+        
+        # Download the file content
+        request = drive_service.files().get_media(fileId=file_id)
+        fh = io.BytesIO()
+        downloader = MediaIoBaseDownload(fh, request)
+        
+        done = False
+        while done is False:
+            status, done = downloader.next_chunk()
+            if status:
+                print(f"  Download {int(status.progress() * 100)}%")
+        
+        # Save to temporary file
+        temp_path = f"temp_{file_name}"
+        with open(temp_path, 'wb') as f:
+            f.write(fh.getvalue())
+        
+        print(f"✅ Downloaded MP3 file: {temp_path}")
+        return temp_path
+        
+    except Exception as e:
+        print(f"❌ Error downloading MP3 from Google Drive: {e}")
+        return None
+
+def download_mp3_file_from_drive(service_account_json, file_url):
+    """Downloads a specific MP3 file from Google Drive using its URL."""
+    from googleapiclient.discovery import build
+    from google.oauth2 import service_account
+    from googleapiclient.http import MediaIoBaseDownload
+    import io
+    
+    try:
+        # Extract file ID from Google Drive URL
+        file_id_match = re.search(r'/file/d/([a-zA-Z0-9_-]+)', file_url)
+        if not file_id_match:
+            print(f"❌ Invalid Google Drive file URL: {file_url}")
+            return None
+        
+        file_id = file_id_match.group(1)
+        
+        creds = service_account.Credentials.from_service_account_file(
+            service_account_json, 
+            scopes=["https://www.googleapis.com/auth/drive"]
+        )
+        drive_service = build('drive', 'v3', credentials=creds)
+        
+        # Get file metadata
+        file_metadata = drive_service.files().get(fileId=file_id, fields='name').execute()
+        file_name = file_metadata.get('name', 'unknown_file.mp3')
+        
+        print(f"📥 Downloading MP3 file: {file_name}")
+        
+        # Download the file content
+        request = drive_service.files().get_media(fileId=file_id)
+        fh = io.BytesIO()
+        downloader = MediaIoBaseDownload(fh, request)
+        
+        done = False
+        while done is False:
+            status, done = downloader.next_chunk()
+            if status:
+                print(f"  Download {int(status.progress() * 100)}%")
+        
+        # Save to temporary file
+        temp_path = f"temp_{file_name}"
+        with open(temp_path, 'wb') as f:
+            f.write(fh.getvalue())
+        
+        print(f"✅ Downloaded MP3 file: {temp_path}")
+        return temp_path
+        
+    except Exception as e:
+        print(f"❌ Error downloading MP3 from Google Drive: {e}")
+        return None
+
+def merge_multiple_audio_files(audio_paths, output_path):
+    """Merges multiple audio files into a single MP3 file."""
+    try:
+        if not audio_paths:
+            print("❌ No audio files provided for merging")
+            return None
+        
+        print(f"🔗 Merging {len(audio_paths)} audio files...")
+        
+        # Load the first audio file
+        combined = AudioSegment.from_file(audio_paths[0])
+        print(f"  - Loaded: {audio_paths[0]}")
+        
+        # Add subsequent audio files
+        for i, audio_path in enumerate(audio_paths[1:], 1):
+            audio = AudioSegment.from_file(audio_path)
+            combined += audio
+            print(f"  - Added: {audio_path}")
+        
+        # Export the combined audio
+        combined.export(output_path, format="mp3")
+        print(f"✅ Merged audio saved: {output_path}")
+        return output_path
+        
+    except Exception as e:
+        print(f"❌ Error merging audio files: {e}")
+        return None
 
 # -----------------------------------------
 # MAIN EXECUTION
@@ -949,6 +1095,191 @@ if __name__ == '__main__':
                 
                 # Add audio path to outputs
                 prev_outputs.append(audio_path)
+                continue  # Skip regular model call for this step
+            
+            # Check for Audio Merging step (e.g., L1&L9&L2SL3)
+            audio_merge_match = re.fullmatch(r'L(\d+)(?:&L(\d+))*SL(\d+)', step)
+            if audio_merge_match:
+                print(f"  - Step {i+1}: {step} (Audio Merging Step)")
+                
+                # Extract all location IDs from the step
+                location_ids = re.findall(r'L(\d+)', step)
+                save_location_id = location_ids[-1]  # Last location ID is the save location
+                source_location_ids = location_ids[:-1]  # All others are source locations
+                
+                if len(source_location_ids) < 2:
+                    log_msg = f"Audio merging requires at least 2 source locations, found {len(source_location_ids)}"
+                    print(f"    > {log_msg}")
+                    workflow_steps_records.append([
+                        get_next_workflow_steps_id() + i + 0.1,
+                        output_record['Triggered Date'],
+                        workflow_id,
+                        request_id,
+                        workflow_code,
+                        step,
+                        '',
+                        '',
+                        log_msg
+                    ])
+                    continue
+                
+                # Download audio files from source locations
+                audio_paths = []
+                download_errors = []
+                
+                for loc_id in source_location_ids:
+                    location = get_location_by_id(loc_id)
+                    if not location:
+                        error_msg = f"Location ID {loc_id} not found in Locations sheet."
+                        download_errors.append(error_msg)
+                        continue
+                    
+                    location_url = location['Location']
+                    location_type = location['Type']
+                    
+                    if location_type == 'File':
+                        # Download specific file
+                        audio_path = download_mp3_file_from_drive(GOOGLE_CREDS_JSON, location_url)
+                    elif location_type == 'mp3':
+                        # Download latest MP3 from folder
+                        folder_id = extract_drive_folder_id(location_url)
+                        if folder_id:
+                            audio_path = download_latest_mp3_from_drive(GOOGLE_CREDS_JSON, folder_id)
+                        else:
+                            error_msg = f"Invalid Google Drive folder ID for location {loc_id}"
+                            download_errors.append(error_msg)
+                            continue
+                    else:
+                        error_msg = f"Location {loc_id} is not a file or mp3 type"
+                        download_errors.append(error_msg)
+                        continue
+                    
+                    if audio_path:
+                        audio_paths.append(audio_path)
+                    else:
+                        error_msg = f"Failed to download audio from location {loc_id}"
+                        download_errors.append(error_msg)
+                
+                if download_errors:
+                    log_msg = f"Audio download errors: {'; '.join(download_errors)}"
+                    print(f"    > {log_msg}")
+                    workflow_steps_records.append([
+                        get_next_workflow_steps_id() + i + 0.1,
+                        output_record['Triggered Date'],
+                        workflow_id,
+                        request_id,
+                        workflow_code,
+                        step,
+                        '',
+                        '',
+                        log_msg
+                    ])
+                    continue
+                
+                if len(audio_paths) < 2:
+                    log_msg = f"Not enough audio files downloaded for merging. Expected at least 2, got {len(audio_paths)}"
+                    print(f"    > {log_msg}")
+                    workflow_steps_records.append([
+                        get_next_workflow_steps_id() + i + 0.1,
+                        output_record['Triggered Date'],
+                        workflow_id,
+                        request_id,
+                        workflow_code,
+                        step,
+                        '',
+                        '',
+                        log_msg
+                    ])
+                    continue
+                
+                # Merge audio files
+                print(f"    > Merging {len(audio_paths)} audio files...")
+                merged_audio_path = f'merged_audio_{request_id}_step_{i+1}.mp3'
+                merged_path = merge_multiple_audio_files(audio_paths, merged_audio_path)
+                
+                if not merged_path:
+                    log_msg = f"Failed to merge audio files for step {i+1}"
+                    print(f"    > {log_msg}")
+                    workflow_steps_records.append([
+                        get_next_workflow_steps_id() + i + 0.1,
+                        output_record['Triggered Date'],
+                        workflow_id,
+                        request_id,
+                        workflow_code,
+                        step,
+                        str(audio_paths),
+                        '',
+                        log_msg
+                    ])
+                    continue
+                
+                # Upload merged audio to destination location
+                save_location = get_location_by_id(save_location_id)
+                if not save_location:
+                    log_msg = f"Save location ID {save_location_id} not found in Locations sheet."
+                    print(f"    > {log_msg}")
+                    workflow_steps_records.append([
+                        get_next_workflow_steps_id() + i + 0.1,
+                        output_record['Triggered Date'],
+                        workflow_id,
+                        request_id,
+                        workflow_code,
+                        step,
+                        str(audio_paths),
+                        merged_path,
+                        log_msg
+                    ])
+                    continue
+                
+                save_folder_url = save_location['Location']
+                save_folder_id = extract_drive_folder_id(save_folder_url)
+                if not save_folder_id:
+                    log_msg = f"Invalid Google Drive folder ID for save location {save_location_id}"
+                    print(f"    > {log_msg}")
+                    workflow_steps_records.append([
+                        get_next_workflow_steps_id() + i + 0.1,
+                        output_record['Triggered Date'],
+                        workflow_id,
+                        request_id,
+                        workflow_code,
+                        step,
+                        str(audio_paths),
+                        merged_path,
+                        log_msg
+                    ])
+                    continue
+                
+                audio_filename = f'merged_workflow_{request_id}_step_{i+1}.mp3'
+                try:
+                    file_link = upload_audio_to_drive(GOOGLE_CREDS_JSON, save_folder_id, audio_filename, merged_path)
+                    log_msg = f"Merged and uploaded audio to Google Drive: {file_link}"
+                    print(f"    > {log_msg}")
+                except Exception as e:
+                    log_msg = f"Failed to upload merged audio to Google Drive: {e}"
+                    print(f"    > {log_msg}")
+                
+                # Clean up temporary files
+                for temp_path in audio_paths:
+                    try:
+                        os.remove(temp_path)
+                    except:
+                        pass
+                
+                # Add workflow step record
+                workflow_steps_records.append([
+                    get_next_workflow_steps_id() + i + 0.1,
+                    output_record['Triggered Date'],
+                    workflow_id,
+                    request_id,
+                    workflow_code,
+                    step,
+                    str(audio_paths),
+                    merged_path,
+                    log_msg
+                ])
+                
+                # Add merged audio path to outputs
+                prev_outputs.append(merged_path)
                 continue  # Skip regular model call for this step
             
             # Parse the step for prompt, model override, and model ID override

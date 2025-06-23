@@ -116,6 +116,15 @@ The script will:
 ### Eleven Labs Steps
 - `L8E1SL4`: Download from Location 8, use Eleven config 1, save to Location 4
 
+### Audio Merging Steps
+- `L1&L9&L2SL3`: Download MP3 from Location 1, latest MP3 from Location 9, latest MP3 from Location 2, merge them, and save to Location 3
+
+**Audio Merging Pattern**: `L{source1}&L{source2}&...&L{sourceN}SL{destination}`
+- Combines multiple audio files from different locations
+- Supports both specific files (Type: "File") and latest MP3 from folders (Type: "mp3")
+- Merges audio files in the order specified
+- Saves the combined audio to the destination location
+
 ## File Structure
 
 - `ai_podcast_pipeline_for_cursor.py`: Main pipeline script
@@ -135,6 +144,22 @@ The pipeline manages these tabs:
 - **Workflow Steps**: Detailed execution logs
 - **Locations**: Google Drive folder mappings
 - **Eleven**: Eleven Labs voice configurations
+
+### Location Types
+
+The **Locations** tab supports different types of file/folder references:
+
+| Type | Description | Usage |
+|------|-------------|-------|
+| `File` | Specific file URL | Downloads the exact file from Google Drive |
+| `Folder` | Folder URL | Used for uploading files to the folder |
+| `Text` | Folder URL | Downloads the latest text file from the folder |
+| `mp3` | Folder URL | Downloads the latest MP3 file from the folder |
+
+**Example Locations:**
+- Location 1: Intro MP3 File (Type: File) - Specific intro audio
+- Location 8: Latest Text File in Scripts Folder (Type: Text) - Latest script for Eleven Labs
+- Location 9: Latest mp3 in Eleven lab Folder (Type: mp3) - Latest generated audio for merging
 
 ## Troubleshooting
 
