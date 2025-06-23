@@ -8,6 +8,7 @@ from pydub import AudioSegment
 from dotenv import load_dotenv
 import time
 import re
+import io
 
 # Load environment variables from .env file
 load_dotenv()
@@ -38,7 +39,7 @@ def create_and_setup_google_sheet(gc, sheet_name, folder_id, user_email):
     spreadsheet.share(user_email, perm_type='user', role='writer')
 
     template_dfs = get_template_dataframes()
-    sheet_order = ["Workflows", "Outputs", "Requests", "Prompts", "Models", "Workflow Steps", "Locations"]
+    sheet_order = ["Workflows", "Outputs", "Requests", "Prompts", "Models", "Workflow Steps", "Locations", "Eleven"]
 
     # Rename the initial "Sheet1" and populate it
     ws = spreadsheet.worksheet("Sheet1")
@@ -102,7 +103,8 @@ def get_template_dataframes():
         [7, "Test Daily News", "P1M2,P2&R1M4,P3&R2M2", ""],
         [8, "Test Daily News", "P1M2,P2&R1M4,P3&R2M2,P4&R3M3", ""],
         [9, "Test Daily News", "P1M2,P2&R1M4,P3&R2M2,P4&R3M3,P5&R4M3", ""],
-        [10, "Test Daily News", "P1M2,P6&R1M2,P3&R2M2,P4&R3M3,P5&R4M3", ""]
+        [10, "Test Daily News", "P1M2,P6&R1M2,P3&R2M2,P4&R3M3,P5&R4M3", ""],
+        [11, "Eleven Labs Audio Generation", "L8E1SL4", "gpt-4o"]
     ], columns=["Workflow ID", "Workflow Title", "Workflow Code", "Model Default"])
 
     outputs = pd.DataFrame(columns=[
@@ -111,7 +113,8 @@ def get_template_dataframes():
 
     requests = pd.DataFrame([
         [1, 1, "", "N"],
-        [2, 2, "", "Y"]
+        [2, 2, "", "Y"],
+        [3, 11, "", "Y"]
     ], columns=["Request ID", "Workflow ID", "Custom Topic If Required", "Active"])
 
     prompts = pd.DataFrame([
@@ -178,8 +181,13 @@ def get_template_dataframes():
         [4, "Eleven Labs Generated Audio", "Folder", "Podcasts/Eleven Labs/", "https://drive.google.com/drive/folders/167wtw8GA9-c6tfcplWy5b5SauL2MAuRR?usp=drive_link"],
         [5, "Latest MP3 File in Folder", "mp3", "Podcasts/", "https://drive.google.com/drive/folders/1Vk-KziEUAVSIxL2_Sh5nCxySoZc_XBVj?usp=drive_link"],
         [6, "Latest MP3 File in Folder", "mp3", "Podcasts/Eleven Labs/", "https://drive.google.com/drive/folders/167wtw8GA9-c6tfcplWy5b5SauL2MAuRR?usp=drive_link"],
-        [7, "Scripts Folder Location", "Folder", "Scripts/", "https://drive.google.com/drive/folders/1KTGRQ3lkdTYNwkr_0UmG3bup6joj0oGn?usp=drive_link"]
-    ], columns=["Location ID", "Location Description", "Type", "File Or Folder", "Location"])
+        [7, "Scripts Folder Location", "Folder", "Scripts/", "https://drive.google.com/drive/folders/1KTGRQ3lkdTYNwkr_0UmG3bup6joj0oGn?usp=drive_link"],
+        [8, "Latest Text File in Scripts Folder", "Text", "Scripts/", "https://drive.google.com/drive/folders/1KTGRQ3lkdTYNwkr_0UmG3bup6joj0oGn?usp=drive_link", "Y"]
+    ], columns=["Location ID", "Location Description", "Type", "File Or Folder", "Location", "Latest"])
+
+    eleven = pd.DataFrame([
+        [1, "Liam", "eleven_multilingual_v2", 0.39, 0.7, 0.5, 1.06]
+    ], columns=["Eleven ID", "Voice", "Model", "Stability", "Similarity Boost", "Style", "Speed"])
 
     return {
         "Workflows": workflow,
@@ -188,7 +196,8 @@ def get_template_dataframes():
         "Prompts": prompts,
         "Models": models,
         "Workflow Steps": workflow_steps,
-        "Locations": locations
+        "Locations": locations,
+        "Eleven": eleven
     }
 
 
@@ -317,20 +326,84 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.7, web_search=False)
         log_error(f"OpenAI error: {e}")
         return ""
 
-def generate_voice_audio(text, voice_id, output_path):
+def generate_voice_audio(text, voice_id, output_path, eleven_config=None):
+    """
+    Enhanced Eleven Labs API call using the official Python client.
+    Always writes audio as a stream (generator of bytes chunks).
+    Falls back to REST API if the client is not installed.
+    """
+    try:
+        from elevenlabs.client import ElevenLabs
+        
+        # Initialize the ElevenLabs client
+        client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
+        
+        # Use provided config or default values
+        if eleven_config:
+            voice_settings = {
+                "stability": float(eleven_config.get('Stability', 0.39)),
+                "similarity_boost": float(eleven_config.get('Similarity Boost', 0.7)),
+                "style": float(eleven_config.get('Style', 0.5)),
+                "speed": float(eleven_config.get('Speed', 1.06))
+            }
+            # Returns a generator of bytes chunks
+            audio_stream = client.text_to_speech.convert(
+                text=text,
+                voice_id=voice_id,
+                voice_settings=voice_settings,
+                model_id=eleven_config.get('Model', 'eleven_multilingual_v2')
+            )
+        else:
+            # Fallback to default settings
+            audio_stream = client.text_to_speech.convert(
+                text=text,
+                voice_id=voice_id,
+                model_id="eleven_multilingual_v2"
+            )
+        # Write the audio stream to file
+        with open(output_path, 'wb') as f:
+            for chunk in audio_stream:
+                f.write(chunk)
+        print(f"✅ Audio generated successfully: {output_path}")
+        return output_path
+    except ImportError:
+        print("⚠️ ElevenLabs Python client not installed. Falling back to REST API...")
+        return generate_voice_audio_rest(text, voice_id, output_path, eleven_config)
+    except Exception as e:
+        print(f"❌ ElevenLabs error: {e}")
+        return None
+
+def generate_voice_audio_rest(text, voice_id, output_path, eleven_config=None):
+    """Fallback REST API method for Eleven Labs."""
     url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
     headers = {
         "xi-api-key": ELEVENLABS_API_KEY,
         "Content-Type": "application/json"
     }
-    payload = {
-        "text": text,
-        "model_id": "eleven_monolingual_v1",
-        "voice_settings": {
-            "stability": 0.5,
-            "similarity_boost": 0.7
+    
+    # Use provided config or default values
+    if eleven_config:
+        payload = {
+            "text": text,
+            "model_id": eleven_config.get('Model', 'eleven_multilingual_v2'),
+            "voice_settings": {
+                "stability": float(eleven_config.get('Stability', 0.39)),
+                "similarity_boost": float(eleven_config.get('Similarity Boost', 0.7)),
+                "style": float(eleven_config.get('Style', 0.5)),
+                "speed": float(eleven_config.get('Speed', 1.06))
+            }
         }
-    }
+    else:
+        # Fallback to original settings
+        payload = {
+            "text": text,
+            "model_id": "eleven_multilingual_v2",
+            "voice_settings": {
+                "stability": 0.5,
+                "similarity_boost": 0.7
+            }
+        }
+    
     try:
         response = requests.post(url, json=payload, headers=headers)
         if response.status_code == 200:
@@ -338,10 +411,94 @@ def generate_voice_audio(text, voice_id, output_path):
                 f.write(response.content)
             return output_path
         else:
-            print(f"❌ ElevenLabs error: {response.status_code} {response.text}")
+            print(f"❌ ElevenLabs REST API error: {response.status_code} {response.text}")
     except Exception as e:
-        print(f"❌ ElevenLabs API error: {e}")
+        print(f"❌ ElevenLabs REST API error: {e}")
     return None
+
+def download_latest_text_file_from_drive(service_account_json, folder_id):
+    """Downloads the latest text file from a Google Drive folder."""
+    from googleapiclient.discovery import build
+    from google.oauth2 import service_account
+    from googleapiclient.http import MediaIoBaseDownload
+    import io
+    
+    try:
+        creds = service_account.Credentials.from_service_account_file(
+            service_account_json, 
+            scopes=["https://www.googleapis.com/auth/drive"]
+        )
+        drive_service = build('drive', 'v3', credentials=creds)
+        
+        # List files in the folder, sorted by modified time (newest first)
+        results = drive_service.files().list(
+            q=f"'{folder_id}' in parents and mimeType='text/plain'",
+            orderBy='modifiedTime desc',
+            pageSize=1,
+            fields='files(id,name,modifiedTime)'
+        ).execute()
+        
+        files = results.get('files', [])
+        if not files:
+            print(f"❌ No text files found in folder {folder_id}")
+            return None
+            
+        latest_file = files[0]
+        file_id = latest_file['id']
+        file_name = latest_file['name']
+        
+        print(f"📥 Downloading latest text file: {file_name}")
+        
+        # Download the file content
+        request = drive_service.files().get_media(fileId=file_id)
+        fh = io.BytesIO()
+        downloader = MediaIoBaseDownload(fh, request)
+        
+        done = False
+        while done is False:
+            status, done = downloader.next_chunk()
+            if status:
+                print(f"  Download {int(status.progress() * 100)}%")
+        
+        content = fh.getvalue().decode('utf-8')
+        print(f"✅ Downloaded {len(content)} characters from {file_name}")
+        return content
+        
+    except Exception as e:
+        print(f"❌ Error downloading file from Google Drive: {e}")
+        return None
+
+def upload_audio_to_drive(service_account_json, folder_id, filename, audio_file_path):
+    """Uploads an audio file to Google Drive folder and returns the file link."""
+    from googleapiclient.discovery import build
+    from googleapiclient.http import MediaFileUpload
+    from google.oauth2 import service_account
+    
+    try:
+        creds = service_account.Credentials.from_service_account_file(
+            service_account_json, 
+            scopes=["https://www.googleapis.com/auth/drive"]
+        )
+        drive_service = build('drive', 'v3', credentials=creds)
+        
+        file_metadata = {
+            'name': filename,
+            'parents': [folder_id],
+            'mimeType': 'audio/mpeg'
+        }
+        
+        media = MediaFileUpload(audio_file_path, mimetype='audio/mpeg')
+        file = drive_service.files().create(
+            body=file_metadata, 
+            media_body=media, 
+            fields='id,webViewLink'
+        ).execute()
+        
+        return file.get('webViewLink')
+        
+    except Exception as e:
+        print(f"❌ Error uploading audio to Google Drive: {e}")
+        return None
 
 def merge_audio(intro_path, main_path, outro_path, final_path):
     try:
@@ -376,13 +533,21 @@ if __name__ == '__main__':
     workflow_steps_ws = spreadsheet.worksheet("Workflow Steps")
     locations_ws = spreadsheet.worksheet("Locations")
 
+    # Try to load Eleven tab (may not exist in older sheets)
+    eleven_ws = None
+    try:
+        eleven_ws = spreadsheet.worksheet("Eleven")
+    except Exception:
+        pass  # If the Eleven tab doesn't exist, skip it
+
     workflow_df = pd.DataFrame(workflow_ws.get_all_records())
     outputs_df = pd.DataFrame(outputs_ws.get_all_records())
     requests_df = pd.DataFrame(requests_ws.get_all_records())
     prompts_df = pd.DataFrame(prompts_ws.get_all_records())
     models_df = pd.DataFrame(models_ws.get_all_records())
     workflow_steps_df = pd.DataFrame(workflow_steps_ws.get_all_records())
-    locations_df = pd.DataFrame(locations_ws.get_all_records()) if locations_ws is not None else pd.DataFrame(columns=["Location ID", "Location Description", "Type", "File Or Folder", "Location"])
+    locations_df = pd.DataFrame(locations_ws.get_all_records()) if locations_ws is not None else pd.DataFrame(columns=["Location ID", "Location Description", "Type", "File Or Folder", "Location", "Latest"])
+    eleven_df = pd.DataFrame(eleven_ws.get_all_records()) if eleven_ws is not None else pd.DataFrame(columns=["Eleven ID", "Voice", "Model", "Stability", "Similarity Boost", "Style", "Speed"])
 
     logs_ws = None
     try:
@@ -476,6 +641,29 @@ if __name__ == '__main__':
         media = MediaInMemoryUpload(text.encode('utf-8'), mimetype='text/plain')
         file = drive_service.files().create(body=file_metadata, media_body=media, fields='id,webViewLink').execute()
         return file.get('webViewLink')
+
+    # Helper to get Eleven Labs configuration by Eleven ID
+    def get_eleven_config(eleven_id):
+        row = eleven_df[eleven_df['Eleven ID'].astype(str) == str(eleven_id)]
+        if not row.empty:
+            return row.iloc[0].to_dict()
+        return None
+
+    # Helper to get voice ID by Eleven ID (this would need to be configured based on your Eleven Labs voice IDs)
+    def get_voice_id_by_eleven_id(eleven_id):
+        # This mapping should be updated with your actual Eleven Labs voice IDs
+        voice_mapping = {
+            "1": "TX3LPaxmHKxFdv7VOQHJ",  # Liam voice ID from Eleven Labs
+            # Add more mappings as needed
+        }
+        return voice_mapping.get(str(eleven_id))
+
+    # Helper to get location by Location ID
+    def get_location_by_id(location_id):
+        row = locations_df[locations_df['Location ID'].astype(str) == str(location_id)]
+        if not row.empty:
+            return row.iloc[0].to_dict()
+        return None
 
     # Parse workflow code step (e.g. P2&R1M8)
     def parse_step(step, prev_outputs, custom_topic):
@@ -575,6 +763,194 @@ if __name__ == '__main__':
                 if response_to_save is not None:
                     prev_outputs.append(response_to_save)
                 continue  # Skip model call for this step
+            
+            # Check for Eleven Labs step (e.g., L8E1SL4)
+            eleven_match = re.fullmatch(r'L(\d+)E(\d+)SL(\d+)', step)
+            if eleven_match:
+                print(f"  - Step {i+1}: {step} (Eleven Labs Step)")
+                location_id = eleven_match.group(1)
+                eleven_id = eleven_match.group(2)
+                save_location_id = eleven_match.group(3)
+                
+                # Get location details for source folder
+                source_location = get_location_by_id(location_id)
+                if not source_location:
+                    log_msg = f"Source location ID {location_id} not found in Locations sheet."
+                    print(f"    > {log_msg}")
+                    workflow_steps_records.append([
+                        get_next_workflow_steps_id() + i + 0.1,
+                        output_record['Triggered Date'],
+                        workflow_id,
+                        request_id,
+                        workflow_code,
+                        step,
+                        '',
+                        '',
+                        log_msg
+                    ])
+                    continue
+                
+                # Get Eleven Labs configuration
+                eleven_config = get_eleven_config(eleven_id)
+                if not eleven_config:
+                    log_msg = f"Eleven Labs configuration ID {eleven_id} not found in Eleven sheet."
+                    print(f"    > {log_msg}")
+                    workflow_steps_records.append([
+                        get_next_workflow_steps_id() + i + 0.1,
+                        output_record['Triggered Date'],
+                        workflow_id,
+                        request_id,
+                        workflow_code,
+                        step,
+                        '',
+                        '',
+                        log_msg
+                    ])
+                    continue
+                
+                # Get voice ID
+                voice_id = get_voice_id_by_eleven_id(eleven_id)
+                if not voice_id:
+                    log_msg = f"Voice ID not found for Eleven ID {eleven_id}. Please update voice_mapping in get_voice_id_by_eleven_id function."
+                    print(f"    > {log_msg}")
+                    workflow_steps_records.append([
+                        get_next_workflow_steps_id() + i + 0.1,
+                        output_record['Triggered Date'],
+                        workflow_id,
+                        request_id,
+                        workflow_code,
+                        step,
+                        '',
+                        '',
+                        log_msg
+                    ])
+                    continue
+                
+                # Download latest text file from source location
+                source_folder_url = source_location['Location']
+                source_folder_id = extract_drive_folder_id(source_folder_url)
+                if not source_folder_id:
+                    log_msg = f"Invalid Google Drive folder ID for source location {location_id}."
+                    print(f"    > {log_msg}")
+                    workflow_steps_records.append([
+                        get_next_workflow_steps_id() + i + 0.1,
+                        output_record['Triggered Date'],
+                        workflow_id,
+                        request_id,
+                        workflow_code,
+                        step,
+                        '',
+                        '',
+                        log_msg
+                    ])
+                    continue
+                
+                text_content = download_latest_text_file_from_drive(GOOGLE_CREDS_JSON, source_folder_id)
+                if not text_content:
+                    log_msg = f"Failed to download text file from source location {location_id}."
+                    print(f"    > {log_msg}")
+                    workflow_steps_records.append([
+                        get_next_workflow_steps_id() + i + 0.1,
+                        output_record['Triggered Date'],
+                        workflow_id,
+                        request_id,
+                        workflow_code,
+                        step,
+                        '',
+                        '',
+                        log_msg
+                    ])
+                    continue
+                
+                # Generate audio using Eleven Labs
+                print(f"    > Generating audio with voice: {eleven_config['Voice']}")
+                temp_audio_path = f'temp_audio_{request_id}_step_{i+1}.mp3'
+                audio_path = generate_voice_audio(text_content, voice_id, temp_audio_path, eleven_config)
+                
+                if not audio_path:
+                    log_msg = f"Failed to generate audio with Eleven Labs for step {i+1}."
+                    print(f"    > {log_msg}")
+                    workflow_steps_records.append([
+                        get_next_workflow_steps_id() + i + 0.1,
+                        output_record['Triggered Date'],
+                        workflow_id,
+                        request_id,
+                        workflow_code,
+                        step,
+                        text_content,
+                        '',
+                        log_msg
+                    ])
+                    continue
+                
+                # Upload audio to destination location
+                save_location = get_location_by_id(save_location_id)
+                if not save_location:
+                    log_msg = f"Save location ID {save_location_id} not found in Locations sheet."
+                    print(f"    > {log_msg}")
+                    workflow_steps_records.append([
+                        get_next_workflow_steps_id() + i + 0.1,
+                        output_record['Triggered Date'],
+                        workflow_id,
+                        request_id,
+                        workflow_code,
+                        step,
+                        text_content,
+                        audio_path,
+                        log_msg
+                    ])
+                    continue
+                
+                save_folder_url = save_location['Location']
+                save_folder_id = extract_drive_folder_id(save_folder_url)
+                if not save_folder_id:
+                    log_msg = f"Invalid Google Drive folder ID for save location {save_location_id}."
+                    print(f"    > {log_msg}")
+                    workflow_steps_records.append([
+                        get_next_workflow_steps_id() + i + 0.1,
+                        output_record['Triggered Date'],
+                        workflow_id,
+                        request_id,
+                        workflow_code,
+                        step,
+                        text_content,
+                        audio_path,
+                        log_msg
+                    ])
+                    continue
+                
+                audio_filename = f'workflow_{request_id}_step_{i+1}_{eleven_config["Voice"]}.mp3'
+                try:
+                    file_link = upload_audio_to_drive(GOOGLE_CREDS_JSON, save_folder_id, audio_filename, audio_path)
+                    log_msg = f"Generated and uploaded audio to Google Drive: {file_link}"
+                    print(f"    > {log_msg}")
+                except Exception as e:
+                    log_msg = f"Failed to upload audio to Google Drive: {e}"
+                    print(f"    > {log_msg}")
+                
+                # Clean up temporary file
+                try:
+                    os.remove(temp_audio_path)
+                except:
+                    pass
+                
+                # Add workflow step record
+                workflow_steps_records.append([
+                    get_next_workflow_steps_id() + i + 0.1,
+                    output_record['Triggered Date'],
+                    workflow_id,
+                    request_id,
+                    workflow_code,
+                    step,
+                    text_content,
+                    audio_path,
+                    log_msg
+                ])
+                
+                # Add audio path to outputs
+                prev_outputs.append(audio_path)
+                continue  # Skip regular model call for this step
+            
             # Parse the step for prompt, model override, and model ID override
             input_text, model_override, model_id_override = parse_step(step, prev_outputs, custom_topic)
             if model_override and model_id_override:

@@ -7,4 +7,5 @@ XlsxWriter
 python-dotenv
 google-auth-oauthlib
 google-api-python-client
-google-auth 
+google-auth
+elevenlabs 

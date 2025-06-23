@@ -1,54 +1,157 @@
-<header>
+# AI Podcast Workflow Pipeline
 
-<!--
-  <<< Author notes: Course header >>>
-  Include a 1280×640 image, course title in sentence case, and a concise description in emphasis.
-  In your repository settings: enable template repository, add your 1280×640 social image, auto delete head branches.
-  Add your open source license, GitHub uses MIT license.
--->
+A comprehensive AI workflow system for generating podcast content using OpenAI and Eleven Labs APIs.
 
-# GitHub Pages
+## Features
 
-_Create a site or blog from your GitHub repositories with GitHub Pages._
+- **OpenAI Integration**: Generate content using various GPT models with web search capabilities
+- **Eleven Labs Integration**: Convert text to speech using configurable voice settings
+- **Google Drive Integration**: Download and upload files automatically
+- **Workflow Automation**: Chain multiple steps together for complex content generation
+- **Google Sheets Management**: Centralized configuration and logging
 
-</header>
+## New: Eleven Labs Integration
 
-<!--
-  <<< Author notes: Step 1 >>>
-  Choose 3-5 steps for your course.
-  The first step is always the hardest, so pick something easy!
-  Link to docs.github.com for further explanations.
-  Encourage users to open new tabs for steps!
--->
+The pipeline now supports Eleven Labs text-to-speech conversion with the following features:
 
-## Step 1: Enable GitHub Pages
+### Workflow Step Pattern: `L8E1SL4`
 
-_Welcome to GitHub Pages and Jekyll :tada:!_
+- **L8**: Location ID 8 (source folder to download latest text file)
+- **E1**: Eleven Labs configuration ID 1 (voice settings)
+- **SL4**: Save Location ID 4 (destination folder for generated audio)
 
-The first step is to enable GitHub Pages on this [repository](https://docs.github.com/en/get-started/quickstart/github-glossary#repository). When you enable GitHub Pages on a repository, GitHub takes the content that's on the main branch and publishes a website based on its contents.
+### Eleven Labs Configuration
 
-### :keyboard: Activity: Enable GitHub Pages
+The "Eleven" tab contains voice configurations:
 
-1. Open a new browser tab, and work on the steps in your second tab while you read the instructions in this tab.
-1. Under your repository name, click **Settings**.
-1. Click **Pages** in the **Code and automation** section.
-1. Ensure "Deploy from a branch" is selected from the **Source** drop-down menu, and then select `main` from the **Branch** drop-down menu.
-1. Click the **Save** button.
-1. Wait about _one minute_ then refresh this page (the one you're following instructions from). [GitHub Actions](https://docs.github.com/en/actions) will automatically update to the next step.
-   > Turning on GitHub Pages creates a deployment of your repository. GitHub Actions may take up to a minute to respond while waiting for the deployment. Future steps will be about 20 seconds; this step is slower.
-   > **Note**: In the **Pages** of **Settings**, the **Visit site** button will appear at the top. Click the button to see your GitHub Pages site.
+| Eleven ID | Voice | Model | Stability | Similarity Boost | Style | Speed |
+|-----------|-------|-------|-----------|------------------|-------|-------|
+| 1 | Liam | eleven_multilingual_v2 | 0.39 | 0.7 | 0.5 | 1.06 |
 
-<footer>
+### Setup Requirements
 
-<!--
-  <<< Author notes: Footer >>>
-  Add a link to get support, GitHub status page, code of conduct, license link.
--->
+1. **Eleven Labs API Key**: Add to your `.env` file:
+   ```
+   ELEVENLABS_API_KEY=your-elevenlabs-api-key
+   ```
 
----
+2. **Install ElevenLabs Client**: The pipeline uses the official ElevenLabs Python client:
+   ```bash
+   pip install elevenlabs
+   ```
 
-Get help: [Post in our discussion board](https://github.com/orgs/skills/discussions/categories/github-pages) &bull; [Review the GitHub status page](https://www.githubstatus.com/)
+3. **Voice ID Configuration**: The Liam voice ID is already configured:
+   ```python
+   voice_mapping = {
+       "1": "21m00Tcm4TlvDq8ikWAM",  # Liam voice ID from Eleven Labs
+   }
+   ```
 
-&copy; 2023 GitHub &bull; [Code of Conduct](https://www.contributor-covenant.org/version/2/1/code_of_conduct/code_of_conduct.md) &bull; [MIT License](https://gh.io/mit)
+4. **Google Drive Permissions**: Ensure your service account has access to the source and destination folders.
 
-</footer>
+### Example Workflow
+
+Workflow ID 11 demonstrates the Eleven Labs integration:
+- **Workflow Code**: `L8E1SL4`
+- **Description**: Downloads the latest text file from Location 8 (Scripts folder), converts it to speech using Eleven Labs configuration 1 (Liam voice), and saves the audio to Location 4 (Eleven Labs Generated Audio folder)
+
+### How It Works
+
+1. **Download Text**: Retrieves the most recent text file from the specified Google Drive folder
+2. **Generate Audio**: Uses ElevenLabs API with the configured voice settings (stability, similarity_boost, style, speed)
+3. **Upload Audio**: Saves the generated MP3 file to the destination folder
+4. **Logging**: Records all steps and results in the Workflow Steps tab
+
+### Testing
+
+Run the test script to verify your Eleven Labs setup:
+```bash
+python test_eleven_labs.py
+```
+
+This will test both API connection and voice generation using the Liam voice ID.
+
+## Installation
+
+1. Install required packages:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+2. Set up environment variables in `.env`:
+   ```
+   OPENAI_API_KEY=your-openai-api-key
+   ELEVENLABS_API_KEY=your-elevenlabs-api-key
+   ```
+
+3. Configure Google Sheets credentials:
+   - Place your service account JSON file as `jmio-google-api.json`
+   - Update `SHARE_SHEET_WITH_EMAIL` in the script
+
+## Usage
+
+Run the pipeline:
+```bash
+python ai_podcast_pipeline_for_cursor.py
+```
+
+The script will:
+1. Load or create the Google Sheet with all required tabs
+2. Process active requests in the "Requests" tab
+3. Execute workflow steps according to the "Workflow Code"
+4. Log all activities in the "Workflow Steps" tab
+5. Save outputs in the "Outputs" tab
+
+## Workflow Code Syntax
+
+### Standard Steps
+- `P1`: Use Prompt ID 1
+- `R1`: Use Response 1 from previous outputs
+- `P1&R1`: Combine Prompt 1 and Response 1
+- `M2`: Use Model ID 2 for this step
+
+### Save Steps
+- `R1SL4`: Save Response 1 to Location 4
+
+### Eleven Labs Steps
+- `L8E1SL4`: Download from Location 8, use Eleven config 1, save to Location 4
+
+## File Structure
+
+- `ai_podcast_pipeline_for_cursor.py`: Main pipeline script
+- `test_eleven_labs.py`: Eleven Labs integration test script
+- `requirements.txt`: Python dependencies
+- `.env`: Environment variables (create this file)
+- `jmio-google-api.json`: Google service account credentials
+
+## Google Sheets Structure
+
+The pipeline manages these tabs:
+- **Workflows**: Define workflow steps and configurations
+- **Outputs**: Store generated content
+- **Requests**: Active workflow requests
+- **Prompts**: Reusable prompt templates
+- **Models**: Available AI models and settings
+- **Workflow Steps**: Detailed execution logs
+- **Locations**: Google Drive folder mappings
+- **Eleven**: Eleven Labs voice configurations
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Eleven Labs API Errors**: Check your API key and ensure the elevenlabs package is installed
+2. **Google Drive Access**: Verify service account permissions
+3. **Missing Dependencies**: Install required packages from requirements.txt
+
+### Voice ID Configuration
+
+The Liam voice ID (`21m00Tcm4TlvDq8ikWAM`) is already configured. To add more voices:
+1. Go to Eleven Labs dashboard
+2. Navigate to Voice Library
+3. Copy the voice ID from the URL or API response
+4. Add to the `voice_mapping` in the `get_voice_id_by_eleven_id` function
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
