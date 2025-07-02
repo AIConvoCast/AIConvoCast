@@ -160,6 +160,55 @@ def test_voice_generation_rest():
         print(f"❌ Voice generation error: {e}")
         return False
 
+def test_specific_chunk():
+    """Test voice generation with a user-supplied chunk using official client"""
+    if not ELEVENLABS_API_KEY:
+        print("❌ ELEVENLABS_API_KEY not found in .env file")
+        return False
+
+    # Paste your chunk here for testing:
+    test_chunk = """Today we will be diving into exciting developments shaping the future of AI across education, startup innovation, and corporate culture. We'll explore Google's new Gemini AI Suite that's transforming classrooms, the massive funding secured by Thinking Machines Lab, and Microsoft's bold push for AI proficiency among its employees. So let's get started!"""
+
+    # Liam voice ID
+    voice_id = "TX3LPaxmHKxFdv7VOQHJ"
+
+    try:
+        from elevenlabs.client import ElevenLabs
+
+        # Initialize the client
+        client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
+
+        print(f"🎤 Testing voice generation with user chunk: (length: {len(test_chunk)})")
+        print(f"   Using voice ID: {voice_id}")
+
+        # Generate audio with custom settings (returns a generator)
+        audio_stream = client.text_to_speech.convert(
+            text=test_chunk,
+            voice_id=voice_id,
+            voice_settings={
+                "stability": 0.39,
+                "similarity_boost": 0.7,
+                "style": 0.5,
+                "speed": 1.06
+            },
+            model_id="eleven_multilingual_v2"
+        )
+
+        # Save the audio file
+        with open("test_chunk_output.mp3", "wb") as f:
+            for chunk in audio_stream:
+                f.write(chunk)
+
+        print(f"✅ Voice generation successful! Audio saved as 'test_chunk_output.mp3'")
+        return True
+
+    except ImportError:
+        print("⚠️ ElevenLabs Python client not installed. Testing with REST API...")
+        return test_voice_generation_rest()
+    except Exception as e:
+        print(f"❌ Voice generation error: {e}")
+        return False
+
 if __name__ == "__main__":
     print("🧪 Testing Eleven Labs Integration")
     print("=" * 40)
@@ -177,11 +226,16 @@ if __name__ == "__main__":
         print("\n2. Skipping voice generation test due to connection failure")
         generation_ok = False
     
+    # Test 3: Specific Chunk Test
+    print("\n3. Testing Specific Chunk (paste your chunk in test_specific_chunk)...")
+    test_specific_chunk()
+    
     # Summary
     print("\n" + "=" * 40)
     print("Test Summary:")
     print(f"   API Connection: {'✅ PASS' if connection_ok else '❌ FAIL'}")
     print(f"   Voice Generation: {'✅ PASS' if generation_ok else '❌ FAIL'}")
+    print("   Specific Chunk: See above for result.")
     
     if connection_ok and generation_ok:
         print("\n🎉 All tests passed! Eleven Labs integration is working correctly.")

@@ -9,6 +9,10 @@ from dotenv import load_dotenv
 import time
 import re
 import io
+import tempfile
+import traceback
+import json
+import sys
 
 # Load environment variables from .env file
 load_dotenv()
@@ -28,6 +32,14 @@ ELEVENLABS_API_KEY = os.getenv('ELEVENLABS_API_KEY', 'your-elevenlabs-key')
 
 # Instantiate the OpenAI client once using the API key from environment variables
 client = OpenAI(api_key=OPENAI_API_KEY)
+
+print(f"[DEBUG] Python version: {sys.version}")
+print(f"[DEBUG] requests version: {requests.__version__}")
+try:
+    import elevenlabs
+    print(f"[DEBUG] elevenlabs version: {elevenlabs.__version__}")
+except ImportError:
+    pass
 
 # -----------------------------------------
 # GOOGLE SHEET SUPPORT
@@ -337,95 +349,279 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.7, web_search=False)
         log_error(f"OpenAI error: {e}")
         return ""
 
+def split_text_into_chunks(text, max_length=2500):
+    """
+    Splits text into chunks of up to max_length characters, preferably on sentence boundaries.
+    If a sentence is longer than max_length, it is split into hard chunks.
+    """
+    import re
+    sentences = re.split(r'(?<=[.!?]) +', text)
+    chunks = []
+    current_chunk = ''
+    for sentence in sentences:
+        # If the sentence itself is too long, split it hard
+        while len(sentence) > max_length:
+            part = sentence[:max_length]
+            sentence = sentence[max_length:]
+            if current_chunk:
+                chunks.append(current_chunk)
+                current_chunk = ''
+            chunks.append(part)
+        if len(current_chunk) + len(sentence) + 1 <= max_length:
+            current_chunk += (' ' if current_chunk else '') + sentence
+        else:
+            if current_chunk:
+                chunks.append(current_chunk)
+            current_chunk = sentence
+    if current_chunk:
+        chunks.append(current_chunk)
+    print(f"[DEBUG] split_text_into_chunks: {len(chunks)} chunk(s) created.")
+    for i, chunk in enumerate(chunks):
+        print(f"[DEBUG]   Chunk {i+1} length: {len(chunk)}")
+    return chunks
+
 def generate_voice_audio(text, voice_id, output_path, eleven_config=None):
     """
     Enhanced Eleven Labs API call using the official Python client.
-    Always writes audio as a stream (generator of bytes chunks).
-    Falls back to REST API if the client is not installed.
+    Handles chunking for long texts and merges resulting audio files.
+    Falls back to REST API if the client fails.
     """
     try:
         from elevenlabs.client import ElevenLabs
         
-        # Initialize the ElevenLabs client
-        client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
-        
-        # Use provided config or default values
-        if eleven_config:
-            voice_settings = {
-                "stability": float(eleven_config.get('Stability', 0.39)),
-                "similarity_boost": float(eleven_config.get('Similarity Boost', 0.7)),
-                "style": float(eleven_config.get('Style', 0.5)),
-                "speed": float(eleven_config.get('Speed', 1.06))
-            }
-            # Returns a generator of bytes chunks
-            audio_stream = client.text_to_speech.convert(
-                text=text,
-                voice_id=voice_id,
-                voice_settings=voice_settings,
-                model_id=eleven_config.get('Model', 'eleven_multilingual_v2')
-            )
+        # Split text into <=2500 character chunks
+        chunks = split_text_into_chunks(text, max_length=2500)
+        print(f"[DEBUG] generate_voice_audio: Preparing to send {len(chunks)} chunk(s) to Eleven Labs API.")
+        if len(chunks) == 1:
+            # Single chunk, process as before
+            chunk_text = chunks[0]
+            client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
+            if eleven_config:
+                voice_settings = {
+                    "stability": float(eleven_config.get('Stability', 0.39)),
+                    "similarity_boost": float(eleven_config.get('Similarity Boost', 0.7)),
+                    "style": float(eleven_config.get('Style', 0.5)),
+                    "speed": float(eleven_config.get('Speed', 1.06))
+                }
+                try:
+                    print(f"[DEBUG] Using model: {eleven_config.get('Model', 'eleven_multilingual_v2') if eleven_config else 'eleven_multilingual_v2'}, voice_id: {voice_id}")
+                    if len(chunk_text) > 2000:
+                        print(f"[WARNING] Chunk is very long ({len(chunk_text)} chars). Consider splitting further if you see timeouts.")
+                    start_time = time.time()
+                    audio_stream = client.text_to_speech.convert(
+                        text=chunk_text,
+                        voice_id=voice_id,
+                        voice_settings=voice_settings,
+                        model_id=eleven_config.get('Model', 'eleven_multilingual_v2')
+                    )
+                    elapsed = time.time() - start_time
+                    print(f"[DEBUG] ElevenLabs SDK call returned in {elapsed:.3f}s (streaming)")
+                    print(f"[DEBUG] ElevenLabs SDK: Received audio stream for chunk. Saving to file...")
+                except Exception as e:
+                    print(f"❌ ElevenLabs client error: {e}")
+                    traceback.print_exc()
+                    print("[DEBUG] Falling back to REST API...")
+                    return generate_voice_audio_rest(text, voice_id, output_path, eleven_config)
+            else:
+                try:
+                    print(f"[DEBUG] Using model: {eleven_config.get('Model', 'eleven_multilingual_v2') if eleven_config else 'eleven_multilingual_v2'}, voice_id: {voice_id}")
+                    if len(chunk_text) > 2000:
+                        print(f"[WARNING] Chunk is very long ({len(chunk_text)} chars). Consider splitting further if you see timeouts.")
+                    start_time = time.time()
+                    audio_stream = client.text_to_speech.convert(
+                        text=chunk_text,
+                        voice_id=voice_id,
+                        model_id="eleven_multilingual_v2"
+                    )
+                    elapsed = time.time() - start_time
+                    print(f"[DEBUG] ElevenLabs SDK call returned in {elapsed:.3f}s (streaming)")
+                    print(f"[DEBUG] ElevenLabs SDK: Received audio stream for chunk. Saving to file...")
+                except Exception as e:
+                    print(f"❌ ElevenLabs client error: {e}")
+                    traceback.print_exc()
+                    print("[DEBUG] Falling back to REST API...")
+                    return generate_voice_audio_rest(text, voice_id, output_path, eleven_config)
+            with open(output_path, 'wb') as f:
+                for chunk in audio_stream:
+                    f.write(chunk)
+            print(f"✅ Audio generated successfully: {output_path}")
+            return output_path
         else:
-            # Fallback to default settings
-            audio_stream = client.text_to_speech.convert(
-                text=text,
-                voice_id=voice_id,
-                model_id="eleven_multilingual_v2"
-            )
-        # Write the audio stream to file
-        with open(output_path, 'wb') as f:
-            for chunk in audio_stream:
-                f.write(chunk)
-        print(f"✅ Audio generated successfully: {output_path}")
-        return output_path
+            # Multiple chunks: process each, then merge
+            temp_audio_paths = []
+            client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
+            for idx, chunk_text in enumerate(chunks):
+                print(f"[DEBUG] Sending chunk {idx+1}/{len(chunks)} to Eleven Labs API (length: {len(chunk_text)})")
+                print(f"[DEBUG] Chunk {idx+1} preview: {chunk_text[:100]}")
+                temp_path = f"{output_path}_chunk{idx+1}.mp3"
+                if eleven_config:
+                    voice_settings = {
+                        "stability": float(eleven_config.get('Stability', 0.39)),
+                        "similarity_boost": float(eleven_config.get('Similarity Boost', 0.7)),
+                        "style": float(eleven_config.get('Style', 0.5)),
+                        "speed": float(eleven_config.get('Speed', 1.06))
+                    }
+                    try:
+                        print(f"[DEBUG] Using model: {eleven_config.get('Model', 'eleven_multilingual_v2') if eleven_config else 'eleven_multilingual_v2'}, voice_id: {voice_id}")
+                        if len(chunk_text) > 2000:
+                            print(f"[WARNING] Chunk {idx+1} is very long ({len(chunk_text)} chars). Consider splitting further if you see timeouts.")
+                        start_time = time.time()
+                        audio_stream = client.text_to_speech.convert(
+                            text=chunk_text,
+                            voice_id=voice_id,
+                            voice_settings=voice_settings,
+                            model_id=eleven_config.get('Model', 'eleven_multilingual_v2')
+                        )
+                        elapsed = time.time() - start_time
+                        print(f"[DEBUG] ElevenLabs SDK call for chunk {idx+1} returned in {elapsed:.3f}s (streaming)")
+                        print(f"[DEBUG] ElevenLabs SDK: Received audio stream for chunk {idx+1}. Saving to file...")
+                    except Exception as e:
+                        print(f"[ERROR] Failed on chunk {idx+1}/{len(chunks)}. First 100 chars: {chunk_text[:100]}")
+                        traceback.print_exc()
+                        print("[DEBUG] Falling back to REST API...")
+                        for p in temp_audio_paths:
+                            try: os.remove(p)
+                            except: pass
+                        return generate_voice_audio_rest(text, voice_id, output_path, eleven_config)
+                else:
+                    try:
+                        print(f"[DEBUG] Using model: {eleven_config.get('Model', 'eleven_multilingual_v2') if eleven_config else 'eleven_multilingual_v2'}, voice_id: {voice_id}")
+                        if len(chunk_text) > 2000:
+                            print(f"[WARNING] Chunk {idx+1} is very long ({len(chunk_text)} chars). Consider splitting further if you see timeouts.")
+                        start_time = time.time()
+                        audio_stream = client.text_to_speech.convert(
+                            text=chunk_text,
+                            voice_id=voice_id,
+                            model_id="eleven_multilingual_v2"
+                        )
+                        elapsed = time.time() - start_time
+                        print(f"[DEBUG] ElevenLabs SDK call for chunk {idx+1} returned in {elapsed:.3f}s (streaming)")
+                        print(f"[DEBUG] ElevenLabs SDK: Received audio stream for chunk {idx+1}. Saving to file...")
+                    except Exception as e:
+                        print(f"[ERROR] Failed on chunk {idx+1}/{len(chunks)}. First 100 chars: {chunk_text[:100]}")
+                        traceback.print_exc()
+                        print("[DEBUG] Falling back to REST API...")
+                        for p in temp_audio_paths:
+                            try: os.remove(p)
+                            except: pass
+                        return generate_voice_audio_rest(text, voice_id, output_path, eleven_config)
+                with open(temp_path, 'wb') as f:
+                    for chunk in audio_stream:
+                        f.write(chunk)
+                print(f"✅ Audio chunk {idx+1} generated and saved: {temp_path}")
+                temp_audio_paths.append(temp_path)
+            # Merge all chunk audio files
+            merged_path = merge_multiple_audio_files(temp_audio_paths, output_path)
+            # Clean up temp chunk files
+            for p in temp_audio_paths:
+                try: os.remove(p)
+                except: pass
+            if merged_path:
+                print(f"✅ Audio generated and merged successfully: {merged_path}")
+            return merged_path
     except ImportError:
         print("⚠️ ElevenLabs Python client not installed. Falling back to REST API...")
         return generate_voice_audio_rest(text, voice_id, output_path, eleven_config)
     except Exception as e:
         print(f"❌ ElevenLabs error: {e}")
-        return None
+        traceback.print_exc()
+        print("[DEBUG] Falling back to REST API...")
+        return generate_voice_audio_rest(text, voice_id, output_path, eleven_config)
+
 
 def generate_voice_audio_rest(text, voice_id, output_path, eleven_config=None):
-    """Fallback REST API method for Eleven Labs."""
+    """Fallback REST API method for Eleven Labs. Handles chunking and merging."""
     url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
     headers = {
         "xi-api-key": ELEVENLABS_API_KEY,
         "Content-Type": "application/json"
     }
     
-    # Use provided config or default values
-    if eleven_config:
-        payload = {
-            "text": text,
-            "model_id": eleven_config.get('Model', 'eleven_multilingual_v2'),
-            "voice_settings": {
-                "stability": float(eleven_config.get('Stability', 0.39)),
-                "similarity_boost": float(eleven_config.get('Similarity Boost', 0.7)),
-                "style": float(eleven_config.get('Style', 0.5)),
-                "speed": float(eleven_config.get('Speed', 1.06))
+    def _single_chunk(chunk_text, temp_path):
+        if eleven_config:
+            payload = {
+                "text": chunk_text,
+                "model_id": eleven_config.get('Model', 'eleven_multilingual_v2'),
+                "voice_settings": {
+                    "stability": float(eleven_config.get('Stability', 0.39)),
+                    "similarity_boost": float(eleven_config.get('Similarity Boost', 0.7)),
+                    "style": float(eleven_config.get('Style', 0.5)),
+                    "speed": float(eleven_config.get('Speed', 1.06))
+                }
             }
-        }
-    else:
-        # Fallback to original settings
-        payload = {
-            "text": text,
-            "model_id": "eleven_multilingual_v2",
-            "voice_settings": {
-                "stability": 0.5,
-                "similarity_boost": 0.7
-            }
-        }
-    
-    try:
-        response = requests.post(url, json=payload, headers=headers)
-        if response.status_code == 200:
-            with open(output_path, 'wb') as f:
-                f.write(response.content)
-            return output_path
         else:
-            print(f"❌ ElevenLabs REST API error: {response.status_code} {response.text}")
-    except Exception as e:
-        print(f"❌ ElevenLabs REST API error: {e}")
-    return None
+            payload = {
+                "text": chunk_text,
+                "model_id": "eleven_multilingual_v2",
+                "voice_settings": {
+                    "stability": 0.5,
+                    "similarity_boost": 0.7
+                }
+            }
+        try:
+            print(f"[DEBUG] ElevenLabs API payload: {json.dumps(payload)[:500]}{'...' if len(json.dumps(payload)) > 500 else ''}")
+            start_time = time.time()
+            response = requests.post(url, json=payload, headers=headers, timeout=120)
+            elapsed = time.time() - start_time
+            print(f"[DEBUG] ElevenLabs API call took {elapsed:.2f} seconds")
+            print(f"[DEBUG] ElevenLabs REST API response status: {response.status_code}")
+            print(f"[DEBUG] ElevenLabs REST API response headers: {dict(response.headers)}")
+            if response.status_code == 200:
+                with open(temp_path, 'wb') as f:
+                    f.write(response.content)
+                print(f"✅ Audio chunk received and saved: {temp_path}")
+                return temp_path
+            else:
+                print(f"❌ ElevenLabs REST API error: {response.status_code} {response.text}")
+                # Try to print error message from JSON if available
+                try:
+                    error_json = response.json()
+                    if 'error' in error_json:
+                        print(f"❌ ElevenLabs API error message: {error_json['error']}")
+                    else:
+                        print(f"❌ ElevenLabs API error JSON: {error_json}")
+                except Exception:
+                    print(f"❌ ElevenLabs API error (non-JSON): {response.content[:500]}")
+                return None
+        except requests.exceptions.Timeout:
+            print("❌ ElevenLabs REST API error: Request timed out after 120 seconds.")
+            traceback.print_exc()
+            return None
+        except requests.exceptions.RequestException as e:
+            print(f"❌ ElevenLabs REST API error: {e}")
+            traceback.print_exc()
+            if hasattr(e, 'response') and e.response is not None:
+                print(f"❌ ElevenLabs REST API error response: {e.response.text}")
+            return None
+        except Exception as e:
+            print(f"❌ ElevenLabs REST API error: {e}")
+            traceback.print_exc()
+            return None
+
+    # Split text into <=2500 character chunks
+    chunks = split_text_into_chunks(text, max_length=2500)
+    if len(chunks) == 1:
+        return _single_chunk(chunks[0], output_path)
+    else:
+        temp_audio_paths = []
+        for idx, chunk_text in enumerate(chunks):
+            temp_path = f"{output_path}_chunk{idx+1}.mp3"
+            result = _single_chunk(chunk_text, temp_path)
+            if result:
+                temp_audio_paths.append(result)
+            else:
+                # Clean up any previous temp files
+                for p in temp_audio_paths:
+                    try: os.remove(p)
+                    except: pass
+                return None
+        merged_path = merge_multiple_audio_files(temp_audio_paths, output_path)
+        for p in temp_audio_paths:
+            try: os.remove(p)
+            except: pass
+        if merged_path:
+            print(f"✅ Audio generated and merged successfully: {merged_path}")
+        return merged_path
 
 def download_latest_text_file_from_drive(service_account_json, folder_id):
     """Downloads the latest text file from a Google Drive folder."""
@@ -1014,7 +1210,7 @@ if __name__ == '__main__':
                 audio_path = generate_voice_audio(text_content, voice_id, temp_audio_path, eleven_config)
                 
                 if not audio_path:
-                    log_msg = f"Failed to generate audio with Eleven Labs for step {i+1}."
+                    log_msg = f"Failed to generate audio with Eleven Labs for step {i+1}. Aborting workflow."
                     print(f"    > {log_msg}")
                     workflow_steps_records.append([
                         get_next_workflow_steps_id() + i + 0.1,
@@ -1027,7 +1223,9 @@ if __name__ == '__main__':
                         '',
                         log_msg
                     ])
-                    continue
+                    # End the entire workflow immediately
+                    print("[FATAL] Eleven Labs API error encountered. Exiting workflow.")
+                    sys.exit(1)
                 
                 # Upload audio to destination location
                 save_location = get_location_by_id(save_location_id)
@@ -1050,7 +1248,7 @@ if __name__ == '__main__':
                 save_folder_url = save_location['Location']
                 save_folder_id = extract_drive_folder_id(save_folder_url)
                 if not save_folder_id:
-                    log_msg = f"Invalid Google Drive folder ID for save location {save_location_id}."
+                    log_msg = f"Invalid Google Drive folder ID for save location {save_location_id}"
                     print(f"    > {log_msg}")
                     workflow_steps_records.append([
                         get_next_workflow_steps_id() + i + 0.1,
@@ -1067,6 +1265,8 @@ if __name__ == '__main__':
                 
                 audio_filename = f'workflow_{request_id}_step_{i+1}_{eleven_config["Voice"]}.mp3'
                 try:
+                    print(f"[DEBUG] Using model: {eleven_config.get('Model', 'eleven_multilingual_v2') if eleven_config else 'eleven_multilingual_v2'}, voice_id: {voice_id}")
+                    start_time = time.time()
                     file_link = upload_audio_to_drive(GOOGLE_CREDS_JSON, save_folder_id, audio_filename, audio_path)
                     log_msg = f"Generated and uploaded audio to Google Drive: {file_link}"
                     print(f"    > {log_msg}")
@@ -1251,6 +1451,8 @@ if __name__ == '__main__':
                 
                 audio_filename = f'merged_workflow_{request_id}_step_{i+1}.mp3'
                 try:
+                    print(f"[DEBUG] Using model: {eleven_config.get('Model', 'eleven_multilingual_v2') if eleven_config else 'eleven_multilingual_v2'}, voice_id: {voice_id}")
+                    start_time = time.time()
                     file_link = upload_audio_to_drive(GOOGLE_CREDS_JSON, save_folder_id, audio_filename, merged_path)
                     log_msg = f"Merged and uploaded audio to Google Drive: {file_link}"
                     print(f"    > {log_msg}")
