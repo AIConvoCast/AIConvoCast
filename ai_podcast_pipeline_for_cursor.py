@@ -15,6 +15,7 @@ import json
 import sys
 import shutil
 from pathlib import Path
+from google.oauth2.service_account import Credentials
 
 # Load environment variables from .env file
 load_dotenv()
@@ -106,17 +107,27 @@ def create_and_setup_google_sheet(gc, sheet_name, folder_id, user_email):
     return spreadsheet
 
 
-def connect_to_google_sheet():
-    """Connects to Google Sheets using service account credentials."""
-    scopes = [
-        'https://spreadsheets.google.com/feeds',
-        'https://www.googleapis.com/auth/drive'
-    ]
-    return gspread.service_account(filename=GOOGLE_CREDS_JSON, scopes=scopes)
+def connect_to_google_sheet_with_retry(retries=5, delay=10):
+    for attempt in range(retries):
+        try:
+            creds = Credentials.from_service_account_file(GOOGLE_CREDS_JSON, scopes=[
+                'https://spreadsheets.google.com/feeds',
+                'https://www.googleapis.com/auth/drive'
+            ])
+            gc = gspread.authorize(creds)
+            return gc
+        except gspread.exceptions.APIError as e:
+            print(f"Google Sheets API error: {e}")
+            if attempt < retries - 1:
+                print(f"Retrying in {delay} seconds... (Attempt {attempt+1}/{retries})")
+                time.sleep(delay)
+            else:
+                print("Max retries reached. Exiting.")
+                raise
 
 def try_load_google_sheet():
     try:
-        gc = connect_to_google_sheet()
+        gc = connect_to_google_sheet_with_retry()
         try:
             spreadsheet = gc.open(GOOGLE_SHEET_NAME)
             ws = spreadsheet.worksheet("Workflows")
@@ -422,12 +433,10 @@ def generate_voice_audio(text, voice_id, output_path, eleven_config=None):
     """
     try:
         from elevenlabs.client import ElevenLabs
-        
         # Split text into <=2500 character chunks
         chunks = split_text_into_chunks(text, max_length=2500)
         print(f"[DEBUG] generate_voice_audio: Preparing to send {len(chunks)} chunk(s) to Eleven Labs API.")
         if len(chunks) == 1:
-            # Single chunk, process as before
             chunk_text = chunks[0]
             client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
             if eleven_config:
@@ -485,9 +494,9 @@ def generate_voice_audio(text, voice_id, output_path, eleven_config=None):
             temp_audio_paths = []
             client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
             for idx, chunk_text in enumerate(chunks):
+                temp_path = MP3_OUTPUT_DIR / f"temp_audio_{int(time.time())}_{os.getpid()}_chunk_{idx+1}.mp3"
                 print(f"[DEBUG] Sending chunk {idx+1}/{len(chunks)} to Eleven Labs API (length: {len(chunk_text)})")
                 print(f"[DEBUG] Chunk {idx+1} preview: {chunk_text[:100]}")
-                temp_path = MP3_OUTPUT_DIR / f"temp_audio_{request_id}_step_{i+1}.mp3"
                 if eleven_config:
                     voice_settings = {
                         "stability": float(eleven_config.get('Stability', 0.39)),
@@ -508,7 +517,7 @@ def generate_voice_audio(text, voice_id, output_path, eleven_config=None):
                         )
                         elapsed = time.time() - start_time
                         print(f"[DEBUG] ElevenLabs SDK call for chunk {idx+1} returned in {elapsed:.3f}s (streaming)")
-                        print(f"[DEBUG] ElevenLabs SDK: Received audio stream for chunk {idx+1}. Saving to file...")
+                        print(f"[DEBUG] ElevenLabs SDK: Received audio stream for chunk {idx+1}. Saving to file {temp_path}...")
                     except Exception as e:
                         print(f"[ERROR] Failed on chunk {idx+1}/{len(chunks)}. First 100 chars: {chunk_text[:100]}")
                         traceback.print_exc()
@@ -530,7 +539,7 @@ def generate_voice_audio(text, voice_id, output_path, eleven_config=None):
                         )
                         elapsed = time.time() - start_time
                         print(f"[DEBUG] ElevenLabs SDK call for chunk {idx+1} returned in {elapsed:.3f}s (streaming)")
-                        print(f"[DEBUG] ElevenLabs SDK: Received audio stream for chunk {idx+1}. Saving to file...")
+                        print(f"[DEBUG] ElevenLabs SDK: Received audio stream for chunk {idx+1}. Saving to file {temp_path}...")
                     except Exception as e:
                         print(f"[ERROR] Failed on chunk {idx+1}/{len(chunks)}. First 100 chars: {chunk_text[:100]}")
                         traceback.print_exc()
@@ -545,21 +554,20 @@ def generate_voice_audio(text, voice_id, output_path, eleven_config=None):
                 print(f"✅ Audio chunk {idx+1} generated and saved: {temp_path}")
                 temp_audio_paths.append(temp_path)
             # Merge all chunk audio files
-            merged_path = merge_multiple_audio_files(temp_audio_paths, output_path)
+            merged_path = MP3_OUTPUT_DIR / f"merged_audio_{int(time.time())}_{os.getpid()}.mp3"
+            print(f"[DEBUG] Merging {len(temp_audio_paths)} chunk files into {merged_path}")
+            merge_multiple_audio_files(temp_audio_paths, merged_path)
             # Clean up temp chunk files
             for p in temp_audio_paths:
                 try: os.remove(p)
                 except: pass
-            if merged_path:
+            if merged_path and os.path.exists(merged_path):
                 print(f"✅ Audio generated and merged successfully: {merged_path}")
+            else:
+                print(f"❌ Merged audio file {merged_path} was not created!")
             return merged_path
     except ImportError:
         print("⚠️ ElevenLabs Python client not installed. Falling back to REST API...")
-        return generate_voice_audio_rest(text, voice_id, output_path, eleven_config)
-    except Exception as e:
-        print(f"❌ ElevenLabs error: {e}")
-        traceback.print_exc()
-        print("[DEBUG] Falling back to REST API...")
         return generate_voice_audio_rest(text, voice_id, output_path, eleven_config)
 
 
@@ -639,7 +647,7 @@ def generate_voice_audio_rest(text, voice_id, output_path, eleven_config=None):
     else:
         temp_audio_paths = []
         for idx, chunk_text in enumerate(chunks):
-            temp_path = MP3_OUTPUT_DIR / f"temp_audio_{request_id}_step_{i+1}.mp3"
+            temp_path = MP3_OUTPUT_DIR / f"temp_audio_{int(time.time())}_{os.getpid()}_chunk_{idx+1}.mp3"
             result = _single_chunk(chunk_text, temp_path)
             if result:
                 temp_audio_paths.append(result)
@@ -649,12 +657,16 @@ def generate_voice_audio_rest(text, voice_id, output_path, eleven_config=None):
                     try: os.remove(p)
                     except: pass
                 return None
-        merged_path = merge_multiple_audio_files(temp_audio_paths, output_path)
+        merged_path = MP3_OUTPUT_DIR / f"merged_audio_{int(time.time())}_{os.getpid()}.mp3"
+        print(f"[DEBUG] Merging {len(temp_audio_paths)} chunk files into {merged_path}")
+        merge_multiple_audio_files(temp_audio_paths, merged_path)
         for p in temp_audio_paths:
             try: os.remove(p)
             except: pass
-        if merged_path:
+        if merged_path and os.path.exists(merged_path):
             print(f"✅ Audio generated and merged successfully: {merged_path}")
+        else:
+            print(f"❌ Merged audio file {merged_path} was not created!")
         return merged_path
 
 def download_latest_text_file_from_drive(service_account_json, folder_id):
@@ -899,7 +911,7 @@ if __name__ == '__main__':
         exit(1)
 
     print("✅ Workbook loaded. Starting workflow processing...")
-    gc = connect_to_google_sheet()
+    gc = connect_to_google_sheet_with_retry()
     spreadsheet = gc.open(GOOGLE_SHEET_NAME)
     workflow_ws = spreadsheet.worksheet("Workflows")
     outputs_ws = spreadsheet.worksheet("Outputs")
@@ -1301,12 +1313,17 @@ if __name__ == '__main__':
                 try:
                     print(f"[DEBUG] Using model: {eleven_config.get('Model', 'eleven_multilingual_v2') if eleven_config else 'eleven_multilingual_v2'}, voice_id: {voice_id}")
                     start_time = time.time()
-                    file_link = upload_audio_to_drive(GOOGLE_CREDS_JSON, save_folder_id, audio_filename, audio_path)
-                    log_msg = f"Generated and uploaded audio to Google Drive: {file_link}"
-                    print(f"    > {log_msg}")
+                    if os.path.exists(audio_path):
+                        file_link = upload_audio_to_drive(GOOGLE_CREDS_JSON, save_folder_id, audio_filename, audio_path)
+                        log_msg = f"Generated and uploaded audio to Google Drive: {file_link}"
+                        print(f"    > {log_msg}")
+                    else:
+                        print(f"File {audio_path} does not exist, skipping upload.")
+                        sys.exit(1)
                 except Exception as e:
                     log_msg = f"Failed to upload audio to Google Drive: {e}"
                     print(f"    > {log_msg}")
+                    sys.exit(1)
                 
                 # Clean up temporary file
                 try:
@@ -1487,9 +1504,12 @@ if __name__ == '__main__':
                 try:
                     print(f"[DEBUG] Using model: {eleven_config.get('Model', 'eleven_multilingual_v2') if eleven_config else 'eleven_multilingual_v2'}, voice_id: {voice_id}")
                     start_time = time.time()
-                    file_link = upload_audio_to_drive(GOOGLE_CREDS_JSON, save_folder_id, audio_filename, merged_path)
-                    log_msg = f"Merged and uploaded audio to Google Drive: {file_link}"
-                    print(f"    > {log_msg}")
+                    if os.path.exists(merged_path):
+                        file_link = upload_audio_to_drive(GOOGLE_CREDS_JSON, save_folder_id, audio_filename, merged_path)
+                        log_msg = f"Merged and uploaded audio to Google Drive: {file_link}"
+                        print(f"    > {log_msg}")
+                    else:
+                        print(f"File {merged_path} does not exist, skipping upload.")
                 except Exception as e:
                     log_msg = f"Failed to upload merged audio to Google Drive: {e}"
                     print(f"    > {log_msg}")
@@ -1584,3 +1604,6 @@ if __name__ == '__main__':
         # Mark request as processed (disabled per user request)
         # requests_ws.update_cell(req_idx + 2, requests_df.columns.get_loc('Active') + 1, 'N')
         print(f"✅ Request {request_id} processed and logged.")
+
+    # print("Critical error message")
+    # sys.exit(1)
