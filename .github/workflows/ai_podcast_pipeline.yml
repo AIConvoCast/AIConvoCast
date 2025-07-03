@@ -74,13 +74,37 @@ jobs:
           SHARE_SHEET_WITH_EMAIL=${{ vars.SHARE_SHEET_WITH_EMAIL }}
           EOF
 
+      - name: Test Environment Variables
+        run: |
+          python test_env_vars.py
+
       - name: Run AI Podcast Pipeline
         id: run-pipeline
         run: |
           echo "Starting AI Podcast Pipeline..."
           echo "Custom Topic: ${{ github.event.inputs.custom_topic || 'None' }}"
           echo "Workflow ID: ${{ github.event.inputs.workflow_id || '12' }}"
-          echo "Trigger: ${{ github.event_name }}"
+          echo "Trigger: ${{ github.event.name }}"
+          
+          # Debug: Check if environment variables are set
+          echo "Checking environment variables..."
+          if [ -n "$OPENAI_API_KEY" ]; then
+            echo "✅ OPENAI_API_KEY is set (length: ${#OPENAI_API_KEY})"
+          else
+            echo "❌ OPENAI_API_KEY is not set"
+          fi
+          
+          if [ -n "$ELEVENLABS_API_KEY" ]; then
+            echo "✅ ELEVENLABS_API_KEY is set (length: ${#ELEVENLABS_API_KEY})"
+          else
+            echo "❌ ELEVENLABS_API_KEY is not set"
+          fi
+          
+          if [ -n "$SHARE_SHEET_WITH_EMAIL" ]; then
+            echo "✅ SHARE_SHEET_WITH_EMAIL is set: $SHARE_SHEET_WITH_EMAIL"
+          else
+            echo "❌ SHARE_SHEET_WITH_EMAIL is not set"
+          fi
           
           python ai_podcast_pipeline_for_cursor.py
         env:

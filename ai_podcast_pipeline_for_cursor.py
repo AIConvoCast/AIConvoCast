@@ -29,10 +29,23 @@ GOOGLE_SHEET_NAME = 'AI Workflow'
 GOOGLE_DRIVE_FOLDER_ID = '17XAnga8MC1o23rFhiQ7fcrrqDNhz_-oB'  # Folder to create the sheet in
 SHARE_SHEET_WITH_EMAIL = 'AIConvoCast@gmail.com'
 
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', 'sk-ESFy8Dn...')
-ELEVENLABS_API_KEY = os.getenv('ELEVENLABS_API_KEY', 'sk_c7b2bab...')
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+ELEVENLABS_API_KEY = os.getenv('ELEVENLABS_API_KEY')
 
 # Instantiate the OpenAI client once using the API key from environment variables
+if not OPENAI_API_KEY:
+    print("❌ OPENAI_API_KEY is not set in environment variables")
+    print("Please ensure OPENAI_API_KEY is set in your GitHub environment variables")
+    sys.exit(1)
+
+if not ELEVENLABS_API_KEY:
+    print("❌ ELEVENLABS_API_KEY is not set in environment variables")
+    print("Please ensure ELEVENLABS_API_KEY is set in your GitHub environment variables")
+    sys.exit(1)
+
+print(f"✅ OpenAI API Key configured (length: {len(OPENAI_API_KEY)})")
+print(f"✅ Eleven Labs API Key configured (length: {len(ELEVENLABS_API_KEY)})")
+
 client = OpenAI(api_key=OPENAI_API_KEY)
 
 print(f"[DEBUG] Python version: {sys.version}")
