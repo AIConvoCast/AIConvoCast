@@ -41,6 +41,7 @@ Thumbs.db
 
 # Credentials
 *.json
+jmio-google-api.json
 
 # Generated files
 *.xlsx
@@ -50,3 +51,12 @@ Thumbs.db
 __pycache__/
 venv/
 *.pyc
+
+# Generated audio files
+generated_mp3/
+temp_audio_*.mp3
+merged_audio_*.mp3
+
+# Temporary files
+*.tmp
+*.temp

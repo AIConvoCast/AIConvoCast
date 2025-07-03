@@ -13,6 +13,8 @@ import tempfile
 import traceback
 import json
 import sys
+import shutil
+from pathlib import Path
 
 # Load environment variables from .env file
 load_dotenv()
@@ -40,6 +42,25 @@ try:
     print(f"[DEBUG] elevenlabs version: {elevenlabs.__version__}")
 except ImportError:
     pass
+
+# Set the directory for generated mp3 files
+MP3_OUTPUT_DIR = Path("generated_mp3")
+MP3_OUTPUT_DIR.mkdir(exist_ok=True)
+
+# Clean up old mp3 files (older than 5 days)
+def cleanup_old_mp3_files():
+    now = time.time()
+    cutoff = now - 5 * 24 * 60 * 60  # 5 days in seconds
+    for mp3_file in MP3_OUTPUT_DIR.glob("*.mp3"):
+        if mp3_file.is_file() and mp3_file.stat().st_mtime < cutoff:
+            print(f"[CLEANUP] Deleting old mp3 file: {mp3_file}")
+            try:
+                mp3_file.unlink()
+            except Exception as e:
+                print(f"[CLEANUP ERROR] Could not delete {mp3_file}: {e}")
+
+# Call cleanup at the start of the script
+cleanup_old_mp3_files()
 
 # -----------------------------------------
 # GOOGLE SHEET SUPPORT
@@ -453,7 +474,7 @@ def generate_voice_audio(text, voice_id, output_path, eleven_config=None):
             for idx, chunk_text in enumerate(chunks):
                 print(f"[DEBUG] Sending chunk {idx+1}/{len(chunks)} to Eleven Labs API (length: {len(chunk_text)})")
                 print(f"[DEBUG] Chunk {idx+1} preview: {chunk_text[:100]}")
-                temp_path = f"{output_path}_chunk{idx+1}.mp3"
+                temp_path = MP3_OUTPUT_DIR / f"temp_audio_{request_id}_step_{i+1}.mp3"
                 if eleven_config:
                     voice_settings = {
                         "stability": float(eleven_config.get('Stability', 0.39)),
@@ -605,7 +626,7 @@ def generate_voice_audio_rest(text, voice_id, output_path, eleven_config=None):
     else:
         temp_audio_paths = []
         for idx, chunk_text in enumerate(chunks):
-            temp_path = f"{output_path}_chunk{idx+1}.mp3"
+            temp_path = MP3_OUTPUT_DIR / f"temp_audio_{request_id}_step_{i+1}.mp3"
             result = _single_chunk(chunk_text, temp_path)
             if result:
                 temp_audio_paths.append(result)
@@ -763,7 +784,7 @@ def download_latest_mp3_from_drive(service_account_json, folder_id):
                 print(f"  Download {int(status.progress() * 100)}%")
         
         # Save to temporary file
-        temp_path = f"temp_{file_name}"
+        temp_path = MP3_OUTPUT_DIR / f"temp_{file_name}"
         with open(temp_path, 'wb') as f:
             f.write(fh.getvalue())
         
@@ -814,7 +835,7 @@ def download_mp3_file_from_drive(service_account_json, file_url):
                 print(f"  Download {int(status.progress() * 100)}%")
         
         # Save to temporary file
-        temp_path = f"temp_{file_name}"
+        temp_path = MP3_OUTPUT_DIR / f"temp_{file_name}"
         with open(temp_path, 'wb') as f:
             f.write(fh.getvalue())
         
@@ -1206,7 +1227,7 @@ if __name__ == '__main__':
                 
                 # Generate audio using Eleven Labs
                 print(f"    > Generating audio with voice: {eleven_config['Voice']}")
-                temp_audio_path = f'temp_audio_{request_id}_step_{i+1}.mp3'
+                temp_audio_path = MP3_OUTPUT_DIR / f"temp_audio_{request_id}_step_{i+1}.mp3"
                 audio_path = generate_voice_audio(text_content, voice_id, temp_audio_path, eleven_config)
                 
                 if not audio_path:
@@ -1394,7 +1415,7 @@ if __name__ == '__main__':
                 
                 # Merge audio files
                 print(f"    > Merging {len(audio_paths)} audio files...")
-                merged_audio_path = f'merged_audio_{request_id}_step_{i+1}.mp3'
+                merged_audio_path = MP3_OUTPUT_DIR / f"merged_audio_{request_id}_step_{i+1}.mp3"
                 merged_path = merge_multiple_audio_files(audio_paths, merged_audio_path)
                 
                 if not merged_path:

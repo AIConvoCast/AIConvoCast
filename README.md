@@ -73,6 +73,8 @@ This will test both API connection and voice generation using the Liam voice ID.
 
 ## Installation
 
+### Local Setup
+
 1. Install required packages:
    ```bash
    pip install -r requirements.txt
@@ -87,6 +89,62 @@ This will test both API connection and voice generation using the Liam voice ID.
 3. Configure Google Sheets credentials:
    - Place your service account JSON file as `jmio-google-api.json`
    - Update `SHARE_SHEET_WITH_EMAIL` in the script
+
+### GitHub Actions Setup
+
+The repository includes automated GitHub Actions workflows for running the AI podcast pipeline.
+
+#### Prerequisites
+
+1. **Repository Secrets**: Add the following secrets to your GitHub repository:
+   - `OPENAI_API_KEY`: Your OpenAI API key
+   - `ELEVENLABS_API_KEY`: Your Eleven Labs API key
+   - `GOOGLE_CREDS_JSON`: The contents of your Google service account JSON file
+   - `SHARE_SHEET_WITH_EMAIL`: Email address to share Google Sheets with
+
+2. **Google Drive Permissions**: Ensure your service account has access to all required Google Drive folders.
+
+#### Workflow Triggers
+
+The pipeline can be triggered in several ways:
+
+1. **Manual Trigger (Recommended)**:
+   - Go to Actions tab in your repository
+   - Select "Run AI Podcast Pipeline"
+   - Click "Run workflow"
+   - Optionally provide:
+     - Custom topic for the podcast
+     - Specific workflow ID to run
+     - Force run flag
+
+2. **Automatic on Push**:
+   - Triggers when you push changes to `ai_podcast_pipeline_for_cursor.py`, `requirements.txt`, or the workflow file
+   - Only runs on the `main` branch
+
+3. **Scheduled (Daily)**:
+   - Automatically runs daily at 9 AM UTC
+   - Perfect for daily news podcasts
+
+#### Workflow Features
+
+- **Artifact Upload**: Generated audio files and logs are saved as artifacts
+- **Error Handling**: Comprehensive error logging and notifications
+- **Timeout Protection**: 30-minute timeout to prevent infinite runs
+- **Cleanup**: Automatic cleanup of temporary files
+- **System Dependencies**: Installs ffmpeg for audio processing
+
+#### Accessing Results
+
+1. **Audio Files**: Download the `generated-audio-files-{run_id}` artifact
+2. **Logs**: Download the `pipeline-logs-{run_id}` artifact for debugging
+3. **Google Sheets**: Check the "Outputs" and "Workflow Steps" tabs for detailed results
+
+#### Customization
+
+To modify the workflow:
+1. Edit `.github/workflows/ai_podcast_pipeline.yml`
+2. Adjust the schedule, timeout, or add new steps
+3. Commit and push to trigger the updated workflow
 
 ## Usage
 

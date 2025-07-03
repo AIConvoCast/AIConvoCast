@@ -1,0 +1,135 @@
+name: Test Setup
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test-setup:
+    runs-on: ubuntu-latest
+    name: Test GitHub Actions Setup
+    timeout-minutes: 10
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Test environment variables
+        run: |
+          echo "Testing environment variable setup..."
+          if [ -n "${{ secrets.OPENAI_API_KEY }}" ]; then
+            echo "✅ OPENAI_API_KEY is set"
+          else
+            echo "❌ OPENAI_API_KEY is not set"
+            exit 1
+          fi
+          
+          if [ -n "${{ secrets.ELEVENLABS_API_KEY }}" ]; then
+            echo "✅ ELEVENLABS_API_KEY is set"
+          else
+            echo "❌ ELEVENLABS_API_KEY is not set"
+            exit 1
+          fi
+          
+          if [ -n "${{ secrets.GOOGLE_CREDS_JSON }}" ]; then
+            echo "✅ GOOGLE_CREDS_JSON is set"
+          else
+            echo "❌ GOOGLE_CREDS_JSON is not set"
+            exit 1
+          fi
+          
+          if [ -n "${{ secrets.SHARE_SHEET_WITH_EMAIL }}" ]; then
+            echo "✅ SHARE_SHEET_WITH_EMAIL is set"
+          else
+            echo "❌ SHARE_SHEET_WITH_EMAIL is not set"
+            exit 1
+          fi
+
+      - name: Test Google credentials
+        run: |
+          echo '${{ secrets.GOOGLE_CREDS_JSON }}' > test-google-creds.json
+          python -c "
+          import json
+          try:
+              with open('test-google-creds.json', 'r') as f:
+                  creds = json.load(f)
+              print('✅ Google credentials JSON is valid')
+              print(f'Project ID: {creds.get(\"project_id\", \"Not found\")}')
+          except json.JSONDecodeError as e:
+              print(f'❌ Invalid JSON in Google credentials: {e}')
+              exit(1)
+          except Exception as e:
+              print(f'❌ Error reading Google credentials: {e}')
+              exit(1)
+          "
+
+      - name: Test Python imports
+        run: |
+          python -c "
+          try:
+              import openai
+              print('✅ OpenAI package imported successfully')
+          except ImportError as e:
+              print(f'❌ Failed to import OpenAI: {e}')
+              exit(1)
+              
+          try:
+              import elevenlabs
+              print('✅ ElevenLabs package imported successfully')
+          except ImportError as e:
+              print(f'❌ Failed to import ElevenLabs: {e}')
+              exit(1)
+              
+          try:
+              import gspread
+              print('✅ GSpread package imported successfully')
+          except ImportError as e:
+              print(f'❌ Failed to import GSpread: {e}')
+              exit(1)
+              
+          try:
+              import pandas
+              print('✅ Pandas package imported successfully')
+          except ImportError as e:
+              print(f'❌ Failed to import Pandas: {e}')
+              exit(1)
+              
+          try:
+              from pydub import AudioSegment
+              print('✅ Pydub package imported successfully')
+          except ImportError as e:
+              print(f'❌ Failed to import Pydub: {e}')
+              exit(1)
+          "
+
+      - name: Test FFmpeg
+        run: |
+          ffmpeg -version
+          echo "✅ FFmpeg is available"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -f test-google-creds.json
+
+      - name: Setup Complete
+        run: |
+          echo "🎉 All tests passed! Your GitHub Actions setup is ready."
+          echo "You can now run the main AI Podcast Pipeline workflow." 
