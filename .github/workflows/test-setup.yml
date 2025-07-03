@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     name: Test GitHub Actions Setup
     timeout-minutes: 10
+    environment: production  # Use your GitHub environment
     
     steps:
       - name: Checkout repository
@@ -34,14 +35,14 @@ jobs:
       - name: Test environment variables
         run: |
           echo "Testing environment variable setup..."
-          if [ -n "${{ secrets.OPENAI_API_KEY }}" ]; then
+          if [ -n "${{ vars.OPENAI_API_KEY }}" ]; then
             echo "✅ OPENAI_API_KEY is set"
           else
             echo "❌ OPENAI_API_KEY is not set"
             exit 1
           fi
           
-          if [ -n "${{ secrets.ELEVENLABS_API_KEY }}" ]; then
+          if [ -n "${{ vars.ELEVENLABS_API_KEY }}" ]; then
             echo "✅ ELEVENLABS_API_KEY is set"
           else
             echo "❌ ELEVENLABS_API_KEY is not set"
@@ -55,7 +56,7 @@ jobs:
             exit 1
           fi
           
-          if [ -n "${{ secrets.SHARE_SHEET_WITH_EMAIL }}" ]; then
+          if [ -n "${{ vars.SHARE_SHEET_WITH_EMAIL }}" ]; then
             echo "✅ SHARE_SHEET_WITH_EMAIL is set"
           else
             echo "❌ SHARE_SHEET_WITH_EMAIL is not set"
@@ -72,11 +73,78 @@ jobs:
                   creds = json.load(f)
               print('✅ Google credentials JSON is valid')
               print(f'Project ID: {creds.get(\"project_id\", \"Not found\")}')
+              
+              # Check required fields
+              required_fields = ['type', 'project_id', 'private_key_id', 'private_key', 'client_email']
+              missing_fields = [field for field in required_fields if field not in creds]
+              
+              if missing_fields:
+                  print(f'❌ Missing required fields: {missing_fields}')
+                  exit(1)
+              else:
+                  print('✅ All required fields present')
+                  
+              if creds.get('type') != 'service_account':
+                  print('❌ Not a service account credential')
+                  exit(1)
+              else:
+                  print('✅ Service account credential')
+                  
           except json.JSONDecodeError as e:
               print(f'❌ Invalid JSON in Google credentials: {e}')
+              print('Content preview:')
+              with open('test-google-creds.json', 'r') as f:
+                  content = f.read()
+                  print(content[:200] + '...' if len(content) > 200 else content)
               exit(1)
           except Exception as e:
               print(f'❌ Error reading Google credentials: {e}')
+              exit(1)
+          "
+
+      - name: Test Google Sheets connection
+        run: |
+          python -c "
+          import time
+          import gspread
+          from google.oauth2 import service_account
+          
+          scopes = [
+              'https://spreadsheets.google.com/feeds',
+              'https://www.googleapis.com/auth/drive'
+          ]
+          
+          try:
+              credentials = service_account.Credentials.from_service_account_file(
+                  'test-google-creds.json', scopes=scopes
+              )
+              
+              gc = gspread.authorize(credentials)
+              print('✅ Successfully authenticated with Google')
+              
+              # Try to list spreadsheets
+              try:
+                  spreadsheets = gc.openall()
+                  print(f'✅ Can access {len(spreadsheets)} spreadsheets')
+                  
+                  # Try to create a test sheet
+                  test_sheet_name = f'Test Sheet {int(time.time())}'
+                  try:
+                      test_sheet = gc.create(test_sheet_name)
+                      print(f'✅ Can create new spreadsheet: {test_sheet_name}')
+                      
+                      # Clean up test sheet
+                      gc.del_spreadsheet(test_sheet.id)
+                      print('✅ Can delete spreadsheets')
+                      
+                  except Exception as e:
+                      print(f'⚠️ Can authenticate but can\'t create/delete sheets: {e}')
+                      
+              except Exception as e:
+                  print(f'⚠️ Can authenticate but can\'t list spreadsheets: {e}')
+                  
+          except Exception as e:
+              print(f'❌ Google Sheets authentication failed: {e}')
               exit(1)
           "
 

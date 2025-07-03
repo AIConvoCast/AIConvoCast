@@ -27,10 +27,10 @@ EXCEL_BACKUP = 'backup_ai_podcast_workflow.xlsx'
 GOOGLE_CREDS_JSON = 'jmio-google-api.json'
 GOOGLE_SHEET_NAME = 'AI Workflow'
 GOOGLE_DRIVE_FOLDER_ID = '17XAnga8MC1o23rFhiQ7fcrrqDNhz_-oB'  # Folder to create the sheet in
-SHARE_SHEET_WITH_EMAIL = 'ianeoconnell@gmail.com' # <--- CHANGE THIS TO YOUR EMAIL
+SHARE_SHEET_WITH_EMAIL = 'AIConvoCast@gmail.com'
 
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', 'your-openai-key')
-ELEVENLABS_API_KEY = os.getenv('ELEVENLABS_API_KEY', 'your-elevenlabs-key')
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', 'sk-ESFy8Dn...')
+ELEVENLABS_API_KEY = os.getenv('ELEVENLABS_API_KEY', 'sk_c7b2bab...')
 
 # Instantiate the OpenAI client once using the API key from environment variables
 client = OpenAI(api_key=OPENAI_API_KEY)

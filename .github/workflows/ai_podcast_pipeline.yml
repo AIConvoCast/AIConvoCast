@@ -33,6 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     name: Run AI Podcast Pipeline
     timeout-minutes: 30
+    environment: production  # Use your GitHub environment
     
     steps:
       - name: Checkout repository
@@ -59,18 +60,18 @@ jobs:
 
       - name: Set up environment variables
         run: |
-          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> $GITHUB_ENV
-          echo "ELEVENLABS_API_KEY=${{ secrets.ELEVENLABS_API_KEY }}" >> $GITHUB_ENV
-          echo "SHARE_SHEET_WITH_EMAIL=${{ secrets.SHARE_SHEET_WITH_EMAIL }}" >> $GITHUB_ENV
+          echo "OPENAI_API_KEY=${{ vars.OPENAI_API_KEY }}" >> $GITHUB_ENV
+          echo "ELEVENLABS_API_KEY=${{ vars.ELEVENLABS_API_KEY }}" >> $GITHUB_ENV
+          echo "SHARE_SHEET_WITH_EMAIL=${{ vars.SHARE_SHEET_WITH_EMAIL }}" >> $GITHUB_ENV
           echo "CUSTOM_TOPIC=${{ github.event.inputs.custom_topic || '' }}" >> $GITHUB_ENV
           echo "WORKFLOW_ID=${{ github.event.inputs.workflow_id || '12' }}" >> $GITHUB_ENV
 
       - name: Create .env file
         run: |
           cat > .env << EOF
-          OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
-          ELEVENLABS_API_KEY=${{ secrets.ELEVENLABS_API_KEY }}
-          SHARE_SHEET_WITH_EMAIL=${{ secrets.SHARE_SHEET_WITH_EMAIL }}
+          OPENAI_API_KEY=${{ vars.OPENAI_API_KEY }}
+          ELEVENLABS_API_KEY=${{ vars.ELEVENLABS_API_KEY }}
+          SHARE_SHEET_WITH_EMAIL=${{ vars.SHARE_SHEET_WITH_EMAIL }}
           EOF
 
       - name: Run AI Podcast Pipeline
@@ -83,9 +84,9 @@ jobs:
           
           python ai_podcast_pipeline_for_cursor.py
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
-          SHARE_SHEET_WITH_EMAIL: ${{ secrets.SHARE_SHEET_WITH_EMAIL }}
+          OPENAI_API_KEY: ${{ vars.OPENAI_API_KEY }}
+          ELEVENLABS_API_KEY: ${{ vars.ELEVENLABS_API_KEY }}
+          SHARE_SHEET_WITH_EMAIL: ${{ vars.SHARE_SHEET_WITH_EMAIL }}
 
       - name: Upload generated audio files
         if: always()
