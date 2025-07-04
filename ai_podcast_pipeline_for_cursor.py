@@ -1607,3 +1607,9 @@ if __name__ == '__main__':
 
     # print("Critical error message")
     # sys.exit(1)
+
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+github_pat = os.getenv("GH_PAT")
