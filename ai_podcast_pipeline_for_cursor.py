@@ -1597,6 +1597,7 @@ if __name__ == '__main__':
 
         output_row = [to_native(output_record.get(col, '')) for col in outputs_df.columns]
         outputs_ws.append_row(output_row)
+        print(f"[INFO] Output written to Output ID: {output_record['Output ID']}")
         # Write to Workflow Steps tab
         for ws_row in workflow_steps_records:
             ws_row_native = [to_native(x) for x in ws_row]
