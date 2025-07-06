@@ -238,3 +238,16 @@ The Liam voice ID (`21m00Tcm4TlvDq8ikWAM`) is already configured. To add more vo
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+
+### Posted Podcasts Update (PPU)
+When the workflow step is `PPU`, the script will update the "Posted Podcasts" tab in the Google Sheet by fetching the latest episodes from the AI Convo Cast Podcast RSS feed. The tab will be fully refreshed with all episodes, including:
+- **Posted Podcasts ID**: Sequential integer (oldest episode = 1, newest = highest ID)
+- **Title**: The episode title (special characters decoded)
+- **Description**: The full episode description (special characters decoded)
+- **Description Short**: The description up to "Help support..."
+
+This ensures that the tab is always up to date and that IDs are consistent for referencing.
+
+### Posted Podcast Last (PPL#)
+When the workflow step is `PPL#` (e.g., `PPL3`), the script will retrieve the Title and Description Short from the last # posted podcast episodes (by highest Posted Podcasts ID, i.e., the newest episodes) and output them to the Outputs tab. This output can be referenced in future steps using `R#`.
+Special characters in titles and descriptions are decoded for readability.

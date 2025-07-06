@@ -16,6 +16,11 @@ import sys
 import shutil
 from pathlib import Path
 from google.oauth2.service_account import Credentials
+import xml.etree.ElementTree as ET
+import html
+import warnings
+
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 # Load environment variables from .env file
 load_dotenv()
@@ -162,32 +167,101 @@ def get_template_dataframes():
         [9, "Test Daily News", "P1M2,P2&R1M4,P3&R2M2,P4&R3M3,P5&R4M3", ""],
         [10, "Test Daily News and Script Save", "P1M2,P6&R1M2,P3&R2M2,P4&R3M3,P5&R4M3,R4SL7", ""],
         [11, "Send latest script to Eleven Labs", "L8E1SL4", ""],
-        [12, "Combine intro mp3 with latest mp3 with outro mp3", "L1&L9&L2SL3", ""]
+        [12, "Combine intro mp3 with latest mp3 with outro mp3", "L1&L9&L2SL3", ""],
+        [13, "Generates Script, Sends to EL and Comines", "P1M2,P6&R1M2,P3&R2M2,P4&R3M3,P5&R4M3,R4SL7,L8E1SL4,L1&L9&L2SL3", ""],
+        [14, "Good Daily News and Script Save", "P1M1,P6&R1M1,P3&R2M1,P4&R3M18,P5&R4M3,R4SL7", ""],
+        [15, "Send to Eleven and Combine", "L8E1SL4,L1&L9&L2SL3", ""],
+        [16, "Good Daily News, Send to Eleven and Combine", "P1M1,P6&R1M1,P3&R2M1,P4&R3M18,P5&R4M3,R4SL7,L8E1SL4,L1&L9&L2SL3", ""],
+        [17, "Top 5 Daily AI News, Send to Eleven and Combine", "P1M1,P7&R1M1,P3&R2M1,P4&R3M18,P5&R4M3,R4SL7,L8E1SL4,L1&L9&L2SL3", ""],
+        [18, "Posted Podcasts Update", "PPU", ""],
+        [19, "Retrieve the last 5 title and descriptions from Posted Podcasts", "PPL5", ""]
     ], columns=["Workflow ID", "Workflow Title", "Workflow Code", "Model Default"])
 
     outputs = pd.DataFrame(columns=[
-        "Output ID", "Triggered Date", "Output 1", "Output 2", "Output 3", "Output 4", "Output 5", "Output 6", "Output 7", "Output 8", "Output 9", "Output 10"
+        "Output ID", "Triggered Date",
+        *[f"Output {i}" for i in range(1, 26)]
     ])
 
     requests = pd.DataFrame([
-        [1, 1, "", "N", ""],
-        [2, 2, "", "N", ""],
-        [3, 3, "", "N", "*used to work"],
-        [4, 4, "", "N", "*works"],
-        [5, 5, "", "N", "*works"],
-        [6, 6, "", "N", "*works"],
-        [7, 7, "", "N", "*works"],
-        [8, 8, "", "N", "*works"],
-        [9, 9, "", "N", "*works but some incorrect news stories"],
-        [10, 10, "", "N", "*works outputs Script to folder"],
-        [11, 11, "", "N", "*works to generate eleven labs based on latest file"],
-        [12, 12, "", "Y", ""]
+        [1, 1, '', 'N', ''],
+        [2, 2, '', 'N', ''],
+        [3, 3, '', 'N', ''],
+        [4, 4, '', 'N', ''],
+        [5, 5, '', 'N', ''],
+        [6, 6, '', 'N', ''],
+        [7, 7, '', 'N', ''],
+        [8, 8, '', 'N', ''],
+        [9, 9, '', 'N', ''],
+        [10, 10, '', 'N', 'Generates and outputs to scripts folder'],
+        [11, 11, '', 'N', 'Generates eleven labs based on latest script saved'],
+        [12, 12, '', 'N', 'Combines Intro Mp3 with latest Eleven Labs Mp3 with Outro Mp3 and saves to Podcast folder'],
+        [13, 13, '', 'N', 'Generates Script, Sends to EL and Combines'],
+        [14, 14, '', 'N', ''],
+        [15, 15, '', 'N', 'Sends to eleven and combines'],
+        [16, 16, '', 'N', 'Top 3 News Stories'],
+        [17, 17, '', 'N', 'Top 5 News Stories'],
+        [18, 18, '', 'Y', 'Posted Podcasts Tab Update'],
+        [19, 19, '', 'N', 'Run workflow to test getting the title and description from the last 5 posted podcasts']
     ], columns=["Request ID", "Workflow ID", "Custom Topic If Required", "Active", "Comments"])
 
     prompts = pd.DataFrame([
         [1, "Daily News", "Please provide a comprehensive overview of the most important news in AI that occurred in the last 24-48 hours and mention dates of when the news items or recent updates occurred to confirm occurrence in the last 24-48 hours. AI news can be in relation to AI model releases, Expected tool releases, New enhancements released for AI tools or other interesting topics related to AI technology, AI company announcements, models, tool releases, enhancements, etc. Please be sure to summarize as many sources as possible and also provide numerous quotes from both company representatives, reporters as well as user feedback on social media."],
-        [2, "Top 3 Topics", "Please select the top 3 news stories to generate podcast episodes on based on the top AI news stories below:"],
-        [3, "Generate All On Appendend Topic", "Generate all details related to the news stories below from the last 24-48 hours. Please make sure to include any and all quotes from participants, companies or even social media reactions that have received significant engagement. Please also include technical specifications if required. Please ensure complete coverage provided details to ensure comprehensive coverage of story. Stories to retrieve all relevant details on:"]
+        [2, "Top 3 Topics", "Please select the best 3 news stories to include in an AI Techology news podcast episodes. The 3 news stories selected should be the whatever news stories you believe are the most interesting and will be most compelling and interesting to our AI Podcast listeners. The 8 possible new items to choose from are below. Please select the top 3 and provide the exact text of the new items provided below:"],
+        [3, "Generate All On Appendend Topic", "Generate all details related to the news stories below from the last 24-48 hours. Please make sure to include any and all quotes from participants, companies or even social media reactions that have received significant engagement. Please also include technical specifications if required. Please ensure complete coverage provided  details to ensure comprehensive coverage of story. Stories to retrieve all relevant details on:"],
+        [4, "Create Script Based on Material", '''Create a podcast script for the "AI Convo Cast" podcast, which is a daily AI news and technology podcast. We will be adding a standard intro and outro to the podcast script you provide on our end, so only generate the main body of the episode script and always start with:
+"Today we will be..."
+Since we will add intro and outro on our end, please do not make references to the podcast, simply generate the script going over the topics provided along with a very brief and positive 1 sentence summary of topics covered. The script should be written in plain, conversational language that is casual, concise and assumes the listener is familiar with AI model generally and just wants to hear the facts. Use quotes from company representatives when possible. Design the content for a natural 15-minute runtime with smooth transitions and integrated summary breakpoints (without explicit headings or titles) that lead into a high-level, abstract summary tying together broader implications, but leaning towards a positive perspective on the AI's advancement and an eagerness to embrace it. Podcast script should contain between 4,750 and 7,000 characters.
+Output must be pure plain text (UTF‑8 encoded) with no hyperlinks, citations, markdown formatting, extraneous symbols, or any headings like "Summary." Do not include any non-text elements or words/phrases ending in ".com." Adjust tone, style, or content as clarified by the user while always prioritizing a clean, accessible, and entertaining spoken presentation. Avoid numbering or bullet points and refrain from using corny sayings. Please also always remove dashes from names (e.g. GPT-4.5 should be GPT 4.5). When converting this text to speech, automatically replace 'GPT 4o' with 'GPT Four-Oh', 'DALL-E' with 'Dolly'. Avoid corny transitions like "speaking of". Transitions should be smooth or simply go into next topic.
+
+Podcast Material for to Base Script On:'''],
+        [5, "Generate Title and Description", '''Please generate a podcast title and description based on the topic or podcast script provided after "Topic to generate Title and Description based" below. The Podcast title and Description should be generated in a similar tone and style as the 3 examples below. Please try to include the specific companies in the titles in order to help those searching for news on those companies. That said only list 2-3 names max to keep the title as brief as possible. Please avoid using phrases with colons as well.
+
+Please always include Amazon an Affiliate Link to this exact address and say "Help support the podcast by using our affiliate links:
+Eleven Labs: https://try.elevenlabs.io/ibl30sgkibkv"
+
+The end of the description should also always include a disclaimer to indicate the podcast is purely for informational purposes and include disclaimer for affiliate links. Do not include text images, bullets or numbering for subsections to avoid compatibility issues, only text. Never reference a particular time or date in the title to ensure podcasts remain evergreen. Ensure the title and description provide an overview of the topics included and the specific technology or companies involved in order to increase engagement and SEO.
+
+Front-load important keywords and topics in the first 1-2 sentences of the description. For example, begin with "In this episode, we discuss [XYZ]…". Include relevant AI terms, guest names, and company names that relate to the episode. Keep the description concise, 3-4 sentences is ideal. If your episode touches on, say, "OpenAI's latest model release and Google's AI announcement," make sure those phrases appear in the description. Reuse keywords around 5 times in your show's description if feasible.
+
+Example Podcast 1: "Title:
+Automate Your Workflow and Podcast with AI
+Description:
+Discover the power of AI-driven automation to streamline your podcasting process and boost your efficiency. In this episode, we explore how tools like Zapier and Google's Notebook LM can revolutionize your content creation workflow. Learn how to automate tasks such as generating episode titles and descriptions, creating engaging scripts from blog posts or videos, and designing eye-catching cover art with AI image tools like DALL-E and Midjourney. We also dive into no-code automation platforms like Make.com, showing you how to seamlessly integrate AI into your podcasting routine.
+
+Help support the podcast by using our Affiliate Links:
+Eleven Labs: https://try.elevenlabs.io/ibl30sgkibkv
+
+Disclaimer:
+This podcast is an independent production and is not affiliated with, endorsed by, or sponsored by Zapier, Google, OpenAI, DALL-E, Midjourney, Make.com, or any other entities mentioned unless explicitly mentioned. The content provided is for educational and entertainment purposes only and does not constitute professional or technical advice. All trademarks, logos, and copyrights mentioned are the property of their respective owners."
+
+Example Podcast 2: "Title:
+AI's Next Leap: Meta's $65B Bet, Agentic AI, and the Future of Automation
+
+Description:
+In this episode, we break down the latest AI trends, including Meta's massive $65 billion AI infrastructure push, the rise of "agentic AI" capable of autonomous task execution, and new, more efficient AI models reshaping the industry. We also examine the ethical dilemmas surrounding deepfake legislation, copyright lawsuits, and the impact of AI automation on the workforce. From NVIDIA's latest Blackwell architecture to Amazon's Nova models and Google's Gemini 2.0, we analyze how AI is evolving beyond theoretical capabilities into real-world applications.
+
+Help support the podcast by using our affiliate links:
+Eleven Labs: https://try.elevenlabs.io/ibl30sgkibkv
+
+Disclaimer:
+This podcast is an independent production and is not affiliated with, endorsed by, or sponsored by Meta, NVIDIA, Amazon, Google,  or any other entities mentioned unless explicitly mentioned. The content provided is for educational and entertainment purposes only and does not constitute professional, financial, or legal advice."
+
+Example Podcast 3: "Title:
+Bought a Website? How to Setup Domains, Hosting, and SEO
+Description:
+Overview of setting up a website with Namecheap after you've purchased it. From registering a domain and choosing the right hosting plan to building your site with Namecheap's Website Builder or WordPress, we walk through the essential steps to get your online presence up and running.
+Discover the key differences between website builders and web hosting, how to navigate Namecheap's user-friendly tools like cPanel and Softaculous, and crucial post-setup tasks such as SSL security, professional email setup, and SEO optimization. We also cover cost-saving strategies, security best practices, and expert tips to streamline the process. Whether you're a beginner looking for a simple drag-and-drop solution or an advanced user preferring manual HTML and FTP uploads, Namecheap offers a range of flexible options to fit your needs.
+
+Help support the podcast by using our affiliate links:
+Eleven Labs: https://try.elevenlabs.io/ibl30sgkibkv
+
+Disclaimer:
+This podcast is an independent production and is not affiliated with, endorsed by, or sponsored by Namecheap or any other entities mentioned unless explicitly mentioned. This episode was generated using AI tools for entertainment purposes only."
+
+Topic to generate Title and Description based:'''],
+        [6, "Top 3 Topics and Validate", "Please select the top 3 news stories to include in an AI Techology news podcast episodes. The 3 news stories selected should be the whatever news stories you believe are the most interesting and will be most compelling and interesting to our AI Podcast listeners. The 8 possible new items to choose from are below. Please select the top 3 and provide the exact text of the new items provided below. Please also validate that the news item has recently ocurred and provide any additional context you can find through web search along with the news story:"],
+        [7, "Top 5 Topics and Validate", "Please select the top 5 news stories to include in an AI Techology news podcast episodes. The 5 news stories selected should be the whatever news stories you believe are the most interesting and will be most compelling and interesting to our AI Podcast listeners. The 8 possible news items to choose from are below. Please select the best 5 and provide the exact text of the news items provided below. Please also validate that the news item has recently ocurred and provide any additional context you can find through web search along with the news story:"],
+        [8, "Do not select topics previously covered", "Please ensure news items selected do not exactly cover topics previously discuss below. Updates to these new items should still be included. Previously Covered News Items to avoid unless it is an an update on previously covered story:"]
     ], columns=["Prompt ID", "Prompt Title", "Prompt Description"])
 
     models = pd.DataFrame([
@@ -1054,7 +1128,7 @@ if __name__ == '__main__':
         return None
 
     # Parse workflow code step (e.g. P2&R1M8)
-    def parse_step(step, prev_outputs, custom_topic):
+    def parse_step(step, all_outputs, custom_topic):
         # Find model override (M#)
         model_override = None
         model_id_override = None
@@ -1066,20 +1140,51 @@ if __name__ == '__main__':
         # Split by & for combining
         parts = [p.strip() for p in step.split('&')]
         input_text = ''
-        for part in parts:
+        for i, part in enumerate(parts):
+            print(f"Processing part: '{part}'")
             if part.startswith('P'):
                 prompt_id = part[1:]
-                input_text += get_prompt_desc(prompt_id) or ''
+                prompt_text = get_prompt_desc(prompt_id)
+                if i > 0:  # Add separator if not the first part
+                    input_text += '\n\n'
+                input_text += prompt_text or ''
+                print(f"  [P{prompt_id}] First 100 chars: {str(prompt_text)[:100]}{'...' if prompt_text and len(prompt_text) > 100 else ''}")
             elif part.startswith('R'):
-                # Extract only the leading digits after 'R'
                 match = re.match(r'R(\d+)', part)
                 if match:
                     resp_idx = int(match.group(1)) - 1
-                    if 0 <= resp_idx < len(prev_outputs):
-                        input_text += prev_outputs[resp_idx]
+                    if 0 <= resp_idx < len(all_outputs):
+                        if i > 0:
+                            input_text += '\n\n'
+                        resp_text = all_outputs[resp_idx]
+                        input_text += resp_text or ''
+                        print(f"  [R{match.group(1)}] First 100 chars: {str(resp_text)[:100]}{'...' if resp_text and len(resp_text) > 100 else ''}")
             elif part == 'C':
-                input_text += custom_topic or ''
+                custom_text = custom_topic or ''
+                if i > 0:
+                    input_text += '\n\n'
+                input_text += custom_text
+                print(f"  [C] First 100 chars: {str(custom_text)[:100]}{'...' if custom_text and len(custom_text) > 100 else ''}")
+        # Only print the first 100 characters of the final input
+        print(f"    Input (first 100): {input_text[:100]}{'...' if len(input_text) > 100 else ''}")
         return input_text, model_override, model_id_override
+
+    # Add to_native helper at top-level so it is available everywhere
+    def to_native(val):
+        if hasattr(val, 'item'):
+            return val.item()
+        if isinstance(val, (int, float, str)) or val is None:
+            return val
+        return str(val)
+
+    # Helper to convert column number to Excel column letters
+    def colnum_to_excel_col(n):
+        """Convert a 1-based column index to Excel column letters."""
+        result = ''
+        while n > 0:
+            n, remainder = divmod(n - 1, 26)
+            result = chr(65 + remainder) + result
+        return result
 
     # Main workflow loop
     for req_idx, req_row in requests_df.iterrows():
@@ -1098,23 +1203,607 @@ if __name__ == '__main__':
         default_model = get_workflow_default_model(workflow_row)
         default_model_id = get_model_id_by_name(default_model)
         steps = [s.strip() for s in workflow_code.split(',') if s.strip()]
-        prev_outputs = []
+        print(f"[DEBUG] Steps to execute: {steps}")
+        all_outputs = []  # Track output for every step, even if None
         workflow_steps_records = []
         output_record = {
             'Output ID': get_next_output_id(),
             'Triggered Date': pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')
         }
+        # Ensure all Output columns are present in output_record
+        for col in outputs_df.columns:
+            if col not in output_record:
+                output_record[col] = ''
+        # Create the initial row in the Outputs tab
+        output_row = [to_native(output_record.get(col, '')) for col in outputs_df.columns]
+        outputs_ws.append_row(output_row)
+        # Get the row number of the newly created row
+        current_output_row = len(outputs_df) + 2  # +2 because of 1-based indexing and header row
+        print(f"[INFO] Created Output ID: {output_record['Output ID']} at row {current_output_row}")
+        executed_steps = set()
         for i, step in enumerate(steps):
-            # Check for save-only step (e.g., R4SL7)
-            save_only_match = re.fullmatch(r'R(\d+)SL(\d+)', step)
-            if save_only_match:
-                print(f"  - Step {i+1}: {step} (Save-Only Step)")
-                resp_idx = int(save_only_match.group(1)) - 1
-                location_id = save_only_match.group(2)
-                response_to_save = None
-                log_msg = ''
-                if 0 <= resp_idx < len(prev_outputs):
-                    response_to_save = prev_outputs[resp_idx]
+            print(f"[DEBUG] Executing step {i+1}/{len(steps)}: {step}")
+            executed_steps.add(i)
+            try:
+                # 1. PPU step FIRST
+                if step == 'PPU':
+                    print(f"  - Step {i+1}: {step} (Posted Podcasts Update Step)")
+                    RSS_FEED_URL = 'https://anchor.fm/s/101530384/podcast/rss'
+                    try:
+                        response = requests.get(RSS_FEED_URL)
+                        response.raise_for_status()
+                        root = ET.fromstring(response.content)
+                        channel = root.find('channel')
+                        items = channel.findall('item') if channel is not None else []
+                        posted_podcasts_data = []
+                        # Reverse items so oldest is first, newest is last
+                        items = items[::-1]
+                        for idx, item in enumerate(items):
+                            title = item.findtext('title', default='')
+                            description = item.findtext('description', default='')
+                            # Decode HTML entities
+                            title = html.unescape(title)
+                            description = html.unescape(description)
+                            # Remove HTML tags from description
+                            import re
+                            cleanr = re.compile('<.*?>')
+                            description_clean = re.sub(cleanr, '', description)
+                            # Description Short: up to 'Help support' (case-insensitive)
+                            desc_short = description_clean.split('Help support')[0].strip()
+                            posted_podcasts_data.append([
+                                idx + 1,  # Sequential ID starting from 1
+                                title,
+                                description_clean,
+                                desc_short
+                            ])
+                        # Update the Posted Podcasts tab
+                        try:
+                            posted_ws = spreadsheet.worksheet('Posted Podcasts')
+                            num_rows = len(posted_podcasts_data) + 1  # +1 for header
+                            num_cols = max(len(row) for row in posted_podcasts_data) if posted_podcasts_data else 4
+                            posted_ws.resize(rows=num_rows, cols=num_cols)
+                            posted_ws.update(values=posted_podcasts_data, range_name='A2')
+                            log_msg = f"Updated Posted Podcasts tab with {len(posted_podcasts_data)} episodes."
+                            print(f"    > {log_msg}")
+                        except Exception as e:
+                            log_msg = f"Failed to update Posted Podcasts tab: {e}"
+                            print(f"    > {log_msg}")
+                    except Exception as e:
+                        log_msg = f"Failed to fetch or parse RSS feed: {e}"
+                        print(f"    > {log_msg}")
+                    workflow_steps_records.append([
+                        get_next_workflow_steps_id() + i + 0.1,
+                        output_record['Triggered Date'],
+                        workflow_id,
+                        request_id,
+                        workflow_code,
+                        step,
+                        '',
+                        '',
+                        log_msg
+                    ])
+                    all_outputs.append(None)
+                    continue
+
+                # 2. PPL# step SECOND
+                ppl_match = re.fullmatch(r'PPL(\d+)', step)
+                if ppl_match:
+                    num_episodes = int(ppl_match.group(1))
+                    print(f"  - Step {i+1}: {step} (Posted Podcast Last Step, retrieving last {num_episodes} episodes)")
+                    try:
+                        posted_ws = spreadsheet.worksheet('Posted Podcasts')
+                        posted_df = pd.DataFrame(posted_ws.get_all_records())
+                        # Sort by Posted Podcasts ID descending (numeric)
+                        if 'Posted Podcasts ID' in posted_df.columns:
+                            try:
+                                posted_df['Posted Podcasts ID'] = posted_df['Posted Podcasts ID'].astype(int)
+                                posted_df_sorted = posted_df.sort_values(by='Posted Podcasts ID', ascending=False)
+                            except Exception:
+                                posted_df_sorted = posted_df.iloc[::-1]
+                        else:
+                            posted_df_sorted = posted_df.iloc[::-1]
+                        # Get the last N episodes
+                        last_episodes = posted_df_sorted.head(num_episodes)
+                        # Prepare output: Title and Description Short for each
+                        output_lines = []
+                        for idx, row in last_episodes.iterrows():
+                            title = row.get('Title', '')
+                            desc_short = row.get('Description Short', '')
+                            output_lines.append(f"Title: {title}\nDescription Short: {desc_short}")
+                        ppl_output = '\n\n'.join(output_lines)
+                        output_col_in = f'Output {2*i+1}'
+                        output_col_out = f'Output {2*i+2}'
+                        output_record[output_col_in] = f"PPL{num_episodes}"
+                        output_record[output_col_out] = ppl_output
+                        log_msg = f"Retrieved last {num_episodes} posted podcast episodes."
+                        print(f"    > {log_msg}")
+                    except Exception as e:
+                        ppl_output = ''
+                        log_msg = f"Failed to retrieve posted podcasts: {e}"
+                        print(f"    > {log_msg}")
+                    workflow_steps_records.append([
+                        get_next_workflow_steps_id() + i + 0.1,
+                        output_record['Triggered Date'],
+                        workflow_id,
+                        request_id,
+                        workflow_code,
+                        step,
+                        f"PPL{num_episodes}",
+                        ppl_output,
+                        log_msg
+                    ])
+                    # After each step, update the Outputs tab with the current output_record
+                    output_row = [to_native(output_record.get(col, '')) for col in outputs_df.columns]
+                    last_col_letter = colnum_to_excel_col(len(outputs_df.columns))
+                    outputs_ws.update(f'A{current_output_row}:{last_col_letter}{current_output_row}', [output_row])
+                    # Only print the first 100 characters of the output
+                    output_col_out = f'Output {2*i+2}'
+                    output_val = output_record.get(output_col_out, '')
+                    print(f"    Output (first 100): {str(output_val)[:100]}{'...' if output_val and len(str(output_val)) > 100 else ''}")
+                    print(f"[INFO] Output updated for Output ID: {output_record['Output ID']} after step {i+1}")
+                    all_outputs.append(ppl_output)
+                    continue
+
+                # Check for save-only step (e.g., R4SL7)
+                save_only_match = re.fullmatch(r'R(\d+)SL(\d+)', step)
+                if save_only_match:
+                    print(f"  - Step {i+1}: {step} (Save-Only Step)")
+                    resp_idx = int(save_only_match.group(1)) - 1
+                    location_id = save_only_match.group(2)
+                    response_to_save = None
+                    log_msg = ''
+                    if 0 <= resp_idx < len(all_outputs):
+                        response_to_save = all_outputs[resp_idx]
+                        loc_row = locations_df[locations_df['Location ID'].astype(str) == location_id]
+                        if not loc_row.empty:
+                            folder_url = loc_row.iloc[0]['Location']
+                            folder_id = extract_drive_folder_id(folder_url)
+                            if folder_id:
+                                filename = f'workflow_{request_id}_step_{i+1}.txt'
+                                try:
+                                    file_link = upload_text_to_drive(GOOGLE_CREDS_JSON, folder_id, filename, response_to_save)
+                                    log_msg = f"Saved response to Google Drive: {file_link}"
+                                except Exception as e:
+                                    log_msg = f"Failed to save response to Google Drive: {e}"
+                            else:
+                                log_msg = f"Invalid Google Drive folder ID for location {location_id}."
+                        else:
+                            log_msg = f"Location ID {location_id} not found in Locations sheet."
+                    else:
+                        log_msg = f"Response index {resp_idx+1} not found in previous outputs."
+                    
+                    print(f"    > {log_msg}")
+
+                    # Always append a workflow step record for save-only steps
+                    workflow_steps_records.append([
+                        get_next_workflow_steps_id() + i + 0.1,  # fractional ID to keep order
+                        output_record['Triggered Date'],
+                        workflow_id,
+                        request_id,
+                        workflow_code,
+                        step,
+                        response_to_save if response_to_save is not None else '',
+                        '',  # No new output
+                        log_msg
+                    ])
+                    # Only append to prev_outputs if response_to_save is defined
+                    if response_to_save is not None:
+                        all_outputs.append(response_to_save)
+                    else:
+                        all_outputs.append(None)
+                    continue  # Skip model call for this step
+                
+                # Check for Eleven Labs step (e.g., L8E1SL4)
+                eleven_match = re.fullmatch(r'L(\d+)E(\d+)SL(\d+)', step)
+                if eleven_match:
+                    print(f"  - Step {i+1}: {step} (Eleven Labs Step)")
+                    location_id = eleven_match.group(1)
+                    eleven_id = eleven_match.group(2)
+                    save_location_id = eleven_match.group(3)
+                    
+                    # Get location details for source folder
+                    source_location = get_location_by_id(location_id)
+                    if not source_location:
+                        log_msg = f"Source location ID {location_id} not found in Locations sheet."
+                        print(f"    > {log_msg}")
+                        workflow_steps_records.append([
+                            get_next_workflow_steps_id() + i + 0.1,
+                            output_record['Triggered Date'],
+                            workflow_id,
+                            request_id,
+                            workflow_code,
+                            step,
+                            '',
+                            '',
+                            log_msg
+                        ])
+                        continue
+                    
+                    # Get Eleven Labs configuration
+                    eleven_config = get_eleven_config(eleven_id)
+                    if not eleven_config:
+                        log_msg = f"Eleven Labs configuration ID {eleven_id} not found in Eleven sheet."
+                        print(f"    > {log_msg}")
+                        workflow_steps_records.append([
+                            get_next_workflow_steps_id() + i + 0.1,
+                            output_record['Triggered Date'],
+                            workflow_id,
+                            request_id,
+                            workflow_code,
+                            step,
+                            '',
+                            '',
+                            log_msg
+                        ])
+                        continue
+                    
+                    # Get voice ID
+                    voice_id = get_voice_id_by_eleven_id(eleven_id)
+                    if not voice_id:
+                        log_msg = f"Voice ID not found for Eleven ID {eleven_id}. Please update voice_mapping in get_voice_id_by_eleven_id function."
+                        print(f"    > {log_msg}")
+                        workflow_steps_records.append([
+                            get_next_workflow_steps_id() + i + 0.1,
+                            output_record['Triggered Date'],
+                            workflow_id,
+                            request_id,
+                            workflow_code,
+                            step,
+                            '',
+                            '',
+                            log_msg
+                        ])
+                        continue
+                    
+                    # Download latest text file from source location
+                    source_folder_url = source_location['Location']
+                    source_folder_id = extract_drive_folder_id(source_folder_url)
+                    if not source_folder_id:
+                        log_msg = f"Invalid Google Drive folder ID for source location {location_id}."
+                        print(f"    > {log_msg}")
+                        workflow_steps_records.append([
+                            get_next_workflow_steps_id() + i + 0.1,
+                            output_record['Triggered Date'],
+                            workflow_id,
+                            request_id,
+                            workflow_code,
+                            step,
+                            '',
+                            '',
+                            log_msg
+                        ])
+                        continue
+                    
+                    text_content = download_latest_text_file_from_drive(GOOGLE_CREDS_JSON, source_folder_id)
+                    if not text_content:
+                        log_msg = f"Failed to download text file from source location {location_id}."
+                        print(f"    > {log_msg}")
+                        workflow_steps_records.append([
+                            get_next_workflow_steps_id() + i + 0.1,
+                            output_record['Triggered Date'],
+                            workflow_id,
+                            request_id,
+                            workflow_code,
+                            step,
+                            '',
+                            '',
+                            log_msg
+                        ])
+                        continue
+                    
+                    # Generate audio using Eleven Labs
+                    print(f"    > Generating audio with voice: {eleven_config['Voice']}")
+                    temp_audio_path = MP3_OUTPUT_DIR / f"temp_audio_{request_id}_step_{i+1}.mp3"
+                    audio_path = generate_voice_audio(text_content, voice_id, temp_audio_path, eleven_config)
+                    
+                    if not audio_path:
+                        log_msg = f"Failed to generate audio with Eleven Labs for step {i+1}. Aborting workflow."
+                        print(f"    > {log_msg}")
+                        workflow_steps_records.append([
+                            get_next_workflow_steps_id() + i + 0.1,
+                            output_record['Triggered Date'],
+                            workflow_id,
+                            request_id,
+                            workflow_code,
+                            step,
+                            text_content,
+                            '',
+                            log_msg
+                        ])
+                        # End the entire workflow immediately
+                        print("[FATAL] Eleven Labs API error encountered. Exiting workflow.")
+                        sys.exit(1)
+                    
+                    # Upload audio to destination location
+                    save_location = get_location_by_id(save_location_id)
+                    if not save_location:
+                        log_msg = f"Save location ID {save_location_id} not found in Locations sheet."
+                        print(f"    > {log_msg}")
+                        workflow_steps_records.append([
+                            get_next_workflow_steps_id() + i + 0.1,
+                            output_record['Triggered Date'],
+                            workflow_id,
+                            request_id,
+                            workflow_code,
+                            step,
+                            text_content,
+                            audio_path,
+                            log_msg
+                        ])
+                        continue
+                    
+                    save_folder_url = save_location['Location']
+                    save_folder_id = extract_drive_folder_id(save_folder_url)
+                    if not save_folder_id:
+                        log_msg = f"Invalid Google Drive folder ID for save location {save_location_id}"
+                        print(f"    > {log_msg}")
+                        workflow_steps_records.append([
+                            get_next_workflow_steps_id() + i + 0.1,
+                            output_record['Triggered Date'],
+                            workflow_id,
+                            request_id,
+                            workflow_code,
+                            step,
+                            text_content,
+                            audio_path,
+                            log_msg
+                        ])
+                        continue
+                    
+                    audio_filename = f'workflow_{request_id}_step_{i+1}_{eleven_config["Voice"]}.mp3'
+                    try:
+                        print(f"[DEBUG] Using model: {eleven_config.get('Model', 'eleven_multilingual_v2') if eleven_config else 'eleven_multilingual_v2'}, voice_id: {voice_id}")
+                        start_time = time.time()
+                        if os.path.exists(audio_path):
+                            file_link = upload_audio_to_drive(GOOGLE_CREDS_JSON, save_folder_id, audio_filename, audio_path)
+                            log_msg = f"Generated and uploaded audio to Google Drive: {file_link}"
+                            print(f"    > {log_msg}")
+                        else:
+                            print(f"File {audio_path} does not exist, skipping upload.")
+                            sys.exit(1)
+                    except Exception as e:
+                        log_msg = f"Failed to upload audio to Google Drive: {e}"
+                        print(f"    > {log_msg}")
+                        sys.exit(1)
+                    
+                    # Clean up temporary file
+                    try:
+                        os.remove(temp_audio_path)
+                    except:
+                        pass
+                    
+                    # Add workflow step record
+                    workflow_steps_records.append([
+                        get_next_workflow_steps_id() + i + 0.1,
+                        output_record['Triggered Date'],
+                        workflow_id,
+                        request_id,
+                        workflow_code,
+                        step,
+                        text_content,
+                        audio_path,
+                        log_msg
+                    ])
+                    
+                    # Add audio path to outputs
+                    all_outputs.append(audio_path)
+                    continue  # Skip regular model call for this step
+                
+                # Check for Audio Merging step (e.g., L1&L9&L2SL3)
+                audio_merge_match = re.fullmatch(r'L(\d+)(?:&L(\d+))*SL(\d+)', step)
+                if audio_merge_match:
+                    print(f"  - Step {i+1}: {step} (Audio Merging Step)")
+                    
+                    # Extract all location IDs from the step
+                    location_ids = re.findall(r'L(\d+)', step)
+                    save_location_id = location_ids[-1]  # Last location ID is the save location
+                    source_location_ids = location_ids[:-1]  # All others are source locations
+                    
+                    if len(source_location_ids) < 2:
+                        log_msg = f"Audio merging requires at least 2 source locations, found {len(source_location_ids)}"
+                        print(f"    > {log_msg}")
+                        workflow_steps_records.append([
+                            get_next_workflow_steps_id() + i + 0.1,
+                            output_record['Triggered Date'],
+                            workflow_id,
+                            request_id,
+                            workflow_code,
+                            step,
+                            '',
+                            '',
+                            log_msg
+                        ])
+                        continue
+                    
+                    # Download audio files from source locations
+                    audio_paths = []
+                    download_errors = []
+                    
+                    for loc_id in source_location_ids:
+                        location = get_location_by_id(loc_id)
+                        if not location:
+                            error_msg = f"Location ID {loc_id} not found in Locations sheet."
+                            download_errors.append(error_msg)
+                            continue
+                        
+                        location_url = location['Location']
+                        location_type = location['Type']
+                        
+                        if location_type == 'File':
+                            # Download specific file
+                            audio_path = download_mp3_file_from_drive(GOOGLE_CREDS_JSON, location_url)
+                        elif location_type == 'mp3':
+                            # Download latest MP3 from folder
+                            folder_id = extract_drive_folder_id(location_url)
+                            if folder_id:
+                                audio_path = download_latest_mp3_from_drive(GOOGLE_CREDS_JSON, folder_id)
+                            else:
+                                error_msg = f"Invalid Google Drive folder ID for location {loc_id}"
+                                download_errors.append(error_msg)
+                                continue
+                        else:
+                            error_msg = f"Location {loc_id} is not a file or mp3 type"
+                            download_errors.append(error_msg)
+                            continue
+                        
+                        if audio_path:
+                            audio_paths.append(audio_path)
+                        else:
+                            error_msg = f"Failed to download audio from location {loc_id}"
+                            download_errors.append(error_msg)
+                    
+                    if download_errors:
+                        log_msg = f"Audio download errors: {'; '.join(download_errors)}"
+                        print(f"    > {log_msg}")
+                        workflow_steps_records.append([
+                            get_next_workflow_steps_id() + i + 0.1,
+                            output_record['Triggered Date'],
+                            workflow_id,
+                            request_id,
+                            workflow_code,
+                            step,
+                            '',
+                            '',
+                            log_msg
+                        ])
+                        continue
+                    
+                    if len(audio_paths) < 2:
+                        log_msg = f"Not enough audio files downloaded for merging. Expected at least 2, got {len(audio_paths)}"
+                        print(f"    > {log_msg}")
+                        workflow_steps_records.append([
+                            get_next_workflow_steps_id() + i + 0.1,
+                            output_record['Triggered Date'],
+                            workflow_id,
+                            request_id,
+                            workflow_code,
+                            step,
+                            '',
+                            '',
+                            log_msg
+                        ])
+                        continue
+                    
+                    # Merge audio files
+                    print(f"    > Merging {len(audio_paths)} audio files...")
+                    merged_audio_path = MP3_OUTPUT_DIR / f"merged_audio_{request_id}_step_{i+1}.mp3"
+                    merged_path = merge_multiple_audio_files(audio_paths, merged_audio_path)
+                    
+                    if not merged_path:
+                        log_msg = f"Failed to merge audio files for step {i+1}"
+                        print(f"    > {log_msg}")
+                        workflow_steps_records.append([
+                            get_next_workflow_steps_id() + i + 0.1,
+                            output_record['Triggered Date'],
+                            workflow_id,
+                            request_id,
+                            workflow_code,
+                            step,
+                            str(audio_paths),
+                            '',
+                            log_msg
+                        ])
+                        continue
+                    
+                    # Upload merged audio to destination location
+                    save_location = get_location_by_id(save_location_id)
+                    if not save_location:
+                        log_msg = f"Save location ID {save_location_id} not found in Locations sheet."
+                        print(f"    > {log_msg}")
+                        workflow_steps_records.append([
+                            get_next_workflow_steps_id() + i + 0.1,
+                            output_record['Triggered Date'],
+                            workflow_id,
+                            request_id,
+                            workflow_code,
+                            step,
+                            str(audio_paths),
+                            merged_path,
+                            log_msg
+                        ])
+                        continue
+                    
+                    save_folder_url = save_location['Location']
+                    save_folder_id = extract_drive_folder_id(save_folder_url)
+                    if not save_folder_id:
+                        log_msg = f"Invalid Google Drive folder ID for save location {save_location_id}"
+                        print(f"    > {log_msg}")
+                        workflow_steps_records.append([
+                            get_next_workflow_steps_id() + i + 0.1,
+                            output_record['Triggered Date'],
+                            workflow_id,
+                            request_id,
+                            workflow_code,
+                            step,
+                            str(audio_paths),
+                            merged_path,
+                            log_msg
+                        ])
+                        continue
+                    
+                    audio_filename = f'merged_workflow_{request_id}_step_{i+1}.mp3'
+                    try:
+                        print(f"[DEBUG] Using model: {eleven_config.get('Model', 'eleven_multilingual_v2') if eleven_config else 'eleven_multilingual_v2'}, voice_id: {voice_id}")
+                        start_time = time.time()
+                        if os.path.exists(merged_path):
+                            file_link = upload_audio_to_drive(GOOGLE_CREDS_JSON, save_folder_id, audio_filename, merged_path)
+                            log_msg = f"Merged and uploaded audio to Google Drive: {file_link}"
+                            print(f"    > {log_msg}")
+                        else:
+                            print(f"File {merged_path} does not exist, skipping upload.")
+                    except Exception as e:
+                        log_msg = f"Failed to upload merged audio to Google Drive: {e}"
+                        print(f"    > {log_msg}")
+                    
+                    # Clean up temporary files
+                    for temp_path in audio_paths:
+                        try:
+                            os.remove(temp_path)
+                        except:
+                            pass
+                    
+                    # Add workflow step record
+                    workflow_steps_records.append([
+                        get_next_workflow_steps_id() + i + 0.1,
+                        output_record['Triggered Date'],
+                        workflow_id,
+                        request_id,
+                        workflow_code,
+                        step,
+                        str(audio_paths),
+                        merged_path,
+                        log_msg
+                    ])
+                    
+                    # Add merged audio path to outputs
+                    all_outputs.append(merged_path)
+                    continue  # Skip regular model call for this step
+                
+                # Parse the step for prompt, model override, and model ID override
+                input_text, model_override, model_id_override = parse_step(step, all_outputs, custom_topic)
+                # print(f"    Input (first 100): {input_text[:100]}{'...' if len(input_text) > 100 else ''}")  # Removed duplicate debug print
+                if model_override and model_id_override:
+                    model_to_use = model_override
+                    web_search_enabled = get_model_web_search_by_id(model_id_override)
+                else:
+                    model_to_use = default_model
+                    web_search_enabled = get_model_web_search_by_id(default_model_id)
+                print(f"  - Step {i+1}: {step} (Model: {model_to_use}, Web Search: {web_search_enabled})")
+                # Fallback for OpenAI client if responses.create is not available
+                if web_search_enabled and not hasattr(client, 'responses'):
+                    msg = "❌ Web search requested but your OpenAI Python package does not support responses.create. Please upgrade openai to the latest version."
+                    log_error(msg)
+                    response = "[Web search not supported by your OpenAI Python package version]"
+                else:
+                    response = call_openai_model(input_text, model_to_use, web_search=web_search_enabled)
+                output_col_in = f'Output {2*i+1}'
+                output_col_out = f'Output {2*i+2}'
+                output_record[output_col_in] = input_text
+                output_record[output_col_out] = response
+                # Check for SL# pattern in step (e.g., R4SL7)
+                sl_match = re.search(r'SL(\d+)', step)
+                if sl_match:
+                    location_id = sl_match.group(1)
                     loc_row = locations_df[locations_df['Location ID'].astype(str) == location_id]
                     if not loc_row.empty:
                         folder_url = loc_row.iloc[0]['Location']
@@ -1122,482 +1811,40 @@ if __name__ == '__main__':
                         if folder_id:
                             filename = f'workflow_{request_id}_step_{i+1}.txt'
                             try:
-                                file_link = upload_text_to_drive(GOOGLE_CREDS_JSON, folder_id, filename, response_to_save)
+                                file_link = upload_text_to_drive(GOOGLE_CREDS_JSON, folder_id, filename, response)
                                 log_msg = f"Saved response to Google Drive: {file_link}"
                             except Exception as e:
                                 log_msg = f"Failed to save response to Google Drive: {e}"
-                        else:
-                            log_msg = f"Invalid Google Drive folder ID for location {location_id}."
-                    else:
-                        log_msg = f"Location ID {location_id} not found in Locations sheet."
-                else:
-                    log_msg = f"Response index {resp_idx+1} not found in previous outputs."
-                
-                print(f"    > {log_msg}")
+                            # Add file link or error to Workflow Steps log message
+                            workflow_steps_records.append([
+                                get_next_workflow_steps_id() + i + 0.1,  # fractional ID to keep order
+                                output_record['Triggered Date'],
+                                workflow_id,
+                                request_id,
+                                workflow_code,
+                                step,
+                                input_text,
+                                response,
+                                log_msg
+                            ])
+                # After each step, update the Outputs tab with the current output_record
+                output_row = [to_native(output_record.get(col, '')) for col in outputs_df.columns]
+                last_col_letter = colnum_to_excel_col(len(outputs_df.columns))
+                outputs_ws.update(f'A{current_output_row}:{last_col_letter}{current_output_row}', [output_row])
+                # Only print the first 100 characters of the output
+                output_col_out = f'Output {2*i+2}'
+                output_val = output_record.get(output_col_out, '')
+                print(f"    Output (first 100): {str(output_val)[:100]}{'...' if output_val and len(str(output_val)) > 100 else ''}")
+                print(f"[INFO] Output updated for Output ID: {output_record['Output ID']} after step {i+1}")
+                all_outputs.append(response)
+            except Exception as e:
+                error_msg = f"[ERROR] Exception in step {i+1} ({step}): {e}"
+                print(error_msg)
+                log_error(error_msg)
+                all_outputs.append(None)
+                print("[FATAL] Workflow execution halted due to error.")
+                sys.exit(1)
 
-                # Always append a workflow step record for save-only steps
-                workflow_steps_records.append([
-                    get_next_workflow_steps_id() + i + 0.1,  # fractional ID to keep order
-                    output_record['Triggered Date'],
-                    workflow_id,
-                    request_id,
-                    workflow_code,
-                    step,
-                    response_to_save if response_to_save is not None else '',
-                    '',  # No new output
-                    log_msg
-                ])
-                # Only append to prev_outputs if response_to_save is defined
-                if response_to_save is not None:
-                    prev_outputs.append(response_to_save)
-                continue  # Skip model call for this step
-            
-            # Check for Eleven Labs step (e.g., L8E1SL4)
-            eleven_match = re.fullmatch(r'L(\d+)E(\d+)SL(\d+)', step)
-            if eleven_match:
-                print(f"  - Step {i+1}: {step} (Eleven Labs Step)")
-                location_id = eleven_match.group(1)
-                eleven_id = eleven_match.group(2)
-                save_location_id = eleven_match.group(3)
-                
-                # Get location details for source folder
-                source_location = get_location_by_id(location_id)
-                if not source_location:
-                    log_msg = f"Source location ID {location_id} not found in Locations sheet."
-                    print(f"    > {log_msg}")
-                    workflow_steps_records.append([
-                        get_next_workflow_steps_id() + i + 0.1,
-                        output_record['Triggered Date'],
-                        workflow_id,
-                        request_id,
-                        workflow_code,
-                        step,
-                        '',
-                        '',
-                        log_msg
-                    ])
-                    continue
-                
-                # Get Eleven Labs configuration
-                eleven_config = get_eleven_config(eleven_id)
-                if not eleven_config:
-                    log_msg = f"Eleven Labs configuration ID {eleven_id} not found in Eleven sheet."
-                    print(f"    > {log_msg}")
-                    workflow_steps_records.append([
-                        get_next_workflow_steps_id() + i + 0.1,
-                        output_record['Triggered Date'],
-                        workflow_id,
-                        request_id,
-                        workflow_code,
-                        step,
-                        '',
-                        '',
-                        log_msg
-                    ])
-                    continue
-                
-                # Get voice ID
-                voice_id = get_voice_id_by_eleven_id(eleven_id)
-                if not voice_id:
-                    log_msg = f"Voice ID not found for Eleven ID {eleven_id}. Please update voice_mapping in get_voice_id_by_eleven_id function."
-                    print(f"    > {log_msg}")
-                    workflow_steps_records.append([
-                        get_next_workflow_steps_id() + i + 0.1,
-                        output_record['Triggered Date'],
-                        workflow_id,
-                        request_id,
-                        workflow_code,
-                        step,
-                        '',
-                        '',
-                        log_msg
-                    ])
-                    continue
-                
-                # Download latest text file from source location
-                source_folder_url = source_location['Location']
-                source_folder_id = extract_drive_folder_id(source_folder_url)
-                if not source_folder_id:
-                    log_msg = f"Invalid Google Drive folder ID for source location {location_id}."
-                    print(f"    > {log_msg}")
-                    workflow_steps_records.append([
-                        get_next_workflow_steps_id() + i + 0.1,
-                        output_record['Triggered Date'],
-                        workflow_id,
-                        request_id,
-                        workflow_code,
-                        step,
-                        '',
-                        '',
-                        log_msg
-                    ])
-                    continue
-                
-                text_content = download_latest_text_file_from_drive(GOOGLE_CREDS_JSON, source_folder_id)
-                if not text_content:
-                    log_msg = f"Failed to download text file from source location {location_id}."
-                    print(f"    > {log_msg}")
-                    workflow_steps_records.append([
-                        get_next_workflow_steps_id() + i + 0.1,
-                        output_record['Triggered Date'],
-                        workflow_id,
-                        request_id,
-                        workflow_code,
-                        step,
-                        '',
-                        '',
-                        log_msg
-                    ])
-                    continue
-                
-                # Generate audio using Eleven Labs
-                print(f"    > Generating audio with voice: {eleven_config['Voice']}")
-                temp_audio_path = MP3_OUTPUT_DIR / f"temp_audio_{request_id}_step_{i+1}.mp3"
-                audio_path = generate_voice_audio(text_content, voice_id, temp_audio_path, eleven_config)
-                
-                if not audio_path:
-                    log_msg = f"Failed to generate audio with Eleven Labs for step {i+1}. Aborting workflow."
-                    print(f"    > {log_msg}")
-                    workflow_steps_records.append([
-                        get_next_workflow_steps_id() + i + 0.1,
-                        output_record['Triggered Date'],
-                        workflow_id,
-                        request_id,
-                        workflow_code,
-                        step,
-                        text_content,
-                        '',
-                        log_msg
-                    ])
-                    # End the entire workflow immediately
-                    print("[FATAL] Eleven Labs API error encountered. Exiting workflow.")
-                    sys.exit(1)
-                
-                # Upload audio to destination location
-                save_location = get_location_by_id(save_location_id)
-                if not save_location:
-                    log_msg = f"Save location ID {save_location_id} not found in Locations sheet."
-                    print(f"    > {log_msg}")
-                    workflow_steps_records.append([
-                        get_next_workflow_steps_id() + i + 0.1,
-                        output_record['Triggered Date'],
-                        workflow_id,
-                        request_id,
-                        workflow_code,
-                        step,
-                        text_content,
-                        audio_path,
-                        log_msg
-                    ])
-                    continue
-                
-                save_folder_url = save_location['Location']
-                save_folder_id = extract_drive_folder_id(save_folder_url)
-                if not save_folder_id:
-                    log_msg = f"Invalid Google Drive folder ID for save location {save_location_id}"
-                    print(f"    > {log_msg}")
-                    workflow_steps_records.append([
-                        get_next_workflow_steps_id() + i + 0.1,
-                        output_record['Triggered Date'],
-                        workflow_id,
-                        request_id,
-                        workflow_code,
-                        step,
-                        text_content,
-                        audio_path,
-                        log_msg
-                    ])
-                    continue
-                
-                audio_filename = f'workflow_{request_id}_step_{i+1}_{eleven_config["Voice"]}.mp3'
-                try:
-                    print(f"[DEBUG] Using model: {eleven_config.get('Model', 'eleven_multilingual_v2') if eleven_config else 'eleven_multilingual_v2'}, voice_id: {voice_id}")
-                    start_time = time.time()
-                    if os.path.exists(audio_path):
-                        file_link = upload_audio_to_drive(GOOGLE_CREDS_JSON, save_folder_id, audio_filename, audio_path)
-                        log_msg = f"Generated and uploaded audio to Google Drive: {file_link}"
-                        print(f"    > {log_msg}")
-                    else:
-                        print(f"File {audio_path} does not exist, skipping upload.")
-                        sys.exit(1)
-                except Exception as e:
-                    log_msg = f"Failed to upload audio to Google Drive: {e}"
-                    print(f"    > {log_msg}")
-                    sys.exit(1)
-                
-                # Clean up temporary file
-                try:
-                    os.remove(temp_audio_path)
-                except:
-                    pass
-                
-                # Add workflow step record
-                workflow_steps_records.append([
-                    get_next_workflow_steps_id() + i + 0.1,
-                    output_record['Triggered Date'],
-                    workflow_id,
-                    request_id,
-                    workflow_code,
-                    step,
-                    text_content,
-                    audio_path,
-                    log_msg
-                ])
-                
-                # Add audio path to outputs
-                prev_outputs.append(audio_path)
-                continue  # Skip regular model call for this step
-            
-            # Check for Audio Merging step (e.g., L1&L9&L2SL3)
-            audio_merge_match = re.fullmatch(r'L(\d+)(?:&L(\d+))*SL(\d+)', step)
-            if audio_merge_match:
-                print(f"  - Step {i+1}: {step} (Audio Merging Step)")
-                
-                # Extract all location IDs from the step
-                location_ids = re.findall(r'L(\d+)', step)
-                save_location_id = location_ids[-1]  # Last location ID is the save location
-                source_location_ids = location_ids[:-1]  # All others are source locations
-                
-                if len(source_location_ids) < 2:
-                    log_msg = f"Audio merging requires at least 2 source locations, found {len(source_location_ids)}"
-                    print(f"    > {log_msg}")
-                    workflow_steps_records.append([
-                        get_next_workflow_steps_id() + i + 0.1,
-                        output_record['Triggered Date'],
-                        workflow_id,
-                        request_id,
-                        workflow_code,
-                        step,
-                        '',
-                        '',
-                        log_msg
-                    ])
-                    continue
-                
-                # Download audio files from source locations
-                audio_paths = []
-                download_errors = []
-                
-                for loc_id in source_location_ids:
-                    location = get_location_by_id(loc_id)
-                    if not location:
-                        error_msg = f"Location ID {loc_id} not found in Locations sheet."
-                        download_errors.append(error_msg)
-                        continue
-                    
-                    location_url = location['Location']
-                    location_type = location['Type']
-                    
-                    if location_type == 'File':
-                        # Download specific file
-                        audio_path = download_mp3_file_from_drive(GOOGLE_CREDS_JSON, location_url)
-                    elif location_type == 'mp3':
-                        # Download latest MP3 from folder
-                        folder_id = extract_drive_folder_id(location_url)
-                        if folder_id:
-                            audio_path = download_latest_mp3_from_drive(GOOGLE_CREDS_JSON, folder_id)
-                        else:
-                            error_msg = f"Invalid Google Drive folder ID for location {loc_id}"
-                            download_errors.append(error_msg)
-                            continue
-                    else:
-                        error_msg = f"Location {loc_id} is not a file or mp3 type"
-                        download_errors.append(error_msg)
-                        continue
-                    
-                    if audio_path:
-                        audio_paths.append(audio_path)
-                    else:
-                        error_msg = f"Failed to download audio from location {loc_id}"
-                        download_errors.append(error_msg)
-                
-                if download_errors:
-                    log_msg = f"Audio download errors: {'; '.join(download_errors)}"
-                    print(f"    > {log_msg}")
-                    workflow_steps_records.append([
-                        get_next_workflow_steps_id() + i + 0.1,
-                        output_record['Triggered Date'],
-                        workflow_id,
-                        request_id,
-                        workflow_code,
-                        step,
-                        '',
-                        '',
-                        log_msg
-                    ])
-                    continue
-                
-                if len(audio_paths) < 2:
-                    log_msg = f"Not enough audio files downloaded for merging. Expected at least 2, got {len(audio_paths)}"
-                    print(f"    > {log_msg}")
-                    workflow_steps_records.append([
-                        get_next_workflow_steps_id() + i + 0.1,
-                        output_record['Triggered Date'],
-                        workflow_id,
-                        request_id,
-                        workflow_code,
-                        step,
-                        '',
-                        '',
-                        log_msg
-                    ])
-                    continue
-                
-                # Merge audio files
-                print(f"    > Merging {len(audio_paths)} audio files...")
-                merged_audio_path = MP3_OUTPUT_DIR / f"merged_audio_{request_id}_step_{i+1}.mp3"
-                merged_path = merge_multiple_audio_files(audio_paths, merged_audio_path)
-                
-                if not merged_path:
-                    log_msg = f"Failed to merge audio files for step {i+1}"
-                    print(f"    > {log_msg}")
-                    workflow_steps_records.append([
-                        get_next_workflow_steps_id() + i + 0.1,
-                        output_record['Triggered Date'],
-                        workflow_id,
-                        request_id,
-                        workflow_code,
-                        step,
-                        str(audio_paths),
-                        '',
-                        log_msg
-                    ])
-                    continue
-                
-                # Upload merged audio to destination location
-                save_location = get_location_by_id(save_location_id)
-                if not save_location:
-                    log_msg = f"Save location ID {save_location_id} not found in Locations sheet."
-                    print(f"    > {log_msg}")
-                    workflow_steps_records.append([
-                        get_next_workflow_steps_id() + i + 0.1,
-                        output_record['Triggered Date'],
-                        workflow_id,
-                        request_id,
-                        workflow_code,
-                        step,
-                        str(audio_paths),
-                        merged_path,
-                        log_msg
-                    ])
-                    continue
-                
-                save_folder_url = save_location['Location']
-                save_folder_id = extract_drive_folder_id(save_folder_url)
-                if not save_folder_id:
-                    log_msg = f"Invalid Google Drive folder ID for save location {save_location_id}"
-                    print(f"    > {log_msg}")
-                    workflow_steps_records.append([
-                        get_next_workflow_steps_id() + i + 0.1,
-                        output_record['Triggered Date'],
-                        workflow_id,
-                        request_id,
-                        workflow_code,
-                        step,
-                        str(audio_paths),
-                        merged_path,
-                        log_msg
-                    ])
-                    continue
-                
-                audio_filename = f'merged_workflow_{request_id}_step_{i+1}.mp3'
-                try:
-                    print(f"[DEBUG] Using model: {eleven_config.get('Model', 'eleven_multilingual_v2') if eleven_config else 'eleven_multilingual_v2'}, voice_id: {voice_id}")
-                    start_time = time.time()
-                    if os.path.exists(merged_path):
-                        file_link = upload_audio_to_drive(GOOGLE_CREDS_JSON, save_folder_id, audio_filename, merged_path)
-                        log_msg = f"Merged and uploaded audio to Google Drive: {file_link}"
-                        print(f"    > {log_msg}")
-                    else:
-                        print(f"File {merged_path} does not exist, skipping upload.")
-                except Exception as e:
-                    log_msg = f"Failed to upload merged audio to Google Drive: {e}"
-                    print(f"    > {log_msg}")
-                
-                # Clean up temporary files
-                for temp_path in audio_paths:
-                    try:
-                        os.remove(temp_path)
-                    except:
-                        pass
-                
-                # Add workflow step record
-                workflow_steps_records.append([
-                    get_next_workflow_steps_id() + i + 0.1,
-                    output_record['Triggered Date'],
-                    workflow_id,
-                    request_id,
-                    workflow_code,
-                    step,
-                    str(audio_paths),
-                    merged_path,
-                    log_msg
-                ])
-                
-                # Add merged audio path to outputs
-                prev_outputs.append(merged_path)
-                continue  # Skip regular model call for this step
-            
-            # Parse the step for prompt, model override, and model ID override
-            input_text, model_override, model_id_override = parse_step(step, prev_outputs, custom_topic)
-            if model_override and model_id_override:
-                model_to_use = model_override
-                web_search_enabled = get_model_web_search_by_id(model_id_override)
-            else:
-                model_to_use = default_model
-                web_search_enabled = get_model_web_search_by_id(default_model_id)
-            print(f"  - Step {i+1}: {step} (Model: {model_to_use}, Web Search: {web_search_enabled})")
-            print(f"    Input: {input_text[:100]}{'...' if len(input_text) > 100 else ''}")
-            # Fallback for OpenAI client if responses.create is not available
-            if web_search_enabled and not hasattr(client, 'responses'):
-                msg = "❌ Web search requested but your OpenAI Python package does not support responses.create. Please upgrade openai to the latest version."
-                log_error(msg)
-                response = "[Web search not supported by your OpenAI Python package version]"
-            else:
-                response = call_openai_model(input_text, model_to_use, web_search=web_search_enabled)
-            prev_outputs.append(response)
-            output_col_in = f'Output {2*i+1}'
-            output_col_out = f'Output {2*i+2}'
-            output_record[output_col_in] = input_text
-            output_record[output_col_out] = response
-            # Check for SL# pattern in step (e.g., R4SL7)
-            sl_match = re.search(r'SL(\d+)', step)
-            if sl_match:
-                location_id = sl_match.group(1)
-                loc_row = locations_df[locations_df['Location ID'].astype(str) == location_id]
-                if not loc_row.empty:
-                    folder_url = loc_row.iloc[0]['Location']
-                    folder_id = extract_drive_folder_id(folder_url)
-                    if folder_id:
-                        filename = f'workflow_{request_id}_step_{i+1}.txt'
-                        try:
-                            file_link = upload_text_to_drive(GOOGLE_CREDS_JSON, folder_id, filename, response)
-                            log_msg = f"Saved response to Google Drive: {file_link}"
-                        except Exception as e:
-                            log_msg = f"Failed to save response to Google Drive: {e}"
-                        # Add file link or error to Workflow Steps log message
-                        workflow_steps_records.append([
-                            get_next_workflow_steps_id() + i + 0.1,  # fractional ID to keep order
-                            output_record['Triggered Date'],
-                            workflow_id,
-                            request_id,
-                            workflow_code,
-                            step,
-                            input_text,
-                            response,
-                            log_msg
-                        ])
-        # Write to Outputs tab
-        def to_native(val):
-            if hasattr(val, 'item'):
-                return val.item()
-            if isinstance(val, (int, float, str)) or val is None:
-                return val
-            return str(val)
-
-        output_row = [to_native(output_record.get(col, '')) for col in outputs_df.columns]
-        outputs_ws.append_row(output_row)
-        print(f"[INFO] Output written to Output ID: {output_record['Output ID']}")
         # Write to Workflow Steps tab
         for ws_row in workflow_steps_records:
             ws_row_native = [to_native(x) for x in ws_row]
@@ -1605,6 +1852,12 @@ if __name__ == '__main__':
         # Mark request as processed (disabled per user request)
         # requests_ws.update_cell(req_idx + 2, requests_df.columns.get_loc('Active') + 1, 'N')
         print(f"✅ Request {request_id} processed and logged.")
+
+    # After the loop, check if all steps were executed
+    if len(executed_steps) != len(steps):
+        print(f"[WARNING] Not all workflow steps were executed! Steps: {len(steps)}, Executed: {len(executed_steps)}")
+    else:
+        print(f"[DEBUG] All workflow steps executed: {len(steps)} steps.")
 
     # print("Critical error message")
     # sys.exit(1)
