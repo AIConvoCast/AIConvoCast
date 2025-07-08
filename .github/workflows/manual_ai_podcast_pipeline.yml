@@ -1,0 +1,36 @@
+name: Manual AI Podcast Pipeline
+
+on:
+  workflow_dispatch:
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Set up environment variables
+        run: |
+          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> $GITHUB_ENV
+          echo "ELEVENLABS_API_KEY=${{ secrets.ELEVENLABS_API_KEY }}" >> $GITHUB_ENV
+          echo "GH_PAT=${{ secrets.GH_PAT }}" >> $GITHUB_ENV
+        # Add any other env vars you need
+
+      - name: Write Google credentials file
+        run: |
+          echo "${{ secrets.GOOGLE_CREDS_JSON }}" > jmio-google-api.json
+        # Store your Google service account JSON as a secret named GOOGLE_CREDS_JSON
+
+      - name: Run AI Podcast Pipeline
+        run: python ai_podcast_pipeline_for_cursor.py 

@@ -388,10 +388,11 @@ def get_intro_outro_paths(row, settings_df):
 # -----------------------------------------
 def call_openai_model(prompt, model="gpt-4o", temperature=0.7, web_search=False):
     """Calls the OpenAI API, using the correct endpoint for web search and model type. Logs all errors and unexpected responses."""
+    import sys
     if not client.api_key:
         msg = "❌ OpenAI API key is not configured. Please check your .env file."
         log_error(msg)
-        return ""
+        sys.exit(1)
     try:
         # Case 1: Chat Completions with always-on search-preview model
         if web_search and (model.endswith("-search-preview")):
@@ -407,17 +408,17 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.7, web_search=False)
             # Robust error logging for chat completions
             if hasattr(response, 'error') and response.error:
                 log_error(f"OpenAI ChatCompletions error: {response.error}\nFull response: {response}")
-                return ""
+                sys.exit(1)
             if hasattr(response, 'choices') and response.choices:
                 return response.choices[0].message.content.strip()
             log_error(f"OpenAI ChatCompletions: Unexpected empty or malformed response. Full response: {response}")
-            return ""
+            sys.exit(1)
         # Case 2: Responses API with web_search_preview tool (base models)
         elif web_search:
             if not hasattr(client, 'responses'):
                 msg = "❌ Web search requested but your OpenAI Python package does not support responses.create. Please upgrade openai to the latest version."
                 log_error(msg)
-                return "[Web search not supported by your OpenAI Python package version]"
+                sys.exit(1)
             response = client.responses.create(
                 model=model,
                 tools=[{"type": "web_search_preview",
@@ -430,7 +431,7 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.7, web_search=False)
             # Robust error logging for responses.create
             if hasattr(response, 'error') and response.error:
                 log_error(f"OpenAI Responses error: {response.error}\nFull response: {response}")
-                return ""
+                sys.exit(1)
             try:
                 for msg in getattr(response, 'output', []):
                     # Handle both dict and object
@@ -445,28 +446,51 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.7, web_search=False)
                                 if ctype == "output_text" and text:
                                     return text.strip()
                 log_error(f"OpenAI Responses: Unexpected empty or malformed response. Full response: {response}")
-                return ""
+                sys.exit(1)
             except Exception as e:
                 log_error(f"Error parsing OpenAI web search response: {e}\nRaw response: {response}")
-                return ""
+                sys.exit(1)
         # Case 3: Standard Chat Completions
         else:
-            response = client.chat.completions.create(
-                model=model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=temperature
-            )
+            # Always omit temperature for o4-mini and similar models
+            models_without_temp = {"o4-mini", "o4-mini-2025-01-31"}
+            kwargs = {
+                "model": model,
+                "messages": [{"role": "user", "content": prompt}]
+            }
+            if model not in models_without_temp and temperature is not None:
+                kwargs["temperature"] = temperature
+            try:
+                response = client.chat.completions.create(**kwargs)
+            except Exception as e:
+                error_msg = str(e)
+                # If this is o4-mini or similar, exit immediately
+                if model in models_without_temp:
+                    log_error(f"OpenAI error for model {model}: {e}")
+                    sys.exit(1)
+                # For other models, try retrying without temperature if error is about temperature
+                if ("'temperature' does not support" in error_msg or "unsupported_value" in error_msg) and "temperature" in kwargs:
+                    log_error(f"Retrying OpenAI call for model {model} without temperature due to error: {error_msg}")
+                    del kwargs["temperature"]
+                    try:
+                        response = client.chat.completions.create(**kwargs)
+                    except Exception as e2:
+                        log_error(f"OpenAI error after retrying without temperature: {e2}")
+                        sys.exit(1)
+                else:
+                    log_error(f"OpenAI error: {e}")
+                    sys.exit(1)
             # Robust error logging for chat completions
             if hasattr(response, 'error') and response.error:
                 log_error(f"OpenAI ChatCompletions error: {response.error}\nFull response: {response}")
-                return ""
+                sys.exit(1)
             if hasattr(response, 'choices') and response.choices:
                 return response.choices[0].message.content.strip()
             log_error(f"OpenAI ChatCompletions: Unexpected empty or malformed response. Full response: {response}")
-            return ""
+            sys.exit(1)
     except Exception as e:
         log_error(f"OpenAI error: {e}")
-        return ""
+        sys.exit(1)
 
 def split_text_into_chunks(text, max_length=2500):
     """
