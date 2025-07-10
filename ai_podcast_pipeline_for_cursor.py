@@ -1767,7 +1767,6 @@ if __name__ == '__main__':
                     
                     audio_filename = f'merged_workflow_{request_id}_step_{i+1}.mp3'
                     try:
-                        print(f"[DEBUG] Using model: {eleven_config.get('Model', 'eleven_multilingual_v2') if eleven_config else 'eleven_multilingual_v2'}, voice_id: {voice_id}")
                         start_time = time.time()
                         if os.path.exists(merged_path):
                             file_link = upload_audio_to_drive(GOOGLE_CREDS_JSON, save_folder_id, audio_filename, merged_path)
@@ -1778,14 +1777,12 @@ if __name__ == '__main__':
                     except Exception as e:
                         log_msg = f"Failed to upload merged audio to Google Drive: {e}"
                         print(f"    > {log_msg}")
-                    
                     # Clean up temporary files
                     for temp_path in audio_paths:
                         try:
                             os.remove(temp_path)
                         except:
                             pass
-                    
                     # Add workflow step record
                     workflow_steps_records.append([
                         get_next_workflow_steps_id() + i + 0.1,
@@ -1798,7 +1795,6 @@ if __name__ == '__main__':
                         merged_path,
                         log_msg
                     ])
-                    
                     # Add merged audio path to outputs
                     all_outputs.append(merged_path)
                     continue  # Skip regular model call for this step
