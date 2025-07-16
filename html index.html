@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>AI Convo Cast – Daily AI News Podcast</title>
+  <meta name="description" content="AI Convo Cast delivers daily, insightful news and analysis on artificial intelligence, models, and industry trends. Listen and stay ahead in AI!">
+  <meta name="robots" content="index,follow">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Open Graph -->
+  <meta property="og:title" content="AI Convo Cast – Daily AI News Podcast">
+  <meta property="og:description" content="AI Convo Cast delivers daily, insightful news and analysis on artificial intelligence, models, and industry trends. Listen and stay ahead in AI!">
+  <meta property="og:url" content="https://AIConvoCast.com/">
+  <meta property="og:image" content="https://static-1.anchor.com/podcast_image_placeholder.png">
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="AI Convo Cast – Daily AI News Podcast">
+  <meta name="twitter:description" content="AI Convo Cast delivers daily, insightful news and analysis on artificial intelligence, models, and industry trends. Listen and stay ahead in AI!">
+  <meta name="twitter:image" content="https://static-1.anchor.com/podcast_image_placeholder.png">
+  <!-- JSON-LD Schema -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "PodcastSeries",
+    "name": "AI Convo Cast",
+    "url": "https://AIConvoCast.com/",
+    "description": "AI Convo Cast delivers daily, insightful news and analysis on artificial intelligence, models, and industry trends. Listen and stay ahead in AI!",
+    "image": "https://static-1.anchor.com/podcast_image_placeholder.png",
+    "sameAs": [
+      "https://open.spotify.com/show/7kQwQ6VwBEm90LkAMPxQnA",
+      "https://podcasts.apple.com/us/podcast/ai-convo-cast/id1234567890",
+      "https://music.amazon.com/podcasts/12345678-90ab-cdef-1234-567890abcdef"
+    ],
+    "publisher": {
+      "@type": "Organization",
+      "name": "AI Convo Cast"
+    },
+    "webFeed": "https://anchor.fm/s/101530384/podcast/rss"
+  }
+  </script>
+  <!-- Google Fonts Preload -->
+  <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
+  <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet"></noscript>
+  <!-- Favicon & Manifest -->
+  <link rel="icon" href="favicon.ico">
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="preload" href="main.js" as="script">
+</head>
+<body>
+  <header class="header" role="banner">
+    <div class="container flex-row">
+      <a href="/" class="logo" aria-label="AI Convo Cast Home">
+        <!-- Simple SVG logo -->
+        <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="20" fill="#1a202c"/><text x="50%" y="55%" text-anchor="middle" fill="#fff" font-size="18" font-family="Inter,Arial,sans-serif" dy=".3em">AI</text></svg>
+      </a>
+      <nav class="nav" aria-label="Main navigation">
+        <a href="/" class="nav-link">Episodes</a>
+        <a href="contact.html" class="nav-link">Contact</a>
+      </nav>
+    </div>
+  </header>
+  <main>
+    <section class="hero">
+      <img src="https://static-1.anchor.com/podcast_image_placeholder.png" alt="AI Convo Cast Cover Art" class="cover-art" width="200" height="200" loading="lazy">
+      <div>
+        <h1>AI Convo Cast</h1>
+        <p class="pitch">Your daily dose of AI news, breakthroughs, and expert insights. Stay ahead in the world of artificial intelligence.</p>
+        <a href="https://open.spotify.com/show/7kQwQ6VwBEm90LkAMPxQnA" class="cta-btn" rel="noopener" target="_blank">Listen on Spotify</a>
+      </div>
+    </section>
+    <section class="episodes-section" aria-label="Podcast Episodes">
+      <h2>Latest Episodes</h2>
+      <div id="episodes-grid" class="episodes-grid" aria-live="polite"></div>
+      <div id="episodes-error" class="error-message" style="display:none;"></div>
+    </section>
+  </main>
+  <footer class="footer">
+    <div>
+      &copy; <span id="year"></span> AI Convo Cast &mdash;
+      <a href="privacy.html">Privacy Policy</a> |
+      <a href="https://anchor.fm/s/101530384/podcast/rss" rel="noopener">RSS Feed</a> |
+      <a href="https://github.com/AIConvoCast/AIConvoCast" rel="noopener">GitHub</a>
+    </div>
+  </footer>
+  <script>
+    document.getElementById('year').textContent = new Date().getFullYear();
+  </script>
+  <script src="main.js" defer></script>
+</body>
+</html>
