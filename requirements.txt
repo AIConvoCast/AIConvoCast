@@ -1,0 +1,13 @@
+pandas
+gspread>=5.10.0
+requests
+openai
+pydub
+XlsxWriter
+python-dotenv
+google-auth-oauthlib
+google-api-python-client
+google-auth
+elevenlabs
+chardet
+google-cloud-storage 

@@ -1,0 +1,203 @@
+name: Test Setup
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test-setup:
+    runs-on: ubuntu-latest
+    name: Test GitHub Actions Setup
+    timeout-minutes: 10
+    environment: production  # Use your GitHub environment
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Test environment variables
+        run: |
+          echo "Testing environment variable setup..."
+          if [ -n "${{ vars.OPENAI_API_KEY }}" ]; then
+            echo "✅ OPENAI_API_KEY is set"
+          else
+            echo "❌ OPENAI_API_KEY is not set"
+            exit 1
+          fi
+          
+          if [ -n "${{ vars.ELEVENLABS_API_KEY }}" ]; then
+            echo "✅ ELEVENLABS_API_KEY is set"
+          else
+            echo "❌ ELEVENLABS_API_KEY is not set"
+            exit 1
+          fi
+          
+          if [ -n "${{ secrets.GOOGLE_CREDS_JSON }}" ]; then
+            echo "✅ GOOGLE_CREDS_JSON is set"
+          else
+            echo "❌ GOOGLE_CREDS_JSON is not set"
+            exit 1
+          fi
+          
+          if [ -n "${{ vars.SHARE_SHEET_WITH_EMAIL }}" ]; then
+            echo "✅ SHARE_SHEET_WITH_EMAIL is set"
+          else
+            echo "❌ SHARE_SHEET_WITH_EMAIL is not set"
+            exit 1
+          fi
+
+      - name: Test Google credentials
+        run: |
+          echo '${{ secrets.GOOGLE_CREDS_JSON }}' > test-google-creds.json
+          python -c "
+          import json
+          try:
+              with open('test-google-creds.json', 'r') as f:
+                  creds = json.load(f)
+              print('✅ Google credentials JSON is valid')
+              print(f'Project ID: {creds.get(\"project_id\", \"Not found\")}')
+              
+              # Check required fields
+              required_fields = ['type', 'project_id', 'private_key_id', 'private_key', 'client_email']
+              missing_fields = [field for field in required_fields if field not in creds]
+              
+              if missing_fields:
+                  print(f'❌ Missing required fields: {missing_fields}')
+                  exit(1)
+              else:
+                  print('✅ All required fields present')
+                  
+              if creds.get('type') != 'service_account':
+                  print('❌ Not a service account credential')
+                  exit(1)
+              else:
+                  print('✅ Service account credential')
+                  
+          except json.JSONDecodeError as e:
+              print(f'❌ Invalid JSON in Google credentials: {e}')
+              print('Content preview:')
+              with open('test-google-creds.json', 'r') as f:
+                  content = f.read()
+                  print(content[:200] + '...' if len(content) > 200 else content)
+              exit(1)
+          except Exception as e:
+              print(f'❌ Error reading Google credentials: {e}')
+              exit(1)
+          "
+
+      - name: Test Google Sheets connection
+        run: |
+          python -c "
+          import time
+          import gspread
+          from google.oauth2 import service_account
+          
+          scopes = [
+              'https://spreadsheets.google.com/feeds',
+              'https://www.googleapis.com/auth/drive'
+          ]
+          
+          try:
+              credentials = service_account.Credentials.from_service_account_file(
+                  'test-google-creds.json', scopes=scopes
+              )
+              
+              gc = gspread.authorize(credentials)
+              print('✅ Successfully authenticated with Google')
+              
+              # Try to list spreadsheets
+              try:
+                  spreadsheets = gc.openall()
+                  print(f'✅ Can access {len(spreadsheets)} spreadsheets')
+                  
+                  # Try to create a test sheet
+                  test_sheet_name = f'Test Sheet {int(time.time())}'
+                  try:
+                      test_sheet = gc.create(test_sheet_name)
+                      print(f'✅ Can create new spreadsheet: {test_sheet_name}')
+                      
+                      # Clean up test sheet
+                      gc.del_spreadsheet(test_sheet.id)
+                      print('✅ Can delete spreadsheets')
+                      
+                  except Exception as e:
+                      print(f'⚠️ Can authenticate but can\'t create/delete sheets: {e}')
+                      
+              except Exception as e:
+                  print(f'⚠️ Can authenticate but can\'t list spreadsheets: {e}')
+                  
+          except Exception as e:
+              print(f'❌ Google Sheets authentication failed: {e}')
+              exit(1)
+          "
+
+      - name: Test Python imports
+        run: |
+          python -c "
+          try:
+              import openai
+              print('✅ OpenAI package imported successfully')
+          except ImportError as e:
+              print(f'❌ Failed to import OpenAI: {e}')
+              exit(1)
+              
+          try:
+              import elevenlabs
+              print('✅ ElevenLabs package imported successfully')
+          except ImportError as e:
+              print(f'❌ Failed to import ElevenLabs: {e}')
+              exit(1)
+              
+          try:
+              import gspread
+              print('✅ GSpread package imported successfully')
+          except ImportError as e:
+              print(f'❌ Failed to import GSpread: {e}')
+              exit(1)
+              
+          try:
+              import pandas
+              print('✅ Pandas package imported successfully')
+          except ImportError as e:
+              print(f'❌ Failed to import Pandas: {e}')
+              exit(1)
+              
+          try:
+              from pydub import AudioSegment
+              print('✅ Pydub package imported successfully')
+          except ImportError as e:
+              print(f'❌ Failed to import Pydub: {e}')
+              exit(1)
+          "
+
+      - name: Test FFmpeg
+        run: |
+          ffmpeg -version
+          echo "✅ FFmpeg is available"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -f test-google-creds.json
+
+      - name: Setup Complete
+        run: |
+          echo "🎉 All tests passed! Your GitHub Actions setup is ready."
+          echo "You can now run the main AI Podcast Pipeline workflow." 

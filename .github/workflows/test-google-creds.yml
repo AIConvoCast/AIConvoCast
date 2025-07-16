@@ -1,0 +1,190 @@
+name: Test Google Credentials
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test-google-creds:
+    runs-on: ubuntu-latest
+    name: Test Google Credentials
+    timeout-minutes: 5
+    environment: production  # Use your GitHub environment
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install gspread google-auth google-auth-oauthlib google-api-python-client
+
+      - name: Create Google credentials file
+        run: |
+          echo '${{ secrets.GOOGLE_CREDS_JSON }}' > jmio-google-api.json
+
+      - name: Test JSON format
+        run: |
+          echo "🔍 Testing JSON format..."
+          python -c "
+          import json
+          try:
+              with open('jmio-google-api.json', 'r') as f:
+                  creds = json.load(f)
+              print('✅ JSON format is valid')
+              print(f'Type: {creds.get(\"type\", \"Not found\")}')
+              print(f'Project ID: {creds.get(\"project_id\", \"Not found\")}')
+              print(f'Client Email: {creds.get(\"client_email\", \"Not found\")}')
+          except json.JSONDecodeError as e:
+              print(f'❌ Invalid JSON: {e}')
+              print('Content preview:')
+              with open('jmio-google-api.json', 'r') as f:
+                  content = f.read()
+                  print(content[:300] + '...' if len(content) > 300 else content)
+              exit(1)
+          except Exception as e:
+              print(f'❌ Error reading file: {e}')
+              exit(1)
+          "
+
+      - name: Test required fields
+        run: |
+          echo "🔍 Testing required fields..."
+          python -c "
+          import json
+          with open('jmio-google-api.json', 'r') as f:
+              creds = json.load(f)
+          
+          required_fields = ['type', 'project_id', 'private_key_id', 'private_key', 'client_email']
+          missing_fields = [field for field in required_fields if field not in creds]
+          
+          if missing_fields:
+              print(f'❌ Missing required fields: {missing_fields}')
+              exit(1)
+          else:
+              print('✅ All required fields present')
+              
+          if creds.get('type') != 'service_account':
+              print('❌ Not a service account credential')
+              exit(1)
+          else:
+              print('✅ Service account credential')
+          "
+
+      - name: Test Google authentication
+        run: |
+          echo "🔍 Testing Google authentication..."
+          python -c "
+          import gspread
+          from google.oauth2 import service_account
+          
+          scopes = [
+              'https://spreadsheets.google.com/feeds',
+              'https://www.googleapis.com/auth/drive'
+          ]
+          
+          try:
+              credentials = service_account.Credentials.from_service_account_file(
+                  'jmio-google-api.json', scopes=scopes
+              )
+              
+              gc = gspread.authorize(credentials)
+              print('✅ Successfully authenticated with Google')
+              
+          except Exception as e:
+              print(f'❌ Authentication failed: {e}')
+              exit(1)
+          "
+
+      - name: Test Google Sheets access
+        run: |
+          echo "🔍 Testing Google Sheets access..."
+          python -c "
+          import gspread
+          from google.oauth2 import service_account
+          
+          scopes = [
+              'https://spreadsheets.google.com/feeds',
+              'https://www.googleapis.com/auth/drive'
+          ]
+          
+          try:
+              credentials = service_account.Credentials.from_service_account_file(
+                  'jmio-google-api.json', scopes=scopes
+              )
+              
+              gc = gspread.authorize(credentials)
+              
+              # Try to list spreadsheets
+              try:
+                  spreadsheets = gc.openall()
+                  print(f'✅ Can access {len(spreadsheets)} spreadsheets')
+                  
+                  # List first few spreadsheet names
+                  for i, sheet in enumerate(spreadsheets[:5]):
+                      print(f'  - {sheet.title}')
+                  if len(spreadsheets) > 5:
+                      print(f'  ... and {len(spreadsheets) - 5} more')
+                      
+              except Exception as e:
+                  print(f'⚠️ Can authenticate but can\'t list spreadsheets: {e}')
+                  
+          except Exception as e:
+              print(f'❌ Google Sheets access failed: {e}')
+              exit(1)
+          "
+
+      - name: Test Google Drive access
+        run: |
+          echo "🔍 Testing Google Drive access..."
+          python -c "
+          from googleapiclient.discovery import build
+          from google.oauth2 import service_account
+          
+          scopes = ['https://www.googleapis.com/auth/drive']
+          
+          try:
+              credentials = service_account.Credentials.from_service_account_file(
+                  'jmio-google-api.json', scopes=scopes
+              )
+              
+              drive_service = build('drive', 'v3', credentials=credentials)
+              
+              # Try to list files
+              try:
+                  results = drive_service.files().list(pageSize=10).execute()
+                  files = results.get('files', [])
+                  print(f'✅ Can access {len(files)} files in Google Drive')
+                  
+                  # List first few file names
+                  for i, file in enumerate(files[:5]):
+                      print(f'  - {file.get(\"name\", \"Unnamed\")}')
+                  if len(files) > 5:
+                      print(f'  ... and {len(files) - 5} more')
+                      
+              except Exception as e:
+                  print(f'⚠️ Can authenticate but can\'t list files: {e}')
+                  
+          except Exception as e:
+              print(f'❌ Google Drive access failed: {e}')
+              exit(1)
+          "
+
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -f jmio-google-api.json
+
+      - name: Test Complete
+        run: |
+          echo "🎉 Google credentials test completed successfully!"
+          echo "Your Google service account is properly configured."
+          echo "You can now run the main AI Podcast Pipeline workflow." 
