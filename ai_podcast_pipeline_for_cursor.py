@@ -1516,8 +1516,9 @@ if __name__ == '__main__':
         print(f"[DEBUG] Steps to execute: {steps}")
         all_outputs = []  # Track output for every step, even if None
         workflow_steps_records = []
+        current_output_id = outputs_df['Output ID'].astype(int).max() if not outputs_df.empty else 0
         output_record = {
-            'Output ID': get_next_output_id(),
+            'Output ID': current_output_id + 1,
             'Triggered Date': pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')
         }
         # Ensure all Output columns are present in output_record
