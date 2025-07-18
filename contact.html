@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Contact – AI Convo Cast</title>
+  <meta name="description" content="Contact the AI Convo Cast team. We welcome your feedback, questions, and partnership inquiries.">
+  <meta name="robots" content="index,follow">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="favicon.ico">
+  <link rel="apple-touch-icon" href="favicon.ico">
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+  <header class="header" role="banner">
+    <div class="container flex-row">
+      <nav class="nav" aria-label="Main navigation">
+        <a href="episodes.html" class="nav-link">Episodes</a>
+        <a href="contact.html" class="nav-link nav-link-active">Contact</a>
+      </nav>
+    </div>
+  </header>
+  <main id="main-content">
+    <section class="hero" style="margin-bottom:2rem;">
+      <img src="ai-convo-cast-logo.jpg" alt="AI Convo Cast Logo" class="hero-logo" width="120" height="120" style="border-radius:24px;object-fit:cover;display:block;margin:0 auto 1.5rem auto;box-shadow:0 8px 32px rgba(0,0,0,0.10);background:#fff;" loading="lazy">
+      <h1>Contact Us</h1>
+    </section>
+    <section class="contact-section">
+      <form id="contact-form" class="contact-form" action="https://formspree.io/f/mnqewqzv" method="POST" novalidate autocomplete="off">
+        <input type="hidden" name="data-form" value="contact-aiconvocast">
+        <input type="hidden" name="_replyto" value="aiconvocast@gmail.com">
+        <div class="form-row">
+          <label for="name">Name</label>
+          <input id="name" name="name" type="text" required maxlength="60" autocomplete="name">
+        </div>
+        <div class="form-row">
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email" required maxlength="80" autocomplete="email">
+        </div>
+        <div class="form-row">
+          <label for="subject">Subject</label>
+          <input id="subject" name="subject" type="text" required maxlength="120" autocomplete="off">
+        </div>
+        <div class="form-row form-row-full">
+          <label for="message">Message</label>
+          <textarea id="message" name="message" rows="5" required maxlength="1000"></textarea>
+        </div>
+        <button type="submit" class="cta-btn">Send Message</button>
+      </form>
+      <div id="thank-you-message" style="display:none; margin-top:2rem; font-size:1.2rem; color:var(--accent); font-weight:600;">Thank you for contacting us! Redirecting to home...</div>
+    </section>
+  </main>
+  <footer class="footer">
+    <div>
+      &copy; <span id="year"></span> AI Convo Cast &mdash;
+      <a href="privacy.html">Privacy Policy</a> |
+      <a href="https://anchor.fm/s/101530384/podcast/rss" rel="noopener">RSS Feed</a> |
+      <a href="https://github.com/AIConvoCast/AIConvoCast" rel="noopener">GitHub</a>
+    </div>
+  </footer>
+  <script>
+    document.getElementById('year').textContent = new Date().getFullYear();
+    document.getElementById('contact-form').addEventListener('submit', function(e) {
+      e.preventDefault();
+      var form = e.target;
+      var valid = true;
+      ['name', 'email', 'subject', 'message'].forEach(function(id) {
+        var el = form[id];
+        if (!el.value.trim()) {
+          el.classList.add('input-error');
+          valid = false;
+        } else {
+          el.classList.remove('input-error');
+        }
+      });
+      var email = form['email'].value.trim();
+      if (!/^[^@]+@[^@]+\\.[^@]+$/.test(email)) {
+        form['email'].classList.add('input-error');
+        valid = false;
+      }
+      if (!valid) return;
+      var data = new FormData(form);
+      fetch(form.action, {
+        method: 'POST',
+        body: data,
+        headers: { 'Accept': 'application/json' }
+      }).then(function(resp) {
+        if (resp.ok) {
+          form.style.display = 'none';
+          document.getElementById('thank-you-message').style.display = 'block';
+          setTimeout(function() { window.location.href = '/'; }, 3000);
+        } else {
+          alert('Sorry, there was a problem submitting your message.');
+        }
+      }).catch(function() {
+        alert('Sorry, there was a problem submitting your message.');
+      });
+    });
+  </script>
+</body>
+</html> 

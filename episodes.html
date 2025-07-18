@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Episodes – AI Convo Cast</title>
+  <meta name="description" content="Browse all episodes of the AI Convo Cast podcast. Stay up to date with the latest in AI news, breakthroughs, and expert insights.">
+  <meta name="robots" content="index,follow">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="favicon.ico">
+  <link rel="apple-touch-icon" href="favicon.ico">
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+  <header class="header" role="banner">
+    <div class="container flex-row">
+      <nav class="nav" aria-label="Main navigation">
+        <a href="episodes.html" class="nav-link nav-link-active">Episodes</a>
+        <a href="contact.html" class="nav-link">Contact</a>
+      </nav>
+    </div>
+  </header>
+  <main id="main-content">
+    <section class="hero" style="margin-bottom:2rem;">
+      <img src="ai-convo-cast-logo.jpg" alt="AI Convo Cast Logo" class="hero-logo" width="120" height="120" style="border-radius:24px;object-fit:cover;display:block;margin:0 auto 1.5rem auto;box-shadow:0 8px 32px rgba(0,0,0,0.10);background:#fff;" loading="lazy">
+      <h1>All Episodes</h1>
+      <p class="pitch">Browse every episode of AI Convo Cast. Listen, learn, and stay ahead in the world of artificial intelligence.</p>
+    </section>
+    <section class="episodes-section" aria-label="Podcast Episodes">
+      <div id="episodes-grid" class="episodes-grid" aria-live="polite"></div>
+      <div id="episodes-error" class="error-message" style="display:none;"></div>
+    </section>
+  </main>
+  <footer class="footer">
+    <div>
+      &copy; <span id="year"></span> AI Convo Cast &mdash;
+      <a href="privacy.html">Privacy Policy</a> |
+      <a href="https://anchor.fm/s/101530384/podcast/rss" rel="noopener">RSS Feed</a> |
+      <a href="https://github.com/AIConvoCast/AIConvoCast" rel="noopener">GitHub</a>
+    </div>
+  </footer>
+  <script>
+    document.getElementById('year').textContent = new Date().getFullYear();
+  </script>
+  <script src="main.js" defer></script>
+</body>
+</html> 
