@@ -207,4 +207,21 @@ body {
 ::-webkit-input-placeholder { color: #aaa; }
 ::-moz-placeholder { color: #aaa; }
 :-ms-input-placeholder { color: #aaa; }
-::placeholder { color: #aaa; } 
+::placeholder { color: #aaa; }
+.hero-logo {
+  display: block;
+  margin: 0 auto 1.5rem auto;
+  width: 120px;
+  height: 120px;
+  border-radius: 24px;
+  object-fit: cover;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.10);
+  background: #fff;
+}
+@media (max-width: 600px) {
+  .hero-logo {
+    width: 80px;
+    height: 80px;
+    border-radius: 16px;
+  }
+} 
