@@ -10,4 +10,6 @@ google-api-python-client
 google-auth
 elevenlabs
 chardet
-google-cloud-storage 
+google-cloud-storage
+anthropic>=0.7.0
+google-generativeai>=0.3.0 

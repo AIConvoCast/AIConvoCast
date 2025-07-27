@@ -399,26 +399,31 @@ def try_load_google_sheet():
 def get_template_dataframes():
     """Returns a dictionary of DataFrames for the new simplified template structure."""
     workflow = pd.DataFrame([
-        [1, "Generate Daily Script", "P1,P2&R1,P3&R2", "gpt-4o"],
-        [2, "Test Daily News", "P1", "gpt-4o"],
-        [3, "Test Daily News", "P1", "gpt-4o-mini"],
-        [4, "Test Daily News", "P1M4", ""],
-        [5, "Test Daily News", "P1M2", ""],
-        [6, "Test Daily News", "P1M2,P2&R1M4", ""],
-        [7, "Test Daily News", "P1M2,P2&R1M4,P3&R2M2", ""],
-        [8, "Test Daily News", "P1M2,P2&R1M4,P3&R2M2,P4&R3M3", ""],
-        [9, "Test Daily News", "P1M2,P2&R1M4,P3&R2M2,P4&R3M3,P5&R4M3", ""],
-        [10, "Test Daily News and Script Save", "P1M2,P6&R1M2,P3&R2M2,P4&R3M3,P5&R4M3,R4SL7", ""],
-        [11, "Send latest script to Eleven Labs", "L8E1SL4", ""],
-        [12, "Combine intro mp3 with latest mp3 with outro mp3", "L1&L9&L2SL3", ""],
-        [13, "Generates Script, Sends to EL and Comines", "P1M2,P6&R1M2,P3&R2M2,P4&R3M3,P5&R4M3,R4SL7,L8E1SL4,L1&L9&L2SL3", ""],
-        [14, "Good Daily News and Script Save", "P1M1,P6&R1M1,P3&R2M1,P4&R3M18,P5&R4M3,R4SL7", ""],
-        [15, "Send to Eleven and Combine", "L8E1SL4,L1&L9&L2SL3", ""],
-        [16, "Good Daily News, Send to Eleven and Combine", "P1M1,P6&R1M1,P3&R2M1,P4&R3M18,P5&R4M3,R4SL7,L8E1SL4,L1&L9&L2SL3", ""],
-        [17, "Top 5 Daily AI News, Send to Eleven and Combine", "P1M1,P7&R1M1,P3&R2M1,P4&R3M18,P5&R4M3,R4SL7,L8E1SL4,L1&L9&L2SL3", ""],
-        [18, "Posted Podcasts Update", "PPU", ""],
-        [19, "Retrieve the last 5 title and descriptions from Posted Podcasts", "PPL5", ""]
-    ], columns=["Workflow ID", "Workflow Title", "Workflow Code", "Model Default"])
+        [1, "Generate Daily Script", "P1,P2&R1,P3&R2", "N", ""],
+        [2, "Test Daily News", "P1", "N", ""],
+        [3, "Test Daily News", "P1", "N", ""],
+        [4, "Test Daily News", "P1M4", "N", ""],
+        [5, "Test Daily News", "P1M2", "N", ""],
+        [6, "Test Daily News", "P1M2,P2&R1M4", "N", ""],
+        [7, "Test Daily News", "P1M2,P2&R1M4,P3&R2M2", "N", ""],
+        [8, "Test Daily News", "P1M2,P2&R1M4,P3&R2M2,P4&R3M3", "N", ""],
+        [9, "Test Daily News", "P1M2,P2&R1M4,P3&R2M2,P4&R3M3,P5&R4M3", "N", ""],
+        [10, "Test Daily News and Script Save", "P1M2,P6&R1M2,P3&R2M2,P4&R3M3,P5&R4M3,R4SL7", "N", ""],
+        [11, "Send latest script to Eleven Labs", "L8E1SL4", "N", ""],
+        [12, "Combine intro mp3 with latest mp3 with outro mp3", "L1&L9&L2SL3", "N", ""],
+        [13, "Generates Script, Sends to EL and Comines", "P1M2,P6&R1M2,P3&R2M2,P4&R3M3,P5&R4M3,R4SL7,L8E1SL4,L1&L9&L2SL3", "N", ""],
+        [14, "Good Daily News and Script Save", "P1M1,P6&R1M1,P3&R2M1,P4&R3M18,P5&R4M3,R4SL7", "N", ""],
+        [15, "Send to Eleven and Combine", "L8E1SL4,L1&L9&L2SL3", "N", ""],
+        [16, "Good Daily News, Send to Eleven and Combine", "P1M1,P6&R1M1,P3&R2M1,P4&R3M18,P5&R4M3,R4SL7,L8E1SL4,L1&L9&L2SL3", "N", ""],
+        [17, "Top 5 Daily AI News, Send to Eleven and Combine", "P1M1,P7&R1M1,P3&R2M1,P4&R3M18,P5&R4M3,R4SL7,L8E1SL4,L1&L9&L2SL3", "N", ""],
+        [18, "Posted Podcasts Update", "PPU", "N", ""],
+        [19, "Retrieve the last 10 title and descriptions from Posted Podcasts", "PPL10", "N", ""],
+        [20, "Update Posted Podcasts, Retrieve last 5 episodes, Get top 8 stories, Select top 3 stories while excluding topics previously covered", "PPU,PPL5,P1M2,P2&R3&P8&R2M4", "N", ""],
+        [21, "Update Posted Podcasts, Retrieve last 5 episodes, Get top stories, Select top 3 stories, Get latest on stories, Generate script with 40", "PPU,PPL15,P1M1,P2&R3&P8&R2M13,P3&R4M1,P4&R5M13,P5&R6M37,R6SL7", "N", ""],
+        [22, "Update Posted Podcasts, Retrieve last 5 episodes, Get top stories, Select top 3 stories, Get latest on stories, Generate script 4.5, send to eleven and combine", "PPU,PPL15,P1M1,P2&R3&P8&R2M13,P3&R4M1,P4&R5M13,P5&R6M37,R6SL7,L8E1SL4,L1&L9&L2SL3", "N", ""],
+        [23, "Update PPU, Retrieve last 5, Get top stories, Select top 3 stories, Get latest on stories, Generate script with 4.1", "PPU,PPL5,P1M1,P2&R3&P8&R2M1,P3&R4M1,P4&R5M73,P5&R6M73", "Y", ""],
+        [24, "Update Models Tab with latest model", "UM", "N", ""]
+    ], columns=["Workflow ID", "Workflow Title", "Workflow Code", "Active", "Custom Topic If Required"])
 
     outputs = pd.DataFrame(columns=[
         "Output ID", "Triggered Date",
@@ -436,15 +441,20 @@ def get_template_dataframes():
         [8, 8, '', 'N', ''],
         [9, 9, '', 'N', ''],
         [10, 10, '', 'N', 'Generates and outputs to scripts folder'],
-        [11, 11, '', 'N', 'Generates eleven labs based on latest script saved'],
-        [12, 12, '', 'N', 'Combines Intro Mp3 with latest Eleven Labs Mp3 with Outro Mp3 and saves to Podcast folder'],
+        [11, 11, '', 'N', 'Generates eleven labs based on latest script saved - L8E1SL4'],
+        [12, 12, '', 'N', 'Combine intro mp3 with latest mp3 with outro mp3 - L1&L9&L2SL3'],
         [13, 13, '', 'N', 'Generates Script, Sends to EL and Combines'],
         [14, 14, '', 'N', ''],
-        [15, 15, '', 'N', 'Sends to eleven and combines'],
+        [15, 15, '', 'N', 'Send to Eleven and Combine - L8E1SL4,L1&L9&L2SL3'],
         [16, 16, '', 'N', 'Top 3 News Stories'],
         [17, 17, '', 'N', 'Top 5 News Stories'],
-        [18, 18, '', 'Y', 'Posted Podcasts Tab Update'],
-        [19, 19, '', 'N', 'Run workflow to test getting the title and description from the last 5 posted podcasts']
+        [18, 18, '', 'N', 'Posted Podcasts Tab Update'],
+        [19, 19, '', 'N', 'Run workflow to test getting the title and description from the last 5 posted podcasts'],
+        [20, 20, '', 'N', 'Update Posted Podcasts, Retrieve last 5 episodes, Get top 8 stories, Select top 3 stories while excluding topics previously covered'],
+        [21, 21, '', 'N', 'Update Posted Podcasts, Retrieve last 5 episodes, Get top stories, Select top 3 stories, Get latest on stories, Generate script'],
+        [22, 22, '', 'N', 'Update Posted Podcasts, Retrieve last 5 episodes, Get top stories, Select top 3 stories, Get latest on stories, Generate script 4.5'],
+        [23, 23, '', 'N', 'Update PPU, Retrieve last 5, Get top stories, Select top 3 stories, Get latest on stories, Generate script with 4.1'],
+        [24, 24, '', 'N', 'Update Models Tab with latest Models']
     ], columns=["Request ID", "Workflow ID", "Custom Topic If Required", "Active", "Comments"])
 
     prompts = pd.DataFrame([
@@ -507,52 +517,102 @@ Topic to generate Title and Description based:'''],
         [8, "Do not select topics previously covered", "Please ensure news items selected do not exactly cover topics previously discuss below. Updates to these new items should still be included. Previously Covered News Items to avoid unless it is an an update on previously covered story:"]
     ], columns=["Prompt ID", "Prompt Title", "Prompt Description"])
 
+    # Updated Models tab with the provided data as default (81 models total)
     models = pd.DataFrame([
-        [1, "gpt-4o", "N", "Y"],
-        [2, "gpt-4o-mini", "N", "Y"],
-        [3, "gpt-4o", "N", "N"],
-        [4, "gpt-4o-mini", "Y", "N"],
-        [5, "gpt-4o-mini-search-preview", "N", "Y"],
-        [6, "gpt-4o-search-preview", "N", "Y"],
-        [7, "chatgpt-4o-latest", "N", "N"],
-        [8, "codex-mini-latest", "N", "N"],
-        [9, "dall-e-2", "N", "N"],
-        [10, "dall-e-3", "N", "N"],
-        [11, "gpt-3.5-turbo-instruct", "N", "N"],
-        [12, "gpt-4", "N", "N"],
-        [13, "gpt-4.1", "N", "N"],
-        [14, "gpt-4.1-mini", "N", "N"],
-        [15, "gpt-4.1-mini-2025-04-14", "N", "N"],
-        [16, "gpt-4.1-nano", "N", "N"],
-        [17, "gpt-4.1-nano-2025-04-14", "N", "N"],
-        [18, "gpt-4.5-preview", "N", "N"],
-        [19, "gpt-4.5-preview-2025-02-27", "N", "N"],
-        [20, "gpt-4o-audio-preview", "N", "N"],
-        [21, "gpt-4o-mini-audio-preview", "N", "N"],
-        [22, "gpt-4o-mini-search-preview", "N", "N"],
-        [23, "gpt-4o-mini-search-preview-2025-03-11", "N", "N"],
-        [24, "gpt-4o-mini-transcribe", "N", "N"],
-        [25, "gpt-4o-mini-tts", "N", "N"],
-        [26, "gpt-4o-realtime-preview", "N", "N"],
-        [27, "gpt-4o-search-preview", "N", "N"],
-        [28, "gpt-4o-search-preview-2025-03-11", "N", "N"],
-        [29, "gpt-4o-transcribe", "N", "N"],
-        [30, "gpt-image-1", "N", "N"],
-        [31, "o1", "N", "N"],
-        [32, "o1-mini", "N", "N"],
-        [33, "o1-preview", "N", "N"],
-        [34, "o1-pro", "N", "N"],
-        [35, "o3-mini", "N", "N"],
-        [36, "o3-mini-2025-01-31", "N", "N"],
-        [37, "o4-mini", "N", "N"],
-        [38, "omni-moderation-latest", "N", "N"],
-        [39, "text-embedding-3-large", "N", "N"],
-        [40, "text-embedding-3-small", "N", "N"],
-        [41, "tts-1", "N", "N"],
-        [42, "tts-1-1106", "N", "N"],
-        [43, "tts-1-hd", "N", "N"],
-        [44, "whisper-1", "N", "N"]
-    ], columns=["Model ID", "Model Name", "Model Default", "Web Search"])
+        [1, "gpt-4o", "N", "Y", "N"],
+        [2, "gpt-4o-mini", "N", "Y", "N"],
+        [3, "gpt-4o", "N", "N", "N"],
+        [4, "gpt-4o-mini", "Y", "N", "N"],
+        [5, "gpt-4o-mini-search-preview", "N", "Y", "N"],
+        [6, "gpt-4o-search-preview", "N", "Y", "N"],
+        [7, "chatgpt-4o-latest", "N", "N", "N"],
+        [8, "codex-mini-latest", "N", "N", "Y"],
+        [9, "dall-e-2", "N", "N", "Y"],
+        [10, "dall-e-3", "N", "N", "Y"],
+        [11, "gpt-3.5-turbo-instruct", "N", "N", "N"],
+        [12, "gpt-4", "N", "N", "N"],
+        [13, "gpt-4.1", "N", "N", "N"],
+        [14, "gpt-4.1-mini", "N", "N", "N"],
+        [15, "gpt-4.1-mini-2025-04-14", "N", "N", "N"],
+        [16, "gpt-4.1-nano", "N", "N", "N"],
+        [17, "gpt-4.1-nano-2025-04-14", "N", "N", "N"],
+        [18, "gpt-4.5-preview", "N", "N", "Y"],
+        [19, "gpt-4.5-preview-2025-02-27", "N", "N", "Y"],
+        [20, "gpt-4o-audio-preview", "N", "N", "Y"],
+        [21, "gpt-4o-mini-audio-preview", "N", "N", "Y"],
+        [22, "gpt-4o-mini-search-preview", "N", "N", "N"],
+        [23, "gpt-4o-mini-search-preview-2025-03-11", "N", "N", "N"],
+        [24, "gpt-4o-mini-transcribe", "N", "N", "Y"],
+        [25, "gpt-4o-mini-tts", "N", "N", "Y"],
+        [26, "gpt-4o-realtime-preview", "N", "N", "Y"],
+        [27, "gpt-4o-search-preview", "N", "N", "N"],
+        [28, "gpt-4o-search-preview-2025-03-11", "N", "N", "N"],
+        [29, "gpt-4o-transcribe", "N", "N", "Y"],
+        [30, "gpt-image-1", "N", "N", "Y"],
+        [31, "o1", "N", "N", "N"],
+        [32, "o1-mini", "N", "N", "N"],
+        [33, "o1-preview", "N", "N", "N"],
+        [34, "o1-pro", "N", "N", "N"],
+        [35, "o3-mini", "N", "N", "N"],
+        [36, "o3-mini-2025-01-31", "N", "N", "N"],
+        [37, "o4-mini", "N", "N", "N"],
+        [38, "omni-moderation-latest", "N", "N", "Y"],
+        [39, "text-embedding-3-large", "N", "N", "Y"],
+        [40, "text-embedding-3-small", "N", "N", "Y"],
+        [41, "tts-1", "N", "N", "Y"],
+        [42, "tts-1-1106", "N", "N", "Y"],
+        [43, "tts-1-hd", "N", "N", "Y"],
+        [44, "whisper-1", "N", "N", "Y"],
+        [45, "gpt-4-0613", "N", "N", "N"],
+        [46, "gpt-3.5-turbo", "N", "N", "N"],
+        [47, "o4-mini-deep-research-2025-06-26", "N", "Y", "N"],
+        [48, "o4-mini-deep-research", "N", "Y", "N"],
+        [49, "davinci-002", "N", "N", "N"],
+        [50, "babbage-002", "N", "N", "N"],
+        [51, "gpt-3.5-turbo-instruct-0914", "N", "N", "N"],
+        [52, "gpt-4-1106-preview", "N", "Y", "N"],
+        [53, "gpt-3.5-turbo-1106", "N", "N", "N"],
+        [54, "gpt-4-0125-preview", "N", "Y", "N"],
+        [55, "gpt-4-turbo-preview", "N", "Y", "N"],
+        [56, "gpt-3.5-turbo-0125", "N", "N", "N"],
+        [57, "gpt-4-turbo", "N", "N", "N"],
+        [58, "gpt-4-turbo-2024-04-09", "N", "N", "N"],
+        [59, "gpt-4o-2024-05-13", "N", "N", "N"],
+        [60, "gpt-4o-mini-2024-07-18", "N", "N", "N"],
+        [61, "gpt-4o-2024-08-06", "N", "N", "N"],
+        [62, "o1-preview-2024-09-12", "N", "Y", "N"],
+        [63, "o1-mini-2024-09-12", "N", "N", "N"],
+        [64, "o1-2024-12-17", "N", "N", "N"],
+        [65, "gpt-4o-2024-11-20", "N", "N", "N"],
+        [66, "o1-pro-2025-03-19", "N", "N", "N"],
+        [67, "o4-mini-2025-04-16", "N", "N", "N"],
+        [68, "gpt-4.1-2025-04-14", "N", "N", "N"],
+        [69, "gpt-3.5-turbo-16k", "N", "N", "N"],
+        [70, "claude-3-5-sonnet-20241022", "N", "N", "N"],
+        [71, "claude-3-5-sonnet-20240620", "N", "N", "N"],
+        [72, "claude-3-5-haiku", "N", "N", "N"],
+        [73, "claude-3-sonnet", "N", "N", "N"],
+        [74, "claude-3-haiku", "N", "N", "N"],
+        [75, "claude-3-opus", "N", "N", "N"],
+        [76, "claude-3-5-sonnet", "N", "N", "N"],
+        [77, "gemini-2.5-pro", "N", "N", "N"],
+        [78, "gemini-2.5-flash", "N", "N", "N"],
+        [79, "gemini-2.5-flash-lite", "N", "N", "N"],
+        [80, "gemini-2.0-flash", "N", "N", "N"],
+        [81, "gemini-2.0-flash-lite", "N", "N", "N"],
+        [82, "claude-opus-4-20250514", "N", "Y", "N"],
+        [83, "claude-sonnet-4-20250514", "N", "Y", "N"],
+        [84, "claude-3-7-sonnet-20250219", "N", "Y", "N"],
+        [85, "claude-3-5-sonnet-20241022", "N", "Y", "N"],
+        [86, "claude-3-5-haiku", "N", "Y", "N"],
+        [87, "claude-3-5-sonnet-20240620", "N", "N", "N"],
+        [88, "claude-3-5-sonnet", "N", "N", "N"],
+        [89, "claude-3-sonnet", "N", "N", "N"],
+        [90, "claude-3-haiku", "N", "N", "N"],
+        [91, "claude-opus-4-20250514", "N", "N", "N"],
+        [92, "claude-sonnet-4-20250514", "N", "N", "N"],
+        [93, "claude-3-7-sonnet-20250219", "N", "N", "N"]
+    ], columns=["Model ID", "Model Name", "Model Default", "Web Search", "Deprecated"])
 
     workflow_steps = pd.DataFrame(columns=[
         "Workflow Steps ID", "Triggered Date", "Workflow ID", "Request ID", "Workflow Steps All", "Workflow Step", "Input", "Output", "Log Messages"
@@ -585,6 +645,328 @@ Topic to generate Title and Description based:'''],
         "Eleven": eleven
     }
 
+
+def fetch_openai_models():
+    """Fetch the latest models from OpenAI API."""
+    try:
+        client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+        models_response = client.models.list()
+        
+        # Filter for text-based chat models (excluding vision, audio, embedding models)
+        text_models = []
+        for model in models_response.data:
+            model_id = model.id
+            
+            # Skip models that are not text-based chat models
+            if any(skip in model_id.lower() for skip in [
+                'vision', 'audio', 'embedding', 'tts', 'whisper', 'dall-e', 
+                'gpt-image', 'text-embedding', 'omni-moderation', 'codex'
+            ]):
+                continue
+                
+            # Skip models with specific patterns that are not chat models
+            if any(pattern in model_id.lower() for pattern in [
+                'transcribe', 'tts', 'audio-preview', 'realtime-preview'
+            ]):
+                continue
+            
+
+            
+            # Determine if model supports web search (based on known patterns)
+            web_search = "search" in model_id.lower() or "preview" in model_id.lower()
+            
+            text_models.append({
+                'id': model_id,
+                'provider': 'openai',
+                'web_search': web_search
+            })
+        
+        return text_models
+    except Exception as e:
+        print(f"❌ Error fetching OpenAI models: {e}")
+        return []
+
+
+def fetch_anthropic_models():
+    """Fetch the latest models from Anthropic API."""
+    try:
+        import anthropic
+        
+        client = anthropic.Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
+        
+        # Anthropic models are typically hardcoded since they don't have a models.list() endpoint
+        # Complete list of current Claude models available via API (as of January 2025)
+        anthropic_models = [
+            # Claude 4 Series (Latest - May 2025)
+            'claude-opus-4-20250514',
+            'claude-sonnet-4-20250514',
+            
+            # Claude 3.7 Series (February 2025)
+            'claude-3-7-sonnet-20250219',
+            
+            # Claude 3.5 Series
+            'claude-3-5-sonnet-20241022',
+            'claude-3-5-sonnet-20240620',
+            'claude-3-5-sonnet',
+            'claude-3-5-haiku',
+            
+            # Claude 3 Series (Core models)
+            'claude-3-opus-20240229',
+            'claude-3-sonnet-20240229',
+            'claude-3-haiku-20240307',
+            
+            # Legacy models (still available)
+            'claude-instant-1.2',
+            'claude-2.1',
+            'claude-2.0'
+        ]
+        
+        text_models = []
+        for model_id in anthropic_models:
+            # Check if model supports web search API (available for specific Claude models as of May 2025)
+            web_search_supported = model_id in [
+                'claude-3-7-sonnet-20250219',
+                'claude-3-5-sonnet-20241022', 
+                'claude-3-5-haiku',
+                'claude-opus-4-20250514',
+                'claude-sonnet-4-20250514'
+            ]
+            
+            text_models.append({
+                'id': model_id,
+                'provider': 'anthropic',
+                'web_search': web_search_supported
+            })
+        
+        return text_models
+    except Exception as e:
+        print(f"❌ Error fetching Anthropic models: {e}")
+        return []
+
+
+def fetch_google_models():
+    """Fetch the latest models from Google Gemini API."""
+    try:
+        import google.generativeai as genai
+        
+        genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
+        
+        # Google Gemini models are typically hardcoded since they don't have a models.list() endpoint
+        # We'll use the known text-based models
+        google_models = [
+            'gemini-2.5-pro',
+            'gemini-2.5-flash',
+            'gemini-2.5-flash-lite',
+            'gemini-2.0-flash',
+            'gemini-2.0-flash-lite'
+        ]
+        
+        text_models = []
+        for model_id in google_models:
+            # Google models don't support web search in the same way as OpenAI
+            text_models.append({
+                'id': model_id,
+                'provider': 'google',
+                'web_search': False
+            })
+        
+        return text_models
+    except Exception as e:
+        print(f"❌ Error fetching Google models: {e}")
+        return []
+
+
+def fetch_all_models():
+    """Fetch models from all supported providers."""
+    all_models = []
+    
+    # Fetch OpenAI models
+    openai_models = fetch_openai_models()
+    all_models.extend(openai_models)
+    
+    # Fetch Anthropic models
+    anthropic_models = fetch_anthropic_models()
+    all_models.extend(anthropic_models)
+    
+    # Fetch Google models
+    google_models = fetch_google_models()
+    all_models.extend(google_models)
+    
+    return all_models
+
+
+def update_models_tab(spreadsheet, models_df):
+    """Update the Models tab while preserving the exact current structure and only updating Deprecated column."""
+    try:
+        # Define the exact current model list as provided by the user
+        current_models = [
+            [1, "gpt-4o", "N", "Y", "N"],
+            [2, "gpt-4o-mini", "N", "Y", "N"],
+            [3, "gpt-4o", "N", "N", "N"],
+            [4, "gpt-4o-mini", "Y", "N", "N"],
+            [5, "gpt-4o-mini-search-preview", "N", "Y", "N"],
+            [6, "gpt-4o-search-preview", "N", "Y", "N"],
+            [7, "chatgpt-4o-latest", "N", "N", "N"],
+            [8, "codex-mini-latest", "N", "N", "Y"],
+            [9, "dall-e-2", "N", "N", "Y"],
+            [10, "dall-e-3", "N", "N", "Y"],
+            [11, "gpt-3.5-turbo-instruct", "N", "N", "N"],
+            [12, "gpt-4", "N", "N", "N"],
+            [13, "gpt-4.1", "N", "N", "N"],
+            [14, "gpt-4.1-mini", "N", "N", "N"],
+            [15, "gpt-4.1-mini-2025-04-14", "N", "N", "N"],
+            [16, "gpt-4.1-nano", "N", "N", "N"],
+            [17, "gpt-4.1-nano-2025-04-14", "N", "N", "N"],
+            [18, "gpt-4.5-preview", "N", "N", "Y"],
+            [19, "gpt-4.5-preview-2025-02-27", "N", "N", "Y"],
+            [20, "gpt-4o-audio-preview", "N", "N", "Y"],
+            [21, "gpt-4o-mini-audio-preview", "N", "N", "Y"],
+            [22, "gpt-4o-mini-search-preview", "N", "N", "N"],
+            [23, "gpt-4o-mini-search-preview-2025-03-11", "N", "N", "N"],
+            [24, "gpt-4o-mini-transcribe", "N", "N", "Y"],
+            [25, "gpt-4o-mini-tts", "N", "N", "Y"],
+            [26, "gpt-4o-realtime-preview", "N", "N", "Y"],
+            [27, "gpt-4o-search-preview", "N", "N", "N"],
+            [28, "gpt-4o-search-preview-2025-03-11", "N", "N", "N"],
+            [29, "gpt-4o-transcribe", "N", "N", "Y"],
+            [30, "gpt-image-1", "N", "N", "Y"],
+            [31, "o1", "N", "N", "N"],
+            [32, "o1-mini", "N", "N", "N"],
+            [33, "o1-preview", "N", "N", "N"],
+            [34, "o1-pro", "N", "N", "N"],
+            [35, "o3-mini", "N", "N", "N"],
+            [36, "o3-mini-2025-01-31", "N", "N", "N"],
+            [37, "o4-mini", "N", "N", "N"],
+            [38, "omni-moderation-latest", "N", "N", "Y"],
+            [39, "text-embedding-3-large", "N", "N", "Y"],
+            [40, "text-embedding-3-small", "N", "N", "Y"],
+            [41, "tts-1", "N", "N", "Y"],
+            [42, "tts-1-1106", "N", "N", "Y"],
+            [43, "tts-1-hd", "N", "N", "Y"],
+            [44, "whisper-1", "N", "N", "Y"],
+            [45, "gpt-4-0613", "N", "N", "N"],
+            [46, "gpt-3.5-turbo", "N", "N", "N"],
+            [47, "o4-mini-deep-research-2025-06-26", "N", "Y", "N"],
+            [48, "o4-mini-deep-research", "N", "Y", "N"],
+            [49, "davinci-002", "N", "N", "N"],
+            [50, "babbage-002", "N", "N", "N"],
+            [51, "gpt-3.5-turbo-instruct-0914", "N", "N", "N"],
+            [52, "gpt-4-1106-preview", "N", "Y", "N"],
+            [53, "gpt-3.5-turbo-1106", "N", "N", "N"],
+            [54, "gpt-4-0125-preview", "N", "Y", "N"],
+            [55, "gpt-4-turbo-preview", "N", "Y", "N"],
+            [56, "gpt-3.5-turbo-0125", "N", "N", "N"],
+            [57, "gpt-4-turbo", "N", "N", "N"],
+            [58, "gpt-4-turbo-2024-04-09", "N", "N", "N"],
+            [59, "gpt-4o-2024-05-13", "N", "N", "N"],
+            [60, "gpt-4o-mini-2024-07-18", "N", "N", "N"],
+            [61, "gpt-4o-2024-08-06", "N", "N", "N"],
+            [62, "o1-preview-2024-09-12", "N", "Y", "N"],
+            [63, "o1-mini-2024-09-12", "N", "N", "N"],
+            [64, "o1-2024-12-17", "N", "N", "N"],
+            [65, "gpt-4o-2024-11-20", "N", "N", "N"],
+            [66, "o1-pro-2025-03-19", "N", "N", "N"],
+            [67, "o4-mini-2025-04-16", "N", "N", "N"],
+            [68, "gpt-4.1-2025-04-14", "N", "N", "N"],
+            [69, "gpt-3.5-turbo-16k", "N", "N", "N"],
+            [70, "claude-3-5-sonnet-20241022", "N", "N", "N"],
+            [71, "claude-3-5-sonnet-20240620", "N", "N", "N"],
+            [72, "claude-3-5-haiku", "N", "N", "N"],
+            [73, "claude-3-sonnet", "N", "N", "N"],
+            [74, "claude-3-haiku", "N", "N", "N"],
+            [75, "claude-3-opus", "N", "N", "N"],
+            [76, "claude-3-5-sonnet", "N", "N", "N"],
+            [77, "gemini-2.5-pro", "N", "N", "N"],
+            [78, "gemini-2.5-flash", "N", "N", "N"],
+            [79, "gemini-2.5-flash-lite", "N", "N", "N"],
+            [80, "gemini-2.0-flash", "N", "N", "N"],
+            [81, "gemini-2.0-flash-lite", "N", "N", "N"],
+            [82, "claude-opus-4-20250514", "N", "Y", "N"],
+            [83, "claude-sonnet-4-20250514", "N", "Y", "N"],
+            [84, "claude-3-7-sonnet-20250219", "N", "Y", "N"],
+            [85, "claude-3-5-sonnet-20241022", "N", "Y", "N"],
+            [86, "claude-3-5-haiku", "N", "Y", "N"],
+            [87, "claude-3-5-sonnet-20240620", "N", "N", "N"],
+            [88, "claude-3-5-sonnet", "N", "N", "N"],
+            [89, "claude-3-sonnet", "N", "N", "N"],
+            [90, "claude-3-haiku", "N", "N", "N"],
+            [91, "claude-opus-4-20250514", "N", "N", "N"],
+            [92, "claude-sonnet-4-20250514", "N", "N", "N"],
+            [93, "claude-3-7-sonnet-20250219", "N", "N", "N"]
+        ]
+        
+        # Fetch latest functional models from all providers
+        latest_models = fetch_all_models()
+        latest_model_names = {model['id'] for model in latest_models}
+        
+        # Start with the current models and only update Deprecated column if needed
+        updated_models = []
+        deprecated_updated = 0
+        
+        for model_data in current_models:
+            model_id, model_name, model_default, web_search, current_deprecated = model_data
+            
+            # Check if this model is deprecated (not in latest functional models)
+            is_deprecated = model_name not in latest_model_names
+            
+            # Only update Deprecated column if it changed
+            new_deprecated = 'Y' if is_deprecated else 'N'
+            if new_deprecated != current_deprecated:
+                deprecated_updated += 1
+            
+            # Add the model with potentially updated Deprecated column
+            updated_models.append([
+                model_id,
+                model_name,
+                model_default,
+                web_search,
+                new_deprecated
+            ])
+        
+        # Add new models that don't exist in the current list
+        next_model_id = 94  # Start after the current 81 models
+        new_models_added = 0
+        
+        for model_info in latest_models:
+            model_name = model_info['id']
+            
+            # Check if this model already exists in our list
+            existing_model_names = {row[1] for row in updated_models}  # Model names are in column 1
+            if model_name not in existing_model_names:
+                # Add new model with default settings
+                updated_models.append([
+                    next_model_id,
+                    model_name,
+                    'N',  # Default to 'N' for new models
+                    'Y' if model_info['web_search'] else 'N',
+                    'N'  # Not deprecated
+                ])
+                next_model_id += 1
+                new_models_added += 1
+        
+        # Update the Models worksheet
+        if updated_models:
+            # Prepare header with Deprecated column
+            headers = ['Model ID', 'Model Name', 'Model Default', 'Web Search', 'Deprecated']
+            
+            # Clear existing data and add new data
+            models_ws = spreadsheet.worksheet('Models')
+            models_ws.clear()
+            models_ws.update('A1:E1', [headers])
+            models_ws.update(f'A2:E{len(updated_models)+1}', updated_models)
+            
+            log_msg = f"Updated Models tab with {len(updated_models)} models ({new_models_added} new models added, {deprecated_updated} deprecated status updated)."
+            print(f"    > {log_msg}")
+            return log_msg
+        else:
+            log_msg = "No models to update."
+            print(f"    > {log_msg}")
+            return log_msg
+            
+    except Exception as e:
+        log_msg = f"Failed to update Models tab: {e}"
+        print(f"    > {log_msg}")
+        return log_msg
 
 def generate_excel_template(file_path):
     template_dfs = get_template_dataframes()
@@ -698,20 +1080,63 @@ def force_clean_mojibake(text):
 def call_openai_model(prompt, model="gpt-4o", temperature=0.7, web_search=False):
     """Calls the OpenAI API, using the correct endpoint for web search and model type. Logs all errors and unexpected responses."""
     import sys
+    import time
+    import signal
+    from threading import Timer
+    
     if not client.api_key:
         msg = "❌ OpenAI API key is not configured. Please check your .env file."
         log_error(msg)
         sys.exit(1)
+    
+    # Timeout handling for deep research models
+    timeout_seconds = 900  # 15 minutes
+    timeout_occurred = False
+    
+    def timeout_handler():
+        nonlocal timeout_occurred
+        timeout_occurred = True
+        print(f"⏰ Timeout reached ({timeout_seconds} seconds) for model {model}. Cancelling API call.")
+    
+    # Set up timeout timer for deep research models
+    if "deep-research" in model:
+        timer = Timer(timeout_seconds, timeout_handler)
+        timer.start()
+        print(f"⏱️ Starting deep research with {timeout_seconds}-second timeout for model {model}")
+        
+        # Modify prompt for deep research to limit scope
+        if web_search:
+            limited_prompt = f"""Please provide a focused and concise response to the following request. Limit your research to the most recent and relevant information only. Focus on the top 3-5 most important points rather than exhaustive coverage.
+
+Request: {prompt}
+
+Please ensure your response is comprehensive but efficient, avoiding overly detailed research that could extend beyond reasonable time limits."""
+        else:
+            limited_prompt = prompt
+    else:
+        timer = None
+        limited_prompt = prompt
     try:
         # Case 1: Chat Completions with always-on search-preview model
         if web_search and (model.endswith("-search-preview")):
+            # Determine search context size based on model type
+            search_context_size = "medium" if "deep-research" in model else "high"
+            
+            # Build web_search_options based on model type
+            web_search_options = {"search_context_size": search_context_size}
+            if "deep-research" not in model:
+                web_search_options["user_location"] = {"type": "approximate", "approximate": {"country": "US"}}
+            
+            # Check for timeout before making API call
+            if timeout_occurred:
+                if timer:
+                    timer.cancel()
+                return "⏰ Research timeout reached. Please try with a more specific request or use a different model."
+            
             response = client.chat.completions.create(
                 model=model,
-                messages=[{"role": "user", "content": prompt}],
-                web_search_options={
-                    "user_location": {"type": "approximate", "approximate": {"country": "US"}},
-                    "search_context_size": "high"
-                },
+                messages=[{"role": "user", "content": limited_prompt}],
+                web_search_options=web_search_options,
                 temperature=temperature
             )
             # Robust error logging for chat completions
@@ -720,6 +1145,9 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.7, web_search=False)
                 sys.exit(1)
             if hasattr(response, 'choices') and response.choices:
                 raw_response = response.choices[0].message.content.strip()
+                # Clean up timer if it exists
+                if timer:
+                    timer.cancel()
                 return fix_text_encoding(raw_response)
             log_error(f"OpenAI ChatCompletions: Unexpected empty or malformed response. Full response: {response}")
             sys.exit(1)
@@ -729,13 +1157,25 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.7, web_search=False)
                 msg = "❌ Web search requested but your OpenAI Python package does not support responses.create. Please upgrade openai to the latest version."
                 log_error(msg)
                 sys.exit(1)
+            # Determine search context size based on model type
+            search_context_size = "medium" if "deep-research" in model else "high"
+            
+            # Build tools configuration based on model type
+            tools_config = {"type": "web_search_preview", "search_context_size": search_context_size}
+            if "deep-research" not in model:
+                tools_config["user_location"] = {"type": "approximate", "country": "US"}
+            
+            # Check for timeout before making API call
+            if timeout_occurred:
+                if timer:
+                    timer.cancel()
+                return "⏰ Research timeout reached. Please try with a more specific request or use a different model."
+            
             response = client.responses.create(
                 model=model,
-                tools=[{"type": "web_search_preview",
-                        "search_context_size": "high",
-                        "user_location": {"type": "approximate", "country": "US"}}],
+                tools=[tools_config],
                 input=[{"role": "user",
-                        "content": [{"type": "input_text", "text": prompt}]}],
+                        "content": [{"type": "input_text", "text": limited_prompt}]}],
                 text={"format": {"type": "text"}}
             )
             # Robust error logging for responses.create
@@ -754,6 +1194,9 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.7, web_search=False)
                                 ctype = getattr(content, 'type', None) or (content.get('type') if isinstance(content, dict) else None)
                                 text = getattr(content, 'text', None) or (content.get('text') if isinstance(content, dict) else None)
                                 if ctype == "output_text" and text:
+                                    # Clean up timer if it exists
+                                    if timer:
+                                        timer.cancel()
                                     return fix_text_encoding(text.strip())
                 log_error(f"OpenAI Responses: Unexpected empty or malformed response. Full response: {response}")
                 sys.exit(1)
@@ -766,10 +1209,17 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.7, web_search=False)
             models_without_temp = {"o4-mini", "o4-mini-2025-01-31"}
             kwargs = {
                 "model": model,
-                "messages": [{"role": "user", "content": prompt}]
+                "messages": [{"role": "user", "content": limited_prompt}]
             }
             if model not in models_without_temp and temperature is not None:
                 kwargs["temperature"] = temperature
+            
+            # Check for timeout before making API call
+            if timeout_occurred:
+                if timer:
+                    timer.cancel()
+                return "⏰ Research timeout reached. Please try with a more specific request or use a different model."
+            
             try:
                 response = client.chat.completions.create(**kwargs)
             except Exception as e:
@@ -778,29 +1228,170 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.7, web_search=False)
                 if model in models_without_temp:
                     log_error(f"OpenAI error for model {model}: {e}")
                     sys.exit(1)
-                # For other models, try retrying without temperature if error is about temperature
-                if ("'temperature' does not support" in error_msg or "unsupported_value" in error_msg) and "temperature" in kwargs:
-                    log_error(f"Retrying OpenAI call for model {model} without temperature due to error: {error_msg}")
-                    del kwargs["temperature"]
-                    try:
-                        response = client.chat.completions.create(**kwargs)
-                    except Exception as e2:
-                        log_error(f"OpenAI error after retrying without temperature: {e2}")
-                        sys.exit(1)
+                                    # For other models, try retrying without temperature if error is about temperature
+                    if ("'temperature' does not support" in error_msg or "unsupported_value" in error_msg) and "temperature" in kwargs:
+                        log_error(f"Retrying OpenAI call for model {model} without temperature due to error: {error_msg}")
+                        del kwargs["temperature"]
+                        
+                        # Check for timeout before retry
+                        if timeout_occurred:
+                            if timer:
+                                timer.cancel()
+                            return "⏰ Research timeout reached. Please try with a more specific request or use a different model."
+                        
+                        try:
+                            response = client.chat.completions.create(**kwargs)
+                        except Exception as e2:
+                            log_error(f"OpenAI error after retrying without temperature: {e2}")
+                            sys.exit(1)
                 else:
-                    log_error(f"OpenAI error: {e}")
-                    sys.exit(1)
+                    # Handle rate limit errors with retry logic
+                    if "rate_limit" in str(e).lower() or "429" in str(e):
+                        print(f"⚠️ Rate limit hit for model {model}. Waiting 5 seconds before retry...")
+                        time.sleep(5)
+                        
+                        # Check for timeout before retry
+                        if timeout_occurred:
+                            if timer:
+                                timer.cancel()
+                            return "⏰ Research timeout reached. Please try with a more specific request or use a different model."
+                        
+                        try:
+                            response = client.chat.completions.create(**kwargs)
+                        except Exception as e2:
+                            log_error(f"OpenAI error after rate limit retry: {e2}")
+                            sys.exit(1)
+                    else:
+                        log_error(f"OpenAI error: {e}")
+                        sys.exit(1)
             # Robust error logging for chat completions
             if hasattr(response, 'error') and response.error:
                 log_error(f"OpenAI ChatCompletions error: {response.error}\nFull response: {response}")
                 sys.exit(1)
             if hasattr(response, 'choices') and response.choices:
-                return response.choices[0].message.content.strip()
+                # Clean up timer if it exists
+                if timer:
+                    timer.cancel()
+                return fix_text_encoding(response.choices[0].message.content.strip())
             log_error(f"OpenAI ChatCompletions: Unexpected empty or malformed response. Full response: {response}")
             sys.exit(1)
     except Exception as e:
+        # Clean up timer if it exists
+        if timer:
+            timer.cancel()
         log_error(f"OpenAI error: {e}")
         sys.exit(1)
+    finally:
+        # Ensure timer is always cleaned up
+        if timer:
+            timer.cancel()
+
+def call_model(prompt, model="gpt-4o", temperature=0.7, web_search=False):
+    """Calls the appropriate model API based on the model name."""
+    # Determine provider from model name
+    if model.startswith('claude-'):
+        return call_anthropic_model(prompt, model, temperature, web_search)
+    elif model.startswith('gemini-'):
+        return call_google_model(prompt, model, temperature)
+    else:
+        # Default to OpenAI for all other models
+        return call_openai_model(prompt, model, temperature, web_search)
+
+
+def call_anthropic_model(prompt, model="claude-3-sonnet", temperature=0.7, web_search=False):
+    """Calls the Anthropic Claude API with optional web search support."""
+    try:
+        import anthropic
+        
+        client = anthropic.Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
+        if not os.getenv('ANTHROPIC_API_KEY'):
+            msg = "❌ Anthropic API key is not configured. Please check your .env file."
+            print(msg)
+            sys.exit(1)
+        
+        # Check if web search is requested and model supports it
+        web_search_models = [
+            'claude-3-7-sonnet-20250219',
+            'claude-3-5-sonnet-20241022', 
+            'claude-3-5-haiku',
+            'claude-opus-4-20250514',
+            'claude-sonnet-4-20250514'
+        ]
+        
+        # Build the API call parameters
+        api_params = {
+            "model": model,
+            "max_tokens": 4000,
+            "messages": [{"role": "user", "content": prompt}]
+        }
+        
+        # Add web search tool if supported and requested
+        if web_search and model in web_search_models:
+            api_params["tools"] = [
+                {
+                    "type": "web_search_20250305",
+                    "name": "web_search"
+                }
+            ]
+            print(f"🔍 Web search enabled for model: {model}")
+        
+        response = client.messages.create(**api_params)
+        
+        if hasattr(response, 'content') and response.content:
+            # Extract all text content blocks and concatenate them
+            text_blocks = []
+            for content in response.content:
+                if hasattr(content, 'type') and content.type == 'text':
+                    text_content = content.text.strip()
+                    text_blocks.append(text_content)
+            
+            if text_blocks:
+                # Join all text blocks into a single response
+                full_response = '\n\n'.join(text_blocks)
+                return fix_text_encoding(full_response)
+        
+        print(f"Anthropic: Unexpected empty or malformed response. Full response: {response}")
+        sys.exit(1)
+        
+    except Exception as e:
+        print(f"Anthropic error: {e}")
+        sys.exit(1)
+
+
+def call_google_model(prompt, model="gemini-2.0-flash", temperature=0.7):
+    """Calls the Google Gemini API."""
+    try:
+        import google.generativeai as genai
+        
+        genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
+        if not os.getenv('GEMINI_API_KEY'):
+            msg = "❌ Google Gemini API key is not configured. Please check your .env file."
+            print(msg)
+            sys.exit(1)
+        
+        # Configure the model
+        generation_config = genai.types.GenerationConfig(
+            temperature=temperature,
+            max_output_tokens=4000,
+        )
+        
+        # Create the model instance
+        model_instance = genai.GenerativeModel(model, generation_config=generation_config)
+        
+        # Generate content
+        response = model_instance.generate_content(prompt)
+        
+        if hasattr(response, 'text'):
+            raw_response = response.text.strip()
+            return fix_text_encoding(raw_response)
+        
+        print(f"Google Gemini: Unexpected empty or malformed response. Full response: {response}")
+        sys.exit(1)
+        
+    except Exception as e:
+        print(f"Google Gemini error: {e}")
+        sys.exit(1)
+
 
 def split_text_into_chunks(text, max_length=2500):
     """
@@ -1469,12 +2060,21 @@ if __name__ == '__main__':
                         resp_text = all_outputs[resp_idx]
                         input_text += resp_text or ''
                         print(f"  [R{match.group(1)}] First 100 chars: {str(resp_text)[:100]}{'...' if resp_text and len(resp_text) > 100 else ''}")
-            elif part == 'C':
-                custom_text = custom_topic or ''
-                if i > 0:
-                    input_text += '\n\n'
-                input_text += custom_text
-                print(f"  [C] First 100 chars: {str(custom_text)[:100]}{'...' if custom_text and len(custom_text) > 100 else ''}")
+            elif part.startswith('C'):
+                # Handle C1 syntax specifically for custom topic
+                if part == 'C1':
+                    custom_text = custom_topic or ''
+                    if i > 0:
+                        input_text += '\n\n'
+                    input_text += custom_text
+                    print(f"  [C1] First 100 chars: {str(custom_text)[:100]}{'...' if custom_text and len(custom_text) > 100 else ''}")
+                elif part == 'C':
+                    # Legacy C syntax (fallback)
+                    custom_text = custom_topic or ''
+                    if i > 0:
+                        input_text += '\n\n'
+                    input_text += custom_text
+                    print(f"  [C] First 100 chars: {str(custom_text)[:100]}{'...' if custom_text and len(custom_text) > 100 else ''}")
         # Only print the first 100 characters of the final input
         print(f"    Input (first 100): {input_text[:100]}{'...' if len(input_text) > 100 else ''}")
         return input_text, model_override, model_id_override
@@ -1496,19 +2096,19 @@ if __name__ == '__main__':
             result = chr(65 + remainder) + result
         return result
 
-    # Main workflow loop
-    for req_idx, req_row in requests_df.iterrows():
-        if str(req_row.get('Active', '')).strip().upper() != 'Y':
+    # Main workflow loop - now reads from Workflows tab instead of Requests tab
+    for workflow_idx, workflow_row in workflow_df.iterrows():
+        if str(workflow_row.get('Active', '')).strip().upper() != 'Y':
             continue
-        request_id = req_row['Request ID']
-        workflow_id = req_row['Workflow ID']
-        custom_topic = req_row.get('Custom Topic If Required', '')
-        print(f"\n🔔 Processing Request ID {request_id} for Workflow ID {workflow_id}")
-        workflow_row = workflow_df[workflow_df['Workflow ID'] == workflow_id]
-        if workflow_row.empty:
-            print(f"  - ⚠ Workflow ID {workflow_id} not found.")
-            continue
-        workflow_row = workflow_row.iloc[0]
+        workflow_id = workflow_row['Workflow ID']
+        # Get custom topic from workflow row, or fall back to environment variable
+        custom_topic = workflow_row.get('Custom Topic If Required', '')
+        if not custom_topic:
+            # Check environment variable for custom topic (from GitHub Actions)
+            custom_topic = os.getenv('CUSTOM_TOPIC', '')
+        if custom_topic:
+            print(f"📝 Custom Topic: {custom_topic[:100]}{'...' if len(custom_topic) > 100 else ''}")
+        print(f"\n🔔 Processing Workflow ID {workflow_id}")
         workflow_code = workflow_row['Workflow Code']
         default_model = get_workflow_default_model(workflow_row)
         default_model_id = get_model_id_by_name(default_model)
@@ -1586,7 +2186,7 @@ if __name__ == '__main__':
                         get_next_workflow_steps_id() + i + 0.1,
                         output_record['Triggered Date'],
                         workflow_id,
-                        request_id,
+                        workflow_id,
                         workflow_code,
                         step,
                         '',
@@ -1596,7 +2196,32 @@ if __name__ == '__main__':
                     all_outputs.append(None)
                     continue
 
-                # 2. PPL# step SECOND
+                # 2. UM step (Update Models)
+                if step == 'UM':
+                    print(f"  - Step {i+1}: {step} (Update Models Step)")
+                    try:
+                        log_msg = update_models_tab(spreadsheet, models_df)
+                        um_output = f"Models tab updated successfully. {log_msg}"
+                    except Exception as e:
+                        log_msg = f"Failed to update Models tab: {e}"
+                        um_output = f"Error updating Models tab: {e}"
+                        print(f"    > {log_msg}")
+                    
+                    workflow_steps_records.append([
+                        get_next_workflow_steps_id() + i + 0.1,
+                        output_record['Triggered Date'],
+                        workflow_id,
+                        workflow_id,
+                        workflow_code,
+                        step,
+                        '',
+                        um_output,
+                        log_msg
+                    ])
+                    all_outputs.append(um_output)
+                    continue
+
+                # 3. PPL# step THIRD
                 ppl_match = re.fullmatch(r'PPL(\d+)', step)
                 if ppl_match:
                     num_episodes = int(ppl_match.group(1))
@@ -1636,7 +2261,7 @@ if __name__ == '__main__':
                         get_next_workflow_steps_id() + i + 0.1,
                         output_record['Triggered Date'],
                         workflow_id,
-                        request_id,
+                        workflow_id,
                         workflow_code,
                         step,
                         f"PPL{num_episodes}",
@@ -1674,7 +2299,7 @@ if __name__ == '__main__':
                             # For GCS: Use the folder prefix directly
                             folder_prefix = folder_url.rstrip('/')  # Clean up any trailing slash
                             timestamp = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
-                            filename = f'workflow_{request_id}_step_{i+1}_{timestamp}.txt'
+                            filename = f'workflow_{workflow_id}_step_{i+1}_{timestamp}.txt'
                             try:
                                 file_link = upload_text_to_gcs(response_to_save, f"{folder_prefix}/{filename}")
                                 log_msg = f"Saved response to Google Cloud Storage: {file_link}"
@@ -1692,7 +2317,7 @@ if __name__ == '__main__':
                         get_next_workflow_steps_id() + i + 0.1,  # fractional ID to keep order
                         output_record['Triggered Date'],
                         workflow_id,
-                        request_id,
+                        workflow_id,
                         workflow_code,
                         step,
                         response_to_save if response_to_save is not None else '',
@@ -1723,7 +2348,7 @@ if __name__ == '__main__':
                             get_next_workflow_steps_id() + i + 0.1,
                             output_record['Triggered Date'],
                             workflow_id,
-                            request_id,
+                            workflow_id,
                             workflow_code,
                             step,
                             '',
@@ -1741,7 +2366,7 @@ if __name__ == '__main__':
                             get_next_workflow_steps_id() + i + 0.1,
                             output_record['Triggered Date'],
                             workflow_id,
-                            request_id,
+                            workflow_id,
                             workflow_code,
                             step,
                             '',
@@ -1759,7 +2384,7 @@ if __name__ == '__main__':
                             get_next_workflow_steps_id() + i + 0.1,
                             output_record['Triggered Date'],
                             workflow_id,
-                            request_id,
+                            workflow_id,
                             workflow_code,
                             step,
                             '',
@@ -1778,7 +2403,7 @@ if __name__ == '__main__':
                             get_next_workflow_steps_id() + i + 0.1,
                             output_record['Triggered Date'],
                             workflow_id,
-                            request_id,
+                            workflow_id,
                             workflow_code,
                             step,
                             '',
@@ -1789,7 +2414,7 @@ if __name__ == '__main__':
                     
                     # Generate audio using Eleven Labs
                     print(f"    > Generating audio with voice: {eleven_config['Voice']}")
-                    temp_audio_path = MP3_OUTPUT_DIR / f"temp_audio_{request_id}_step_{i+1}.mp3"
+                    temp_audio_path = MP3_OUTPUT_DIR / f"temp_audio_{workflow_id}_step_{i+1}.mp3"
                     audio_path = generate_voice_audio(text_content, voice_id, temp_audio_path, eleven_config)
                     
                     if not audio_path:
@@ -1799,7 +2424,7 @@ if __name__ == '__main__':
                             get_next_workflow_steps_id() + i + 0.1,
                             output_record['Triggered Date'],
                             workflow_id,
-                            request_id,
+                            workflow_id,
                             workflow_code,
                             step,
                             text_content,
@@ -1819,7 +2444,7 @@ if __name__ == '__main__':
                             get_next_workflow_steps_id() + i + 0.1,
                             output_record['Triggered Date'],
                             workflow_id,
-                            request_id,
+                            workflow_id,
                             workflow_code,
                             step,
                             text_content,
@@ -1830,7 +2455,7 @@ if __name__ == '__main__':
                     
                     save_folder_prefix = save_location['Location']  # Use GCS folder prefix directly
                     timestamp = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
-                    audio_filename = f'workflow_{request_id}_step_{i+1}_{eleven_config["Voice"]}_{timestamp}.mp3'
+                    audio_filename = f'workflow_{workflow_id}_step_{i+1}_{eleven_config["Voice"]}_{timestamp}.mp3'
                     try:
                         print(f"[DEBUG] Using model: {eleven_config.get('Model', 'eleven_multilingual_v2') if eleven_config else 'eleven_multilingual_v2'}, voice_id: {voice_id}")
                         start_time = time.time()
@@ -1860,7 +2485,7 @@ if __name__ == '__main__':
                         get_next_workflow_steps_id() + i + 0.1,
                         output_record['Triggered Date'],
                         workflow_id,
-                        request_id,
+                        workflow_id,
                         workflow_code,
                         step,
                         text_content,
@@ -1889,7 +2514,7 @@ if __name__ == '__main__':
                             get_next_workflow_steps_id() + i + 0.1,
                             output_record['Triggered Date'],
                             workflow_id,
-                            request_id,
+                            workflow_id,
                             workflow_code,
                             step,
                             '',
@@ -1941,7 +2566,7 @@ if __name__ == '__main__':
                             get_next_workflow_steps_id() + i + 0.1,
                             output_record['Triggered Date'],
                             workflow_id,
-                            request_id,
+                            workflow_id,
                             workflow_code,
                             step,
                             '',
@@ -1957,7 +2582,7 @@ if __name__ == '__main__':
                             get_next_workflow_steps_id() + i + 0.1,
                             output_record['Triggered Date'],
                             workflow_id,
-                            request_id,
+                            workflow_id,
                             workflow_code,
                             step,
                             '',
@@ -1968,7 +2593,7 @@ if __name__ == '__main__':
                     
                     # Merge audio files
                     print(f"    > Merging {len(audio_paths)} audio files...")
-                    merged_audio_path = MP3_OUTPUT_DIR / f"merged_audio_{request_id}_step_{i+1}.mp3"
+                    merged_audio_path = MP3_OUTPUT_DIR / f"merged_audio_{workflow_id}_step_{i+1}.mp3"
                     merged_path = merge_multiple_audio_files(audio_paths, merged_audio_path)
                     
                     if not merged_path:
@@ -1978,7 +2603,7 @@ if __name__ == '__main__':
                             get_next_workflow_steps_id() + i + 0.1,
                             output_record['Triggered Date'],
                             workflow_id,
-                            request_id,
+                            workflow_id,
                             workflow_code,
                             step,
                             str(audio_paths),
@@ -1996,7 +2621,7 @@ if __name__ == '__main__':
                             get_next_workflow_steps_id() + i + 0.1,
                             output_record['Triggered Date'],
                             workflow_id,
-                            request_id,
+                            workflow_id,
                             workflow_code,
                             step,
                             str(audio_paths),
@@ -2007,7 +2632,7 @@ if __name__ == '__main__':
                     
                     save_folder_prefix = save_location['Location']  # Use GCS folder prefix directly
                     timestamp = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
-                    audio_filename = f'merged_workflow_{request_id}_step_{i+1}_{timestamp}.mp3'
+                    audio_filename = f'merged_workflow_{workflow_id}_step_{i+1}_{timestamp}.mp3'
                     
                     try:
                         start_time = time.time()
@@ -2034,7 +2659,7 @@ if __name__ == '__main__':
                         get_next_workflow_steps_id() + i + 0.1,
                         output_record['Triggered Date'],
                         workflow_id,
-                        request_id,
+                        workflow_id,
                         workflow_code,
                         step,
                         str(audio_paths),
@@ -2061,7 +2686,7 @@ if __name__ == '__main__':
                     log_error(msg)
                     response = "[Web search not supported by your OpenAI Python package version]"
                 else:
-                    response = call_openai_model(input_text, model_to_use, web_search=web_search_enabled)
+                    response = call_model(input_text, model_to_use, web_search=web_search_enabled)
                 
                 # Ensure response is properly encoded as UTF-8
                 if isinstance(response, bytes):
@@ -2083,7 +2708,7 @@ if __name__ == '__main__':
                         # For GCS: Use the folder prefix directly
                         folder_prefix = folder_url.rstrip('/')  # Clean up any trailing slash
                         timestamp = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
-                        filename = f'workflow_{request_id}_step_{i+1}_{timestamp}.txt'
+                        filename = f'workflow_{workflow_id}_step_{i+1}_{timestamp}.txt'
                         try:
                             file_link = upload_text_to_gcs(response, f"{folder_prefix}/{filename}")
                             log_msg = f"Saved response to Google Cloud Storage: {file_link}"
@@ -2094,7 +2719,7 @@ if __name__ == '__main__':
                             get_next_workflow_steps_id() + i + 0.1,  # fractional ID to keep order
                             output_record['Triggered Date'],
                             workflow_id,
-                            request_id,
+                            workflow_id,  # Use workflow_id instead of workflow_id
                             workflow_code,
                             step,
                             input_text,
@@ -2125,7 +2750,7 @@ if __name__ == '__main__':
             workflow_steps_ws.append_row(ws_row_native)
         # Mark request as processed (disabled per user request)
         # requests_ws.update_cell(req_idx + 2, requests_df.columns.get_loc('Active') + 1, 'N')
-        print(f"✅ Request {request_id} processed and logged.")
+        print(f"✅ Workflow {workflow_id} processed and logged.")
 
     # After the loop, check if all steps were executed
     if len(executed_steps) != len(steps):
