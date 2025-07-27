@@ -8,10 +8,10 @@ on:
         required: false
         type: string
       workflow_id:
-        description: 'Specific workflow ID to run (optional)'
+        description: 'Specific workflow ID to run (optional) - leave blank to use Active Y flag from Workflows tab'
         required: false
         type: string
-        default: '12'
+        default: ''
       force_run:
         description: 'Force run even if no changes detected'
         required: false
@@ -53,8 +53,10 @@ jobs:
           echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> $GITHUB_ENV
           echo "ELEVENLABS_API_KEY=${{ secrets.ELEVENLABS_API_KEY }}" >> $GITHUB_ENV
           echo "SHARE_SHEET_WITH_EMAIL=${{ secrets.SHARE_SHEET_WITH_EMAIL }}" >> $GITHUB_ENV
+          echo "ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}" >> $GITHUB_ENV
+          echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> $GITHUB_ENV
           echo "CUSTOM_TOPIC=${{ github.event.inputs.custom_topic || '' }}" >> $GITHUB_ENV
-          echo "WORKFLOW_ID=${{ github.event.inputs.workflow_id || '12' }}" >> $GITHUB_ENV
+          echo "WORKFLOW_ID=${{ github.event.inputs.workflow_id || '' }}" >> $GITHUB_ENV
 
       - name: Create .env file
         run: |
@@ -62,6 +64,8 @@ jobs:
           OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
           ELEVENLABS_API_KEY=${{ secrets.ELEVENLABS_API_KEY }}
           SHARE_SHEET_WITH_EMAIL=${{ secrets.SHARE_SHEET_WITH_EMAIL }}
+          ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
           EOF
 
       - name: Test Environment Variables
@@ -73,7 +77,7 @@ jobs:
         run: |
           echo "Starting AI Podcast Pipeline..."
           echo "Custom Topic: ${{ github.event.inputs.custom_topic || 'None' }}"
-          echo "Workflow ID: ${{ github.event.inputs.workflow_id || '12' }}"
+          echo "Workflow ID: ${{ github.event.inputs.workflow_id || 'Active Y from Workflows tab' }}"
           echo "Trigger: ${{ github.event.name }}"
           
           # Debug: Check if environment variables are set
@@ -96,11 +100,25 @@ jobs:
             echo "❌ SHARE_SHEET_WITH_EMAIL is not set"
           fi
           
+          if [ -n "$ANTHROPIC_API_KEY" ]; then
+            echo "✅ ANTHROPIC_API_KEY is set (length: ${#ANTHROPIC_API_KEY})"
+          else
+            echo "❌ ANTHROPIC_API_KEY is not set"
+          fi
+          
+          if [ -n "$GEMINI_API_KEY" ]; then
+            echo "✅ GEMINI_API_KEY is set (length: ${#GEMINI_API_KEY})"
+          else
+            echo "❌ GEMINI_API_KEY is not set"
+          fi
+          
           python ai_podcast_pipeline_for_cursor.py
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
           SHARE_SHEET_WITH_EMAIL: ${{ secrets.SHARE_SHEET_WITH_EMAIL }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
 
       - name: Upload generated audio files
         if: always()

@@ -2097,7 +2097,14 @@ if __name__ == '__main__':
         return result
 
     # Main workflow loop - now reads from Workflows tab instead of Requests tab
+    # Check if a specific workflow ID is requested via environment variable
+    requested_workflow_id = os.getenv('WORKFLOW_ID')
+    
     for workflow_idx, workflow_row in workflow_df.iterrows():
+        # If a specific workflow ID is requested, only process that one
+        if requested_workflow_id and str(workflow_row['Workflow ID']) != str(requested_workflow_id):
+            continue
+            
         if str(workflow_row.get('Active', '')).strip().upper() != 'Y':
             continue
         workflow_id = workflow_row['Workflow ID']
@@ -2109,6 +2116,8 @@ if __name__ == '__main__':
         if custom_topic:
             print(f"📝 Custom Topic: {custom_topic[:100]}{'...' if len(custom_topic) > 100 else ''}")
         print(f"\n🔔 Processing Workflow ID {workflow_id}")
+        if requested_workflow_id:
+            print(f"🎯 Requested Workflow ID: {requested_workflow_id}")
         workflow_code = workflow_row['Workflow Code']
         default_model = get_workflow_default_model(workflow_row)
         default_model_id = get_model_id_by_name(default_model)
