@@ -63,3 +63,6 @@ merged_audio_*.mp3
 # Temporary files
 *.tmp
 *.temp
+
+# Computer automation agent (private/local use only)
+computer_agent/

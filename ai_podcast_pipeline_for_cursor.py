@@ -627,7 +627,9 @@ Topic to generate Title and Description based:'''],
         [6, "Latest MP3 File in Folder", "mp3", "eleven-labs/", "eleven-labs/"],
         [7, "Scripts Folder Location", "Folder", "scripts/", "scripts/"],
         [8, "Latest Text File in Scripts Folder", "Text", "scripts/", "scripts/", "Y"],
-        [9, "Latest mp3 in Eleven lab Folder", "mp3", "eleven-labs/", "eleven-labs/", "Y"]
+        [9, "Latest mp3 in Eleven lab Folder", "mp3", "eleven-labs/", "eleven-labs/", "Y"],
+        [10, "Title and Description Folder Location", "Folder", "descriptions/", "descriptions/"],
+        [11, "Latest Title and Description Text file in Descriptions Folder", "Text", "descriptions/", "descriptions/", "Y"]
     ], columns=["Location ID", "Location Description", "Type", "File Or Folder", "Location", "Latest"])
 
     eleven = pd.DataFrame([
@@ -2087,6 +2089,39 @@ if __name__ == '__main__':
             return val
         return str(val)
 
+    def extract_title_from_text(text):
+        """Extract title from text between 'Title:' and 'Description:'"""
+        if not text:
+            return None
+        
+        # Find the title section
+        title_match = re.search(r'#?\s*Title:\s*(.+?)(?=\s*#?\s*Description:|$)', text, re.DOTALL | re.IGNORECASE)
+        if title_match:
+            title = title_match.group(1).strip()
+            # Remove markdown headers and clean up
+            title = re.sub(r'^#+\s*', '', title)
+            title = title.strip()
+            return title
+        return None
+
+    def clean_filename(title):
+        """Clean title text to be suitable for filename"""
+        if not title:
+            return None
+        
+        # Remove special characters, keep only alphanumeric, spaces, hyphens, underscores
+        cleaned = re.sub(r'[^\w\s\-]', '', title)
+        # Replace multiple spaces/newlines with single space
+        cleaned = re.sub(r'\s+', ' ', cleaned)
+        # Replace spaces with underscores
+        cleaned = cleaned.replace(' ', '_')
+        # Remove leading/trailing underscores
+        cleaned = cleaned.strip('_')
+        # Limit length
+        cleaned = cleaned[:100]
+        
+        return cleaned if cleaned else None
+
     # Helper to convert column number to Excel column letters
     def colnum_to_excel_col(n):
         """Convert a 1-based column index to Excel column letters."""
@@ -2289,12 +2324,13 @@ if __name__ == '__main__':
                     all_outputs.append(ppl_output)
                     continue
 
-                # Check for save-only step (e.g., R4SL7)
-                save_only_match = re.fullmatch(r'R(\d+)SL(\d+)', step)
+                # Check for save-only step (e.g., R4SL7 or R4SL7T2)
+                save_only_match = re.fullmatch(r'R(\d+)SL(\d+)(?:T(\d+))?', step)
                 if save_only_match:
                     print(f"  - Step {i+1}: {step} (Save-Only Step)")
                     resp_idx = int(save_only_match.group(1)) - 1
                     location_id = save_only_match.group(2)
+                    title_resp_idx = int(save_only_match.group(3)) - 1 if save_only_match.group(3) else None
                     response_to_save = None
                     log_msg = ''
                     if 0 <= resp_idx < len(all_outputs):
@@ -2308,7 +2344,19 @@ if __name__ == '__main__':
                             # For GCS: Use the folder prefix directly
                             folder_prefix = folder_url.rstrip('/')  # Clean up any trailing slash
                             timestamp = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
-                            filename = f'workflow_{workflow_id}_step_{i+1}_{timestamp}.txt'
+                            
+                            # Check if custom title is requested
+                            if title_resp_idx is not None and 0 <= title_resp_idx < len(all_outputs):
+                                title_text = all_outputs[title_resp_idx]
+                                extracted_title = extract_title_from_text(title_text)
+                                clean_title = clean_filename(extracted_title)
+                                if clean_title:
+                                    filename = f'{clean_title}.txt'
+                                else:
+                                    filename = f'workflow_{workflow_id}_step_{i+1}_{timestamp}.txt'
+                            else:
+                                filename = f'workflow_{workflow_id}_step_{i+1}_{timestamp}.txt'
+                            
                             try:
                                 file_link = upload_text_to_gcs(response_to_save, f"{folder_prefix}/{filename}")
                                 log_msg = f"Saved response to Google Cloud Storage: {file_link}"
@@ -2340,13 +2388,14 @@ if __name__ == '__main__':
                         all_outputs.append(None)
                     continue  # Skip model call for this step
                 
-                # Check for Eleven Labs step (e.g., L8E1SL4)
-                eleven_match = re.fullmatch(r'L(\d+)E(\d+)SL(\d+)', step)
+                # Check for Eleven Labs step (e.g., L8E1SL4 or L8E1SL4T2)
+                eleven_match = re.fullmatch(r'L(\d+)E(\d+)SL(\d+)(?:T(\d+))?', step)
                 if eleven_match:
                     print(f"  - Step {i+1}: {step} (Eleven Labs Step)")
                     location_id = eleven_match.group(1)
                     eleven_id = eleven_match.group(2)
                     save_location_id = eleven_match.group(3)
+                    title_resp_idx = int(eleven_match.group(4)) - 1 if eleven_match.group(4) else None
                     
                     # Get location details for source folder
                     source_location = get_location_by_id(location_id)
@@ -2464,7 +2513,18 @@ if __name__ == '__main__':
                     
                     save_folder_prefix = save_location['Location']  # Use GCS folder prefix directly
                     timestamp = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
-                    audio_filename = f'workflow_{workflow_id}_step_{i+1}_{eleven_config["Voice"]}_{timestamp}.mp3'
+                    
+                    # Check if custom title is requested
+                    if title_resp_idx is not None and 0 <= title_resp_idx < len(all_outputs):
+                        title_text = all_outputs[title_resp_idx]
+                        extracted_title = extract_title_from_text(title_text)
+                        clean_title = clean_filename(extracted_title)
+                        if clean_title:
+                            audio_filename = f'{clean_title}.mp3'
+                        else:
+                            audio_filename = f'workflow_{workflow_id}_step_{i+1}_{eleven_config["Voice"]}_{timestamp}.mp3'
+                    else:
+                        audio_filename = f'workflow_{workflow_id}_step_{i+1}_{eleven_config["Voice"]}_{timestamp}.mp3'
                     try:
                         print(f"[DEBUG] Using model: {eleven_config.get('Model', 'eleven_multilingual_v2') if eleven_config else 'eleven_multilingual_v2'}, voice_id: {voice_id}")
                         start_time = time.time()
@@ -2506,10 +2566,14 @@ if __name__ == '__main__':
                     all_outputs.append(audio_path)
                     continue  # Skip regular model call for this step
                 
-                # Check for Audio Merging step (e.g., L1&L9&L2SL3)
-                audio_merge_match = re.fullmatch(r'L(\d+)(?:&L(\d+))*SL(\d+)', step)
+                # Check for Audio Merging step (e.g., L1&L9&L2SL3 or L1&L9&L2SL3T2)
+                audio_merge_match = re.fullmatch(r'L(\d+)(?:&L(\d+))*SL(\d+)(?:T(\d+))?', step)
                 if audio_merge_match:
                     print(f"  - Step {i+1}: {step} (Audio Merging Step)")
+                    
+                    # Extract title response index if specified
+                    title_match = re.search(r'T(\d+)', step)
+                    title_resp_idx = int(title_match.group(1)) - 1 if title_match else None
                     
                     # Extract all location IDs from the step
                     location_ids = re.findall(r'L(\d+)', step)
@@ -2641,7 +2705,18 @@ if __name__ == '__main__':
                     
                     save_folder_prefix = save_location['Location']  # Use GCS folder prefix directly
                     timestamp = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
-                    audio_filename = f'merged_workflow_{workflow_id}_step_{i+1}_{timestamp}.mp3'
+                    
+                    # Check if custom title is requested
+                    if title_resp_idx is not None and 0 <= title_resp_idx < len(all_outputs):
+                        title_text = all_outputs[title_resp_idx]
+                        extracted_title = extract_title_from_text(title_text)
+                        clean_title = clean_filename(extracted_title)
+                        if clean_title:
+                            audio_filename = f'{clean_title}.mp3'
+                        else:
+                            audio_filename = f'merged_workflow_{workflow_id}_step_{i+1}_{timestamp}.mp3'
+                    else:
+                        audio_filename = f'merged_workflow_{workflow_id}_step_{i+1}_{timestamp}.mp3'
                     
                     try:
                         start_time = time.time()
@@ -2682,20 +2757,28 @@ if __name__ == '__main__':
                 # Parse the step for prompt, model override, and model ID override
                 input_text, model_override, model_id_override = parse_step(step, all_outputs, custom_topic)
                 # print(f"    Input (first 100): {input_text[:100]}{'...' if len(input_text) > 100 else ''}")  # Removed duplicate debug print
-                if model_override and model_id_override:
-                    model_to_use = model_override
-                    web_search_enabled = get_model_web_search_by_id(model_id_override)
+                
+                # Check if no model is specified (no M# pattern found)
+                if model_override is None and model_id_override is None:
+                    # No model call - just return the input text as output
+                    print(f"  - Step {i+1}: {step} (No Model - Pass Through)")
+                    response = input_text
                 else:
-                    model_to_use = default_model
-                    web_search_enabled = get_model_web_search_by_id(default_model_id)
-                print(f"  - Step {i+1}: {step} (Model: {model_to_use}, Web Search: {web_search_enabled})")
-                # Fallback for OpenAI client if responses.create is not available
-                if web_search_enabled and not hasattr(client, 'responses'):
-                    msg = "❌ Web search requested but your OpenAI Python package does not support responses.create. Please upgrade openai to the latest version."
-                    log_error(msg)
-                    response = "[Web search not supported by your OpenAI Python package version]"
-                else:
-                    response = call_model(input_text, model_to_use, web_search=web_search_enabled)
+                    # Model is specified, proceed with model call
+                    if model_override and model_id_override:
+                        model_to_use = model_override
+                        web_search_enabled = get_model_web_search_by_id(model_id_override)
+                    else:
+                        model_to_use = default_model
+                        web_search_enabled = get_model_web_search_by_id(default_model_id)
+                    print(f"  - Step {i+1}: {step} (Model: {model_to_use}, Web Search: {web_search_enabled})")
+                    # Fallback for OpenAI client if responses.create is not available
+                    if web_search_enabled and not hasattr(client, 'responses'):
+                        msg = "❌ Web search requested but your OpenAI Python package does not support responses.create. Please upgrade openai to the latest version."
+                        log_error(msg)
+                        response = "[Web search not supported by your OpenAI Python package version]"
+                    else:
+                        response = call_model(input_text, model_to_use, web_search=web_search_enabled)
                 
                 # Ensure response is properly encoded as UTF-8
                 if isinstance(response, bytes):
@@ -2707,17 +2790,30 @@ if __name__ == '__main__':
                 output_col_out = f'Output {2*i+2}'
                 output_record[output_col_in] = input_text
                 output_record[output_col_out] = response
-                # Check for SL# pattern in step (e.g., R4SL7)
-                sl_match = re.search(r'SL(\d+)', step)
+                # Check for SL# pattern in step (e.g., R4SL7 or SL7T2)
+                sl_match = re.search(r'SL(\d+)(?:T(\d+))?', step)
                 if sl_match:
                     location_id = sl_match.group(1)
+                    title_resp_idx = int(sl_match.group(2)) - 1 if sl_match.group(2) else None
                     loc_row = locations_df[locations_df['Location ID'].astype(str) == location_id]
                     if not loc_row.empty:
                         folder_url = loc_row.iloc[0]['Location']
                         # For GCS: Use the folder prefix directly
                         folder_prefix = folder_url.rstrip('/')  # Clean up any trailing slash
                         timestamp = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
-                        filename = f'workflow_{workflow_id}_step_{i+1}_{timestamp}.txt'
+                        
+                        # Check if custom title is requested
+                        if title_resp_idx is not None and 0 <= title_resp_idx < len(all_outputs):
+                            title_text = all_outputs[title_resp_idx]
+                            extracted_title = extract_title_from_text(title_text)
+                            clean_title = clean_filename(extracted_title)
+                            if clean_title:
+                                filename = f'{clean_title}.txt'
+                            else:
+                                filename = f'workflow_{workflow_id}_step_{i+1}_{timestamp}.txt'
+                        else:
+                            filename = f'workflow_{workflow_id}_step_{i+1}_{timestamp}.txt'
+                        
                         try:
                             file_link = upload_text_to_gcs(response, f"{folder_prefix}/{filename}")
                             log_msg = f"Saved response to Google Cloud Storage: {file_link}"

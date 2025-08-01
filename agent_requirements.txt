@@ -1,0 +1,37 @@
+# AI Agent Requirements
+# Core dependencies for the podcast automation agent
+
+# Google APIs
+google-cloud-storage>=2.10.0
+google-api-python-client>=2.88.0
+google-auth-oauthlib>=1.0.0
+google-auth-httplib2>=0.1.0
+gspread>=5.9.0
+
+# Web automation (for future web tasks)
+selenium>=4.11.0
+beautifulsoup4>=4.12.0
+requests>=2.31.0
+
+# Data processing
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Environment and utilities
+python-dotenv>=1.0.0
+pathlib>=1.0.0
+
+# Logging and debugging
+colorlog>=6.7.0
+
+# Audio processing (if needed for metadata)
+mutagen>=1.46.0
+
+# File handling
+pathspec>=0.11.0
+
+# Optional: For advanced web scraping
+lxml>=4.9.0
+
+# Optional: For scheduling tasks
+schedule>=1.2.0 
