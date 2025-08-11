@@ -270,7 +270,8 @@ if not ELEVENLABS_API_KEY:
 print(f"✅ OpenAI API Key configured (length: {len(OPENAI_API_KEY)})")
 print(f"✅ Eleven Labs API Key configured (length: {len(ELEVENLABS_API_KEY)})")
 
-client = OpenAI(api_key=OPENAI_API_KEY)
+# Configure OpenAI client for predictable timeouts and no hidden retries
+client = OpenAI(api_key=OPENAI_API_KEY, timeout=75, max_retries=0)
 
 print(f"[DEBUG] Python version: {sys.version}")
 print(f"[DEBUG] requests version: {requests.__version__}")
@@ -517,7 +518,7 @@ Topic to generate Title and Description based:'''],
         [8, "Do not select topics previously covered", "Please ensure news items selected do not exactly cover topics previously discuss below. Updates to these new items should still be included. Previously Covered News Items to avoid unless it is an an update on previously covered story:"]
     ], columns=["Prompt ID", "Prompt Title", "Prompt Description"])
 
-    # Updated Models tab with the provided data as default (81 models total)
+    # Updated Models tab with the provided data as default (122 models total)
     models = pd.DataFrame([
         [1, "gpt-4o", "N", "Y", "N"],
         [2, "gpt-4o-mini", "N", "Y", "N"],
@@ -591,9 +592,9 @@ Topic to generate Title and Description based:'''],
         [70, "claude-3-5-sonnet-20241022", "N", "N", "N"],
         [71, "claude-3-5-sonnet-20240620", "N", "N", "N"],
         [72, "claude-3-5-haiku", "N", "N", "N"],
-        [73, "claude-3-sonnet", "N", "N", "N"],
-        [74, "claude-3-haiku", "N", "N", "N"],
-        [75, "claude-3-opus", "N", "N", "N"],
+        [73, "claude-3-sonnet", "N", "N", "Y"],
+        [74, "claude-3-haiku", "N", "N", "Y"],
+        [75, "claude-3-opus", "N", "N", "Y"],
         [76, "claude-3-5-sonnet", "N", "N", "N"],
         [77, "gemini-2.5-pro", "N", "N", "N"],
         [78, "gemini-2.5-flash", "N", "N", "N"],
@@ -603,15 +604,44 @@ Topic to generate Title and Description based:'''],
         [82, "claude-opus-4-20250514", "N", "Y", "N"],
         [83, "claude-sonnet-4-20250514", "N", "Y", "N"],
         [84, "claude-3-7-sonnet-20250219", "N", "Y", "N"],
-        [85, "claude-3-5-sonnet-20241022", "N", "Y", "N"],
-        [86, "claude-3-5-haiku", "N", "Y", "N"],
-        [87, "claude-3-5-sonnet-20240620", "N", "N", "N"],
-        [88, "claude-3-5-sonnet", "N", "N", "N"],
-        [89, "claude-3-sonnet", "N", "N", "N"],
-        [90, "claude-3-haiku", "N", "N", "N"],
+        [85, "claude-3-opus-20240229", "N", "N", "N"],
+        [86, "claude-3-sonnet-20240229", "N", "N", "N"],
+        [87, "claude-3-haiku-20240307", "N", "N", "N"],
+        [88, "claude-instant-1.2", "N", "N", "N"],
+        [89, "claude-2.1", "N", "N", "N"],
+        [90, "claude-2.0", "N", "N", "N"],
         [91, "claude-opus-4-20250514", "N", "N", "N"],
         [92, "claude-sonnet-4-20250514", "N", "N", "N"],
-        [93, "claude-3-7-sonnet-20250219", "N", "N", "N"]
+        [93, "claude-3-7-sonnet-20250219", "N", "N", "N"],
+        [94, "gpt-5-nano", "N", "N", "N"],
+        [95, "gpt-5", "N", "N", "N"],
+        [96, "gpt-5-mini-2025-08-07", "N", "N", "N"],
+        [97, "gpt-5-mini", "N", "N", "N"],
+        [98, "gpt-5-nano-2025-08-07", "N", "N", "N"],
+        [99, "o3-2025-04-16", "N", "N", "N"],
+        [100, "o3", "N", "N", "N"],
+        [101, "gpt-5-chat-latest", "N", "N", "N"],
+        [102, "gpt-5-2025-08-07", "N", "N", "N"],
+        [103, "gpt-4-1106-preview", "N", "N", "N"],
+        [104, "gpt-4-0125-preview", "N", "N", "N"],
+        [105, "gpt-4-turbo-preview", "N", "N", "N"],
+        [106, "gpt-4o-search-preview-2025-03-11", "N", "Y", "N"],
+        [107, "gpt-4o-mini-search-preview-2025-03-11", "N", "Y", "N"],
+        [108, "o4-mini-deep-research", "N", "N", "N"],
+        [109, "o4-mini-deep-research-2025-06-26", "N", "N", "N"],
+        [110, "claude-3-5-sonnet-20241022", "N", "Y", "N"],
+        [111, "claude-3-5-haiku", "N", "Y", "N"],
+        [112, "gpt-5-nano", "N", "Y", "N"],
+        [113, "gpt-5", "N", "Y", "N"],
+        [114, "gpt-5-mini-2025-08-07", "N", "Y", "N"],
+        [115, "gpt-5-mini", "N", "Y", "N"],
+        [116, "gpt-5-nano-2025-08-07", "N", "Y", "N"],
+        [117, "gpt-4o-2024-05-13", "N", "Y", "N"],
+        [118, "gpt-4o-mini-2024-07-18", "N", "Y", "N"],
+        [119, "gpt-4o-2024-08-06", "N", "Y", "N"],
+        [120, "gpt-4o-2024-11-20", "N", "Y", "N"],
+        [121, "gpt-5-chat-latest", "N", "Y", "N"],
+        [122, "gpt-5-2025-08-07", "N", "Y", "N"]
     ], columns=["Model ID", "Model Name", "Model Default", "Web Search", "Deprecated"])
 
     workflow_steps = pd.DataFrame(columns=[
@@ -651,7 +681,7 @@ Topic to generate Title and Description based:'''],
 def fetch_openai_models():
     """Fetch the latest models from OpenAI API."""
     try:
-        client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+        client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'), timeout=75, max_retries=0)
         models_response = client.models.list()
         
         # Filter for text-based chat models (excluding vision, audio, embedding models)
@@ -672,15 +702,18 @@ def fetch_openai_models():
             ]):
                 continue
             
-
-            
-            # Determine if model supports web search (based on known patterns)
-            web_search = "search" in model_id.lower() or "preview" in model_id.lower()
+            # Treat actual search-preview models and GPT-5/GPT-4o families as web-search capable (via Responses API)
+            lower_id = model_id.lower()
+            web_search_capable = (
+                ('search-preview' in lower_id)
+                or lower_id.startswith('gpt-5')
+                or lower_id.startswith('gpt-4o')
+            )
             
             text_models.append({
                 'id': model_id,
                 'provider': 'openai',
-                'web_search': web_search
+                'web_search': web_search_capable
             })
         
         return text_models
@@ -798,166 +831,110 @@ def fetch_all_models():
 
 
 def update_models_tab(spreadsheet, models_df):
-    """Update the Models tab while preserving the exact current structure and only updating Deprecated column."""
+    """Update the Models tab by preserving existing rows, marking non-real models as Deprecated='Y',
+    and ensuring for each real model there is one baseline row (Web Search='N') and, if supported, a second row (Web Search='Y')."""
     try:
-        # Define the exact current model list as provided by the user
-        current_models = [
-            [1, "gpt-4o", "N", "Y", "N"],
-            [2, "gpt-4o-mini", "N", "Y", "N"],
-            [3, "gpt-4o", "N", "N", "N"],
-            [4, "gpt-4o-mini", "Y", "N", "N"],
-            [5, "gpt-4o-mini-search-preview", "N", "Y", "N"],
-            [6, "gpt-4o-search-preview", "N", "Y", "N"],
-            [7, "chatgpt-4o-latest", "N", "N", "N"],
-            [8, "codex-mini-latest", "N", "N", "Y"],
-            [9, "dall-e-2", "N", "N", "Y"],
-            [10, "dall-e-3", "N", "N", "Y"],
-            [11, "gpt-3.5-turbo-instruct", "N", "N", "N"],
-            [12, "gpt-4", "N", "N", "N"],
-            [13, "gpt-4.1", "N", "N", "N"],
-            [14, "gpt-4.1-mini", "N", "N", "N"],
-            [15, "gpt-4.1-mini-2025-04-14", "N", "N", "N"],
-            [16, "gpt-4.1-nano", "N", "N", "N"],
-            [17, "gpt-4.1-nano-2025-04-14", "N", "N", "N"],
-            [18, "gpt-4.5-preview", "N", "N", "Y"],
-            [19, "gpt-4.5-preview-2025-02-27", "N", "N", "Y"],
-            [20, "gpt-4o-audio-preview", "N", "N", "Y"],
-            [21, "gpt-4o-mini-audio-preview", "N", "N", "Y"],
-            [22, "gpt-4o-mini-search-preview", "N", "N", "N"],
-            [23, "gpt-4o-mini-search-preview-2025-03-11", "N", "N", "N"],
-            [24, "gpt-4o-mini-transcribe", "N", "N", "Y"],
-            [25, "gpt-4o-mini-tts", "N", "N", "Y"],
-            [26, "gpt-4o-realtime-preview", "N", "N", "Y"],
-            [27, "gpt-4o-search-preview", "N", "N", "N"],
-            [28, "gpt-4o-search-preview-2025-03-11", "N", "N", "N"],
-            [29, "gpt-4o-transcribe", "N", "N", "Y"],
-            [30, "gpt-image-1", "N", "N", "Y"],
-            [31, "o1", "N", "N", "N"],
-            [32, "o1-mini", "N", "N", "N"],
-            [33, "o1-preview", "N", "N", "N"],
-            [34, "o1-pro", "N", "N", "N"],
-            [35, "o3-mini", "N", "N", "N"],
-            [36, "o3-mini-2025-01-31", "N", "N", "N"],
-            [37, "o4-mini", "N", "N", "N"],
-            [38, "omni-moderation-latest", "N", "N", "Y"],
-            [39, "text-embedding-3-large", "N", "N", "Y"],
-            [40, "text-embedding-3-small", "N", "N", "Y"],
-            [41, "tts-1", "N", "N", "Y"],
-            [42, "tts-1-1106", "N", "N", "Y"],
-            [43, "tts-1-hd", "N", "N", "Y"],
-            [44, "whisper-1", "N", "N", "Y"],
-            [45, "gpt-4-0613", "N", "N", "N"],
-            [46, "gpt-3.5-turbo", "N", "N", "N"],
-            [47, "o4-mini-deep-research-2025-06-26", "N", "Y", "N"],
-            [48, "o4-mini-deep-research", "N", "Y", "N"],
-            [49, "davinci-002", "N", "N", "N"],
-            [50, "babbage-002", "N", "N", "N"],
-            [51, "gpt-3.5-turbo-instruct-0914", "N", "N", "N"],
-            [52, "gpt-4-1106-preview", "N", "Y", "N"],
-            [53, "gpt-3.5-turbo-1106", "N", "N", "N"],
-            [54, "gpt-4-0125-preview", "N", "Y", "N"],
-            [55, "gpt-4-turbo-preview", "N", "Y", "N"],
-            [56, "gpt-3.5-turbo-0125", "N", "N", "N"],
-            [57, "gpt-4-turbo", "N", "N", "N"],
-            [58, "gpt-4-turbo-2024-04-09", "N", "N", "N"],
-            [59, "gpt-4o-2024-05-13", "N", "N", "N"],
-            [60, "gpt-4o-mini-2024-07-18", "N", "N", "N"],
-            [61, "gpt-4o-2024-08-06", "N", "N", "N"],
-            [62, "o1-preview-2024-09-12", "N", "Y", "N"],
-            [63, "o1-mini-2024-09-12", "N", "N", "N"],
-            [64, "o1-2024-12-17", "N", "N", "N"],
-            [65, "gpt-4o-2024-11-20", "N", "N", "N"],
-            [66, "o1-pro-2025-03-19", "N", "N", "N"],
-            [67, "o4-mini-2025-04-16", "N", "N", "N"],
-            [68, "gpt-4.1-2025-04-14", "N", "N", "N"],
-            [69, "gpt-3.5-turbo-16k", "N", "N", "N"],
-            [70, "claude-3-5-sonnet-20241022", "N", "N", "N"],
-            [71, "claude-3-5-sonnet-20240620", "N", "N", "N"],
-            [72, "claude-3-5-haiku", "N", "N", "N"],
-            [73, "claude-3-sonnet", "N", "N", "N"],
-            [74, "claude-3-haiku", "N", "N", "N"],
-            [75, "claude-3-opus", "N", "N", "N"],
-            [76, "claude-3-5-sonnet", "N", "N", "N"],
-            [77, "gemini-2.5-pro", "N", "N", "N"],
-            [78, "gemini-2.5-flash", "N", "N", "N"],
-            [79, "gemini-2.5-flash-lite", "N", "N", "N"],
-            [80, "gemini-2.0-flash", "N", "N", "N"],
-            [81, "gemini-2.0-flash-lite", "N", "N", "N"],
-            [82, "claude-opus-4-20250514", "N", "Y", "N"],
-            [83, "claude-sonnet-4-20250514", "N", "Y", "N"],
-            [84, "claude-3-7-sonnet-20250219", "N", "Y", "N"],
-            [85, "claude-3-5-sonnet-20241022", "N", "Y", "N"],
-            [86, "claude-3-5-haiku", "N", "Y", "N"],
-            [87, "claude-3-5-sonnet-20240620", "N", "N", "N"],
-            [88, "claude-3-5-sonnet", "N", "N", "N"],
-            [89, "claude-3-sonnet", "N", "N", "N"],
-            [90, "claude-3-haiku", "N", "N", "N"],
-            [91, "claude-opus-4-20250514", "N", "N", "N"],
-            [92, "claude-sonnet-4-20250514", "N", "N", "N"],
-            [93, "claude-3-7-sonnet-20250219", "N", "N", "N"]
-        ]
-        
         # Fetch latest functional models from all providers
         latest_models = fetch_all_models()
         latest_model_names = {model['id'] for model in latest_models}
+        latest_model_name_to_search = {model['id']: bool(model.get('web_search', False)) for model in latest_models}
         
-        # Start with the current models and only update Deprecated column if needed
+        # Build updated list based on existing sheet content (preserve IDs/order for existing rows)
         updated_models = []
         deprecated_updated = 0
         
-        for model_data in current_models:
-            model_id, model_name, model_default, web_search, current_deprecated = model_data
-            
-            # Check if this model is deprecated (not in latest functional models)
-            is_deprecated = model_name not in latest_model_names
-            
-            # Only update Deprecated column if it changed
-            new_deprecated = 'Y' if is_deprecated else 'N'
+        # Normalize existing models from sheet
+        if models_df is None or models_df.empty:
+            existing_rows = []
+        else:
+            # Ensure columns exist
+            for col in ['Model ID', 'Model Name', 'Model Default', 'Web Search', 'Deprecated']:
+                if col not in models_df.columns:
+                    models_df[col] = ''
+            # Sort by Model ID to preserve ordering
+            try:
+                models_df['Model ID'] = models_df['Model ID'].astype(int)
+            except Exception:
+                pass
+            models_df = models_df.sort_values(by='Model ID', kind='stable')
+            existing_rows = models_df.to_dict(orient='records')
+
+        # Update Deprecated for existing rows; preserve everything else
+        for row in existing_rows:
+            model_id = row.get('Model ID')
+            model_name = str(row.get('Model Name', '')).strip()
+            model_default = str(row.get('Model Default', 'N')).strip() or 'N'
+            web_search_flag = str(row.get('Web Search', 'N')).strip().upper()
+            current_deprecated = str(row.get('Deprecated', 'N')).strip().upper()
+
+            is_real = model_name in latest_model_names
+            new_deprecated = 'N' if is_real else 'Y'
             if new_deprecated != current_deprecated:
                 deprecated_updated += 1
             
-            # Add the model with potentially updated Deprecated column
             updated_models.append([
                 model_id,
                 model_name,
                 model_default,
-                web_search,
+                'Y' if web_search_flag == 'Y' else 'N',
                 new_deprecated
             ])
         
-        # Add new models that don't exist in the current list
-        next_model_id = 94  # Start after the current 81 models
+        # Track existing pairs to avoid duplicates
+        existing_pairs = {(str(row[1]).strip(), str(row[3]).strip().upper()) for row in updated_models}
+
+        # Determine next Model ID dynamically
+        try:
+            current_max_id = max(int(row[0]) for row in updated_models) if updated_models else 0
+        except Exception:
+            current_max_id = 0
+        next_model_id = current_max_id + 1
+
         new_models_added = 0
         
+        # Ensure baseline and search-capable rows exist for each real model
         for model_info in latest_models:
             model_name = model_info['id']
-            
-            # Check if this model already exists in our list
-            existing_model_names = {row[1] for row in updated_models}  # Model names are in column 1
-            if model_name not in existing_model_names:
-                # Add new model with default settings
+            supports_search = bool(model_info.get('web_search', False))
+
+            # Baseline row (Web Search = 'N')
+            if (model_name, 'N') not in existing_pairs:
                 updated_models.append([
                     next_model_id,
                     model_name,
-                    'N',  # Default to 'N' for new models
-                    'Y' if model_info['web_search'] else 'N',
-                    'N'  # Not deprecated
+                    'N',
+                    'N',
+                    'N'
                 ])
+                existing_pairs.add((model_name, 'N'))
                 next_model_id += 1
                 new_models_added += 1
         
-        # Update the Models worksheet
+            # Web search row (Web Search = 'Y') only if supported
+            if supports_search and (model_name, 'Y') not in existing_pairs:
+                updated_models.append([
+                    next_model_id,
+                    model_name,
+                    'N',
+                    'Y',
+                    'N'
+                ])
+                existing_pairs.add((model_name, 'Y'))
+                next_model_id += 1
+                new_models_added += 1
+
+        # Write back to the sheet
         if updated_models:
-            # Prepare header with Deprecated column
             headers = ['Model ID', 'Model Name', 'Model Default', 'Web Search', 'Deprecated']
-            
-            # Clear existing data and add new data
             models_ws = spreadsheet.worksheet('Models')
             models_ws.clear()
             models_ws.update('A1:E1', [headers])
             models_ws.update(f'A2:E{len(updated_models)+1}', updated_models)
             
-            log_msg = f"Updated Models tab with {len(updated_models)} models ({new_models_added} new models added, {deprecated_updated} deprecated status updated)."
+            log_msg = (
+                f"Updated Models tab with {len(updated_models)} models "
+                f"({new_models_added} new models added, {deprecated_updated} deprecated status updated)."
+            )
             print(f"    > {log_msg}")
             return log_msg
         else:
@@ -1058,6 +1035,8 @@ def force_clean_mojibake(text):
     """Force replace all known mojibake patterns with correct characters."""
     if not isinstance(text, str):
         text = str(text)
+    
+    # First handle common mojibake patterns
     replacements = {
         'â€™': "'",
         'â€œ': '"',
@@ -1070,16 +1049,37 @@ def force_clean_mojibake(text):
         'Ã©': 'é',
         'Ã': 'à',
         'Â': '',  # Sometimes appears as a stray
-        'â€™': "'",  # Ian added 
+        # Additional common patterns
+        'â€‹': '',   # Zero-width space
+        'â€‚': ' ',   # En space
+        'â€ƒ': ' ',   # Em space
+        'â€‰': ' ',   # Thin space
+        'â€Š': ' ',   # Hair space
+        'â€Œ': '',   # Zero-width non-joiner
+        'â€': '',    # Zero-width joiner
+        'â€Ž': '',   # Left-to-right mark
+        'â€': '',    # Right-to-left mark
     }
+    
     for mojibake, correct in replacements.items():
         text = text.replace(mojibake, correct)
+    
+    # Additional smart quote normalization
+    # Handle various smart quote encodings
+    text = text.replace(''', "'")  # Left single quotation mark
+    text = text.replace(''', "'")  # Right single quotation mark
+    text = text.replace('"', '"')  # Left double quotation mark
+    text = text.replace('"', '"')  # Right double quotation mark
+    text = text.replace('–', '-')  # En dash
+    text = text.replace('—', '-')  # Em dash
+    text = text.replace('…', '...')  # Ellipsis
+    
     return text
 
 # -----------------------------------------
 # API CALLS
 # -----------------------------------------
-def call_openai_model(prompt, model="gpt-4o", temperature=0.7, web_search=False):
+def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False):
     """Calls the OpenAI API, using the correct endpoint for web search and model type. Logs all errors and unexpected responses."""
     import sys
     import time
@@ -1091,38 +1091,36 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.7, web_search=False)
         log_error(msg)
         sys.exit(1)
     
-    # Timeout handling for deep research models
-    timeout_seconds = 900  # 15 minutes
+    # Timeout handling
     timeout_occurred = False
+    # Use a strict 120s timeout for any web_search; otherwise 15 minutes for deep-research models
+    configured_timeout = 300 if web_search else (900 if "deep-research" in model else None)
     
     def timeout_handler():
         nonlocal timeout_occurred
         timeout_occurred = True
-        print(f"⏰ Timeout reached ({timeout_seconds} seconds) for model {model}. Cancelling API call.")
-    
-    # Set up timeout timer for deep research models
-    if "deep-research" in model:
-        timer = Timer(timeout_seconds, timeout_handler)
+        print(f"⏰ Timeout reached ({configured_timeout} seconds) for model {model}. Cancelling API call.")
+
+    timer = None
+    if configured_timeout:
+        timer = Timer(configured_timeout, timeout_handler)
         timer.start()
-        print(f"⏱️ Starting deep research with {timeout_seconds}-second timeout for model {model}")
+        print(f"⏱️ Starting request with {configured_timeout}-second timeout for model {model}")
         
-        # Modify prompt for deep research to limit scope
-        if web_search:
-            limited_prompt = f"""Please provide a focused and concise response to the following request. Limit your research to the most recent and relevant information only. Focus on the top 3-5 most important points rather than exhaustive coverage.
-
-Request: {prompt}
-
-Please ensure your response is comprehensive but efficient, avoiding overly detailed research that could extend beyond reasonable time limits."""
-        else:
-            limited_prompt = prompt
+    # Limit prompt length and scope when doing web search to reduce tokens and time
+    if web_search:
+        limited_prompt = (
+            "Please answer concisely. Use at most 2 recent, credible sources. "
+            "Focus on 3-5 key points. Keep output under ~300 words. "
+            "Stop searching after the first high-quality results.\n\nRequest: " + str(prompt)
+        )
     else:
-        timer = None
         limited_prompt = prompt
     try:
         # Case 1: Chat Completions with always-on search-preview model
         if web_search and (model.endswith("-search-preview")):
-            # Determine search context size based on model type
-            search_context_size = "medium" if "deep-research" in model else "high"
+            # Determine search context size (medium per configuration)
+            search_context_size = "medium"
             
             # Build web_search_options based on model type
             web_search_options = {"search_context_size": search_context_size}
@@ -1135,12 +1133,41 @@ Please ensure your response is comprehensive but efficient, avoiding overly deta
                     timer.cancel()
                 return "⏰ Research timeout reached. Please try with a more specific request or use a different model."
             
-            response = client.chat.completions.create(
+            # Some models reject temperature; only include max_tokens here
+            # Attempt with basic limits; handle rate limits with a quick backoff and reduced budget
+            cc_max_tokens = 3000
+            cc_search_context_size = search_context_size
+            try:
+                response = client.chat.completions.create(
                 model=model,
                 messages=[{"role": "user", "content": limited_prompt}],
-                web_search_options=web_search_options,
-                temperature=temperature
-            )
+                    web_search_options={**web_search_options, "search_context_size": cc_search_context_size},
+                    max_tokens=cc_max_tokens
+                )
+            except Exception as e:
+                err_text = str(e)
+                if ("rate limit" in err_text.lower() or "429" in err_text) and not timeout_occurred:
+                    # Parse suggested wait if present
+                    import re
+                    m = re.search(r"try again in ([0-9]+\.?[0-9]*)s", err_text)
+                    wait_s = float(m.group(1)) if m else 5.0
+                    # Reduce budgets
+                    cc_max_tokens = max(300, cc_max_tokens // 2)
+                    cc_search_context_size = "low"
+                    remaining = configured_timeout if configured_timeout else 0
+                    if remaining:
+                        # Best-effort sleep bounded by remaining time
+                        from time import sleep
+                        sleep(min(wait_s, max(0.0, remaining - 2)))
+                    # Retry once with reduced budgets
+                    response = client.chat.completions.create(
+                        model=model,
+                        messages=[{"role": "user", "content": limited_prompt[:1000]}],
+                        web_search_options={**web_search_options, "search_context_size": cc_search_context_size},
+                        max_tokens=cc_max_tokens
+                    )
+                else:
+                    raise
             # Robust error logging for chat completions
             if hasattr(response, 'error') and response.error:
                 log_error(f"OpenAI ChatCompletions error: {response.error}\nFull response: {response}")
@@ -1153,19 +1180,14 @@ Please ensure your response is comprehensive but efficient, avoiding overly deta
                 return fix_text_encoding(raw_response)
             log_error(f"OpenAI ChatCompletions: Unexpected empty or malformed response. Full response: {response}")
             sys.exit(1)
-        # Case 2: Responses API with web_search_preview tool (base models)
+        # Case 2: Responses API with web_search tool (base models)
         elif web_search:
             if not hasattr(client, 'responses'):
                 msg = "❌ Web search requested but your OpenAI Python package does not support responses.create. Please upgrade openai to the latest version."
                 log_error(msg)
                 sys.exit(1)
-            # Determine search context size based on model type
-            search_context_size = "medium" if "deep-research" in model else "high"
-            
-            # Build tools configuration based on model type
-            tools_config = {"type": "web_search_preview", "search_context_size": search_context_size}
-            if "deep-research" not in model:
-                tools_config["user_location"] = {"type": "approximate", "country": "US"}
+            # Build tools configuration for Responses API web search
+            tools_config = {"type": "web_search"}
             
             # Check for timeout before making API call
             if timeout_occurred:
@@ -1173,13 +1195,64 @@ Please ensure your response is comprehensive but efficient, avoiding overly deta
                     timer.cancel()
                 return "⏰ Research timeout reached. Please try with a more specific request or use a different model."
             
-            response = client.responses.create(
-                model=model,
-                tools=[tools_config],
-                input=[{"role": "user",
-                        "content": [{"type": "input_text", "text": limited_prompt}]}],
-                text={"format": {"type": "text"}}
-            )
+            # Attempt with basic limits; handle rate limits with a quick backoff and reduced budget
+            resp_max_tokens = 3000
+            try:
+                _model_lower = str(model).lower()
+                _is_gpt5 = _model_lower.startswith("gpt-5")
+                _is_gpt4o = _model_lower.startswith("gpt-4o")
+
+                text_cfg = {"format": {"type": "text"}}
+                # Set verbosity per model family capabilities
+                if _is_gpt5:
+                    text_cfg["verbosity"] = "low"
+                elif _is_gpt4o:
+                    text_cfg["verbosity"] = "medium"
+
+                responses_kwargs = {
+                    "model": model,
+                    "tools": [tools_config],
+                    "input": [{"role": "user",
+                                "content": [{"type": "input_text", "text": limited_prompt}]}],
+                    "text": text_cfg,
+                    "max_output_tokens": resp_max_tokens
+                }
+                # Include reasoning.effort only for GPT-5 models
+                if _is_gpt5:
+                    responses_kwargs["reasoning"] = {"effort": "low"}
+
+                response = client.responses.create(**responses_kwargs)
+            except Exception as e:
+                err_text = str(e)
+                if ("rate limit" in err_text.lower() or "429" in err_text) and not timeout_occurred:
+                    import re, time
+                    m = re.search(r"try again in ([0-9]+\.?[0-9]*)s", err_text)
+                    wait_s = float(m.group(1)) if m else 5.0
+                    # Reduce budgets
+                    resp_max_tokens = max(400, resp_max_tokens // 2)
+                    # Sleep bounded by remaining time
+                    time.sleep(min(wait_s, 10))
+                    # Retry once with reduced budgets and truncated prompt
+                    text_cfg_retry = {"format": {"type": "text"}}
+                    if _is_gpt5:
+                        text_cfg_retry["verbosity"] = "low"
+                    elif _is_gpt4o:
+                        text_cfg_retry["verbosity"] = "medium"
+
+                    responses_kwargs_retry = {
+                        "model": model,
+                        "tools": [tools_config],
+                        "input": [{"role": "user",
+                                    "content": [{"type": "input_text", "text": limited_prompt[:1000]}]}],
+                        "text": text_cfg_retry,
+                        "max_output_tokens": resp_max_tokens
+                    }
+                    if _is_gpt5:
+                        responses_kwargs_retry["reasoning"] = {"effort": "low"}
+
+                    response = client.responses.create(**responses_kwargs_retry)
+                else:
+                    raise
             # Robust error logging for responses.create
             if hasattr(response, 'error') and response.error:
                 log_error(f"OpenAI Responses error: {response.error}\nFull response: {response}")
@@ -1207,13 +1280,15 @@ Please ensure your response is comprehensive but efficient, avoiding overly deta
                 sys.exit(1)
         # Case 3: Standard Chat Completions
         else:
-            # Always omit temperature for o4-mini and similar models
+            # Always omit temperature for models that don't support custom temperature
             models_without_temp = {"o4-mini", "o4-mini-2025-01-31"}
+            is_gpt5 = str(model).lower().startswith("gpt-5")
             kwargs = {
                 "model": model,
                 "messages": [{"role": "user", "content": limited_prompt}]
             }
-            if model not in models_without_temp and temperature is not None:
+            # Only include temperature when supported (not GPT-5 and not in explicit no-temp list)
+            if (model not in models_without_temp) and (not is_gpt5) and (temperature is not None):
                 kwargs["temperature"] = temperature
             
             # Check for timeout before making API call
@@ -1288,7 +1363,7 @@ Please ensure your response is comprehensive but efficient, avoiding overly deta
         if timer:
             timer.cancel()
 
-def call_model(prompt, model="gpt-4o", temperature=0.7, web_search=False):
+def call_model(prompt, model="gpt-4o", temperature=0.8, web_search=False):
     """Calls the appropriate model API based on the model name."""
     # Determine provider from model name
     if model.startswith('claude-'):
@@ -1300,7 +1375,7 @@ def call_model(prompt, model="gpt-4o", temperature=0.7, web_search=False):
         return call_openai_model(prompt, model, temperature, web_search)
 
 
-def call_anthropic_model(prompt, model="claude-3-sonnet", temperature=0.7, web_search=False):
+def call_anthropic_model(prompt, model="claude-3-sonnet", temperature=0.8, web_search=False):
     """Calls the Anthropic Claude API with optional web search support."""
     try:
         import anthropic
@@ -1360,7 +1435,7 @@ def call_anthropic_model(prompt, model="claude-3-sonnet", temperature=0.7, web_s
         sys.exit(1)
 
 
-def call_google_model(prompt, model="gemini-2.0-flash", temperature=0.7):
+def call_google_model(prompt, model="gemini-2.0-flash", temperature=0.8):
     """Calls the Google Gemini API."""
     try:
         import google.generativeai as genai
@@ -2351,9 +2426,9 @@ if __name__ == '__main__':
                                 extracted_title = extract_title_from_text(title_text)
                                 clean_title = clean_filename(extracted_title)
                                 if clean_title:
-                                    filename = f'{clean_title}.txt'
+                                    filename = f'{timestamp}_{clean_title}.txt'
                                 else:
-                                    filename = f'workflow_{workflow_id}_step_{i+1}_{timestamp}.txt'
+                                    filename = f'{timestamp}_workflow_{workflow_id}_step_{i+1}.txt'
                             else:
                                 filename = f'workflow_{workflow_id}_step_{i+1}_{timestamp}.txt'
                             
@@ -2520,11 +2595,11 @@ if __name__ == '__main__':
                         extracted_title = extract_title_from_text(title_text)
                         clean_title = clean_filename(extracted_title)
                         if clean_title:
-                            audio_filename = f'{clean_title}.mp3'
+                            audio_filename = f'{timestamp}_{clean_title}.mp3'
                         else:
-                            audio_filename = f'workflow_{workflow_id}_step_{i+1}_{eleven_config["Voice"]}_{timestamp}.mp3'
+                            audio_filename = f'{timestamp}_workflow_{workflow_id}_step_{i+1}_{eleven_config["Voice"]}.mp3'
                     else:
-                        audio_filename = f'workflow_{workflow_id}_step_{i+1}_{eleven_config["Voice"]}_{timestamp}.mp3'
+                        audio_filename = f'{timestamp}_workflow_{workflow_id}_step_{i+1}_{eleven_config["Voice"]}.mp3'
                     try:
                         print(f"[DEBUG] Using model: {eleven_config.get('Model', 'eleven_multilingual_v2') if eleven_config else 'eleven_multilingual_v2'}, voice_id: {voice_id}")
                         start_time = time.time()
@@ -2712,11 +2787,11 @@ if __name__ == '__main__':
                         extracted_title = extract_title_from_text(title_text)
                         clean_title = clean_filename(extracted_title)
                         if clean_title:
-                            audio_filename = f'{clean_title}.mp3'
+                            audio_filename = f'{timestamp}_{clean_title}.mp3'
                         else:
-                            audio_filename = f'merged_workflow_{workflow_id}_step_{i+1}_{timestamp}.mp3'
+                            audio_filename = f'{timestamp}_merged_workflow_{workflow_id}_step_{i+1}.mp3'
                     else:
-                        audio_filename = f'merged_workflow_{workflow_id}_step_{i+1}_{timestamp}.mp3'
+                        audio_filename = f'{timestamp}_merged_workflow_{workflow_id}_step_{i+1}.mp3'
                     
                     try:
                         start_time = time.time()
@@ -2808,14 +2883,17 @@ if __name__ == '__main__':
                             extracted_title = extract_title_from_text(title_text)
                             clean_title = clean_filename(extracted_title)
                             if clean_title:
-                                filename = f'{clean_title}.txt'
+                                filename = f'{timestamp}_{clean_title}.txt'
                             else:
-                                filename = f'workflow_{workflow_id}_step_{i+1}_{timestamp}.txt'
+                                filename = f'{timestamp}_workflow_{workflow_id}_step_{i+1}.txt'
                         else:
-                            filename = f'workflow_{workflow_id}_step_{i+1}_{timestamp}.txt'
+                            filename = f'{timestamp}_workflow_{workflow_id}_step_{i+1}.txt'
                         
                         try:
-                            file_link = upload_text_to_gcs(response, f"{folder_prefix}/{filename}")
+                            # Always normalize text before saving
+                            normalized_response = fix_text_encoding(response)
+                            normalized_response = force_clean_mojibake(normalized_response)
+                            file_link = upload_text_to_gcs(normalized_response, f"{folder_prefix}/{filename}")
                             log_msg = f"Saved response to Google Cloud Storage: {file_link}"
                         except Exception as e:
                             log_msg = f"Failed to save response to Google Cloud Storage: {e}"
