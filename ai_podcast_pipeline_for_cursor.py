@@ -25,6 +25,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 import pickle
 from google.cloud import storage
+from google.cloud import texttospeech
 print(storage.__version__)
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -255,6 +256,7 @@ SHARE_SHEET_WITH_EMAIL = 'AIConvoCast@gmail.com'
 
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 ELEVENLABS_API_KEY = os.getenv('ELEVENLABS_API_KEY')
+GOOGLE_TTS_SERVICE_ACCOUNT_FILE = 'jmio-google-api.json'  # Same service account file
 
 # Instantiate the OpenAI client once using the API key from environment variables
 if not OPENAI_API_KEY:
@@ -269,6 +271,14 @@ if not ELEVENLABS_API_KEY:
 
 print(f"✅ OpenAI API Key configured (length: {len(OPENAI_API_KEY)})")
 print(f"✅ Eleven Labs API Key configured (length: {len(ELEVENLABS_API_KEY)})")
+
+# Initialize Google Text-to-Speech client
+try:
+    google_tts_client = texttospeech.TextToSpeechClient.from_service_account_json(GOOGLE_TTS_SERVICE_ACCOUNT_FILE)
+    print(f"✅ Google Text-to-Speech client configured")
+except Exception as e:
+    print(f"⚠️ Google Text-to-Speech client initialization failed: {e}")
+    google_tts_client = None
 
 # Configure OpenAI client for predictable timeouts and no hidden retries
 client = OpenAI(api_key=OPENAI_API_KEY, timeout=75, max_retries=0)
@@ -1745,6 +1755,153 @@ def generate_voice_audio_rest(text, voice_id, output_path, eleven_config=None):
             print(f"❌ Merged audio file {merged_path} was not created!")
         return merged_path
 
+
+def generate_google_voice_audio(text, voice_name, output_path):
+    """
+    Generate audio using Google Cloud Text-to-Speech API with Chirp 3 HD voices.
+    
+    Args:
+        text (str): The text to convert to speech
+        voice_name (str): The Google voice name (e.g., "Alnilam")
+        output_path (str): The path to save the generated audio file
+    
+    Returns:
+        str: Path to the generated audio file, or None if failed
+    """
+    if not google_tts_client:
+        print("❌ Google Text-to-Speech client not initialized")
+        return None
+    
+    try:
+        print(f"[DEBUG] generate_google_voice_audio: Generating audio with Google TTS")
+        print(f"[DEBUG] Voice: {voice_name}, Text length: {len(text)}")
+        
+        # Split text into chunks for longer texts (Google TTS has a 5000 character limit)
+        chunks = split_text_into_chunks(text, max_length=4000)
+        print(f"[DEBUG] generate_google_voice_audio: Preparing to send {len(chunks)} chunk(s) to Google TTS API.")
+        
+        if len(chunks) == 1:
+            return _generate_single_google_chunk(chunks[0], voice_name, output_path)
+        else:
+            # Handle multiple chunks
+            temp_audio_paths = []
+            for idx, chunk_text in enumerate(chunks):
+                temp_path = MP3_OUTPUT_DIR / f"temp_google_audio_{int(time.time())}_{os.getpid()}_chunk_{idx+1}.mp3"
+                print(f"[DEBUG] Sending chunk {idx+1}/{len(chunks)} to Google TTS API (length: {len(chunk_text)})")
+                result = _generate_single_google_chunk(chunk_text, voice_name, temp_path)
+                if result:
+                    temp_audio_paths.append(result)
+                else:
+                    # Clean up any previous temp files
+                    for p in temp_audio_paths:
+                        try: 
+                            os.remove(p)
+                        except: 
+                            pass
+                    return None
+            
+            # Merge all chunks
+            merged_path = MP3_OUTPUT_DIR / f"merged_google_audio_{int(time.time())}_{os.getpid()}.mp3"
+            print(f"[DEBUG] Merging {len(temp_audio_paths)} Google TTS chunk files into {merged_path}")
+            merge_multiple_audio_files(temp_audio_paths, merged_path)
+            
+            # Clean up temp files
+            for p in temp_audio_paths:
+                try: 
+                    os.remove(p)
+                except: 
+                    pass
+            
+            if merged_path and os.path.exists(merged_path):
+                print(f"✅ Google TTS audio generated and merged successfully: {merged_path}")
+            else:
+                print(f"❌ Merged Google TTS audio file {merged_path} was not created!")
+            return merged_path
+            
+    except Exception as e:
+        print(f"❌ Google TTS error: {e}")
+        traceback.print_exc()
+        return None
+
+
+def _generate_single_google_chunk(text, voice_name, output_path):
+    """Generate a single audio chunk using Google TTS."""
+    try:
+        # Map voice name to full Google voice identifier
+        # Based on the documentation, Alnilam is a male voice in Chirp 3 HD
+        voice_mapping = {
+            "Alnilam": "en-US-Chirp3-HD-Alnilam",
+            "Achernar": "en-US-Chirp3-HD-Achernar",  # Female
+            "Achird": "en-US-Chirp3-HD-Achird",      # Male
+            "Algenib": "en-US-Chirp3-HD-Algenib",    # Male
+            "Algieba": "en-US-Chirp3-HD-Algieba",    # Male
+            "Aoede": "en-US-Chirp3-HD-Aoede",        # Female
+            "Autonoe": "en-US-Chirp3-HD-Autonoe",    # Female
+            "Callirrhoe": "en-US-Chirp3-HD-Callirrhoe", # Female
+            "Charon": "en-US-Chirp3-HD-Charon",      # Male
+            "Despina": "en-US-Chirp3-HD-Despina",    # Female
+            "Enceladus": "en-US-Chirp3-HD-Enceladus", # Male
+            "Erinome": "en-US-Chirp3-HD-Erinome",    # Female
+            "Fenrir": "en-US-Chirp3-HD-Fenrir",      # Male
+            "Gacrux": "en-US-Chirp3-HD-Gacrux",      # Female
+            "Iapetus": "en-US-Chirp3-HD-Iapetus",    # Male
+            "Kore": "en-US-Chirp3-HD-Kore",          # Female
+            "Laomedeia": "en-US-Chirp3-HD-Laomedeia", # Female
+            "Leda": "en-US-Chirp3-HD-Leda",          # Female
+            "Orus": "en-US-Chirp3-HD-Orus",          # Male
+            "Pulcherrima": "en-US-Chirp3-HD-Pulcherrima", # Female
+            "Puck": "en-US-Chirp3-HD-Puck",          # Male
+            "Rasalgethi": "en-US-Chirp3-HD-Rasalgethi", # Male
+            "Sadachbia": "en-US-Chirp3-HD-Sadachbia", # Male
+            "Sadaltager": "en-US-Chirp3-HD-Sadaltager", # Male
+            "Schedar": "en-US-Chirp3-HD-Schedar",    # Male
+            "Sulafat": "en-US-Chirp3-HD-Sulafat",    # Female
+            "Umbriel": "en-US-Chirp3-HD-Umbriel",    # Male
+            "Vindemiatrix": "en-US-Chirp3-HD-Vindemiatrix", # Female
+            "Zephyr": "en-US-Chirp3-HD-Zephyr",      # Female
+            "Zubenelgenubi": "en-US-Chirp3-HD-Zubenelgenubi" # Male
+        }
+        
+        full_voice_name = voice_mapping.get(voice_name, f"en-US-Chirp3-HD-{voice_name}")
+        
+        # Set up the synthesis input
+        synthesis_input = texttospeech.SynthesisInput(text=text)
+        
+        # Set up the voice parameters
+        voice = texttospeech.VoiceSelectionParams(
+            language_code="en-US",
+            name=full_voice_name
+        )
+        
+        # Set up the audio config
+        audio_config = texttospeech.AudioConfig(
+            audio_encoding=texttospeech.AudioEncoding.MP3
+        )
+        
+        start_time = time.time()
+        print(f"[DEBUG] Calling Google TTS API with voice: {full_voice_name}")
+        
+        # Perform the text-to-speech request
+        response = google_tts_client.synthesize_speech(
+            input=synthesis_input, voice=voice, audio_config=audio_config
+        )
+        
+        elapsed = time.time() - start_time
+        print(f"[DEBUG] Google TTS API call returned in {elapsed:.3f}s")
+        
+        # Write the response to the output file
+        with open(output_path, "wb") as out:
+            out.write(response.audio_content)
+            
+        print(f"✅ Google TTS audio chunk saved: {output_path}")
+        return output_path
+        
+    except Exception as e:
+        print(f"❌ Google TTS single chunk error: {e}")
+        traceback.print_exc()
+        return None
+
+
 def download_latest_text_file_from_drive_oauth(folder_id):
     """Downloads the latest text file from a Google Drive folder using OAuth."""
     from googleapiclient.http import MediaIoBaseDownload
@@ -2619,6 +2776,175 @@ if __name__ == '__main__':
                         sys.exit(1)
                     
                     # Clean up temporary file
+                    try:
+                        os.remove(temp_audio_path)
+                    except:
+                        pass
+                    
+                    # Add workflow step record
+                    workflow_steps_records.append([
+                        get_next_workflow_steps_id() + i + 0.1,
+                        output_record['Triggered Date'],
+                        workflow_id,
+                        workflow_id,
+                        workflow_code,
+                        step,
+                        text_content,
+                        audio_path,
+                        log_msg
+                    ])
+                    
+                    # Add audio path to outputs
+                    all_outputs.append(audio_path)
+                    continue  # Skip regular model call for this step
+                
+                # Check for Google Voice step (e.g., L8GV1SL4 or L8GV1SL4T2)
+                google_voice_match = re.fullmatch(r'L(\d+)GV(\d+)SL(\d+)(?:T(\d+))?', step)
+                if google_voice_match:
+                    print(f"  - Step {i+1}: {step} (Google Voice Step)")
+                    location_id = google_voice_match.group(1)
+                    voice_id = google_voice_match.group(2)
+                    save_location_id = google_voice_match.group(3)
+                    title_resp_idx = int(google_voice_match.group(4)) - 1 if google_voice_match.group(4) else None
+                    
+                    # Map voice IDs to voice names (GV1 = Alnilam)
+                    google_voice_mapping = {
+                        "1": "Alnilam",
+                        "2": "Achernar",   # Female
+                        "3": "Achird",     # Male  
+                        "4": "Algenib",    # Male
+                        "5": "Algieba",    # Male
+                        "6": "Aoede",      # Female
+                        "7": "Autonoe",    # Female
+                        "8": "Callirrhoe", # Female
+                        "9": "Charon",     # Male
+                        "10": "Despina",   # Female
+                        "11": "Enceladus", # Male
+                        "12": "Erinome",   # Female
+                        "13": "Fenrir",    # Male
+                        "14": "Gacrux",    # Female
+                        "15": "Iapetus",   # Male
+                        "16": "Kore",      # Female
+                        "17": "Laomedeia", # Female
+                        "18": "Leda",      # Female
+                        "19": "Orus",      # Male
+                        "20": "Pulcherrima", # Female
+                        "21": "Puck",      # Male
+                        "22": "Rasalgethi", # Male
+                        "23": "Sadachbia", # Male
+                        "24": "Sadaltager", # Male
+                        "25": "Schedar",   # Male
+                        "26": "Sulafat",   # Female
+                        "27": "Umbriel",   # Male
+                        "28": "Vindemiatrix", # Female
+                        "29": "Zephyr",    # Female
+                        "30": "Zubenelgenubi" # Male
+                    }
+                    
+                    voice_name = google_voice_mapping.get(voice_id, "Alnilam")
+                    
+                    # Get location details for source folder
+                    source_location = get_location_by_id(location_id)
+                    if not source_location:
+                        log_msg = f"Source location ID {location_id} not found in Locations sheet."
+                        print(f"    > {log_msg}")
+                        workflow_steps_records.append([
+                            get_next_workflow_steps_id() + i + 0.1,
+                            output_record['Triggered Date'],
+                            workflow_id,
+                            workflow_id,
+                            workflow_code,
+                            step,
+                            '',
+                            '',
+                            log_msg
+                        ])
+                        continue
+                    
+                    # Download latest text file from source location
+                    source_folder_prefix = source_location['Location']  # Use GCS folder prefix directly
+                    text_content = download_latest_text_file_from_gcs(source_folder_prefix)
+                    if not text_content:
+                        log_msg = f"Failed to download text file from source location {location_id}."
+                        print(f"    > {log_msg}")
+                        workflow_steps_records.append([
+                            get_next_workflow_steps_id() + i + 0.1,
+                            output_record['Triggered Date'],
+                            workflow_id,
+                            workflow_id,
+                            workflow_code,
+                            step,
+                            '',
+                            '',
+                            log_msg
+                        ])
+                        continue
+                    
+                    # Generate audio using Google Voice
+                    print(f"    > Generating audio with Google Voice: {voice_name}")
+                    temp_audio_path = MP3_OUTPUT_DIR / f"temp_google_audio_{workflow_id}_step_{i+1}.mp3"
+                    audio_path = generate_google_voice_audio(text_content, voice_name, temp_audio_path)
+                    
+                    if not audio_path:
+                        log_msg = f"Failed to generate audio with Google Voice for step {i+1}. Aborting workflow."
+                        print(f"    > {log_msg}")
+                        workflow_steps_records.append([
+                            get_next_workflow_steps_id() + i + 0.1,
+                            output_record['Triggered Date'],
+                            workflow_id,
+                            workflow_id,
+                            workflow_code,
+                            step,
+                            text_content,
+                            '',
+                            log_msg
+                        ])
+                        # End the entire workflow immediately
+                        print("[FATAL] Google Voice API error encountered. Exiting workflow.")
+                        sys.exit(1)
+                    
+                    # Upload audio to destination location
+                    save_location = get_location_by_id(save_location_id)
+                    if not save_location:
+                        log_msg = f"Save location ID {save_location_id} not found in Locations sheet."
+                        print(f"    > {log_msg}")
+                        workflow_steps_records.append([
+                            get_next_workflow_steps_id() + i + 0.1,
+                            output_record['Triggered Date'],
+                            workflow_id,
+                            workflow_id,
+                            workflow_code,
+                            step,
+                            text_content,
+                            audio_path,
+                            log_msg
+                        ])
+                        continue
+                    
+                    save_folder_prefix = save_location['Location']  # Use GCS folder prefix directly
+                    timestamp = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
+                    
+                    # Check if custom title is requested
+                    if title_resp_idx is not None and 0 <= title_resp_idx < len(all_outputs):
+                        title_text = all_outputs[title_resp_idx]
+                        extracted_title = extract_title_from_text(title_text)
+                        clean_title = clean_filename(extracted_title)
+                        if clean_title:
+                            audio_filename = f'{timestamp}_{clean_title}.mp3'
+                        else:
+                            audio_filename = f'{timestamp}_workflow_{workflow_id}_step_{i+1}_{voice_name}.mp3'
+                    else:
+                        audio_filename = f'workflow_{workflow_id}_step_{i+1}_{timestamp}_{voice_name}.mp3'
+                    
+                    try:
+                        audio_link = upload_file_to_gcs(audio_path, f"{save_folder_prefix}/{audio_filename}")
+                        log_msg = f"Google Voice audio generated and saved to Google Cloud Storage: {audio_link}"
+                    except Exception as e:
+                        log_msg = f"Failed to save Google Voice audio to Google Cloud Storage: {e}"
+                    
+                    print(f"    > {log_msg}")
+                    
+                    # Clean up temp file
                     try:
                         os.remove(temp_audio_path)
                     except:
