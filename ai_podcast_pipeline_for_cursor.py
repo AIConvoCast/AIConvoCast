@@ -219,10 +219,20 @@ def upload_text_to_gcs(text_content, destination_blob_name):
         before = text_content[:200]
         text_content = force_clean_mojibake(text_content)
         after = text_content[:200]
-        if 'â€™' in before:
-            print("❗ force_clean_mojibake applied before saving to GCS")
+        
+        # Check for any remaining mojibake patterns
+        mojibake_patterns = ['â€™', 'â€œ', 'â€', 'â€"', 'â€¦', 'â€¢', '\u00e2\u0080\u0099', '\u00e2\u0080\u009c']
+        found_mojibake = any(pattern in before for pattern in mojibake_patterns)
+        still_has_mojibake = any(pattern in after for pattern in mojibake_patterns)
+        
+        if found_mojibake:
+            print("❗ Mojibake detected and cleaned before saving to GCS")
             print(f"Before: {before}")
             print(f"After:  {after}")
+            if still_has_mojibake:
+                print("⚠️ WARNING: Some mojibake patterns may still remain!")
+            else:
+                print("✅ All mojibake patterns successfully cleaned")
 
         # Create temporary file
         temp_path = MP3_OUTPUT_DIR / f"temp_text_{int(time.time())}.txt"
@@ -1046,29 +1056,64 @@ def force_clean_mojibake(text):
     if not isinstance(text, str):
         text = str(text)
     
-    # First handle common mojibake patterns
+    # First handle common mojibake patterns - Enhanced with more comprehensive replacements
     replacements = {
-        'â€™': "'",
-        'â€œ': '"',
-        'â€': '"',
-        'â€"': '—',
-        'â€¦': '…',
-        'â€¢': '•',
-        'â€"': '–',
-        'â€˜': "'",
-        'Ã©': 'é',
-        'Ã': 'à',
-        'Â': '',  # Sometimes appears as a stray
-        # Additional common patterns
-        'â€‹': '',   # Zero-width space
-        'â€‚': ' ',   # En space
-        'â€ƒ': ' ',   # Em space
-        'â€‰': ' ',   # Thin space
-        'â€Š': ' ',   # Hair space
-        'â€Œ': '',   # Zero-width non-joiner
-        'â€': '',    # Zero-width joiner
-        'â€Ž': '',   # Left-to-right mark
-        'â€': '',    # Right-to-left mark
+        # Smart quotes and apostrophes (most common issue)
+        'â€™': "'",      # Right single quotation mark (U+2019) - Microsoft's issue
+        'â€˜': "'",      # Left single quotation mark (U+2018)
+        'â€œ': '"',      # Left double quotation mark (U+201C)
+        'â€': '"',      # Right double quotation mark (U+201D)
+        
+        # Alternative encodings of the same characters
+        '\u00e2\u0080\u0099': "'",  # UTF-8 bytes for right single quotation mark
+        '\u00e2\u0080\u0098': "'",  # UTF-8 bytes for left single quotation mark  
+        '\u00e2\u0080\u009c': '"',  # UTF-8 bytes for left double quotation mark
+        '\u00e2\u0080\u009d': '"',  # UTF-8 bytes for right double quotation mark
+        
+        # Dashes
+        'â€"': '—',      # Em dash (U+2014)
+        'â€"': '–',      # En dash (U+2013)
+        '\u00e2\u0080\u0094': '—',  # UTF-8 bytes for em dash
+        '\u00e2\u0080\u0093': '–',  # UTF-8 bytes for en dash
+        
+        # Other punctuation
+        'â€¦': '…',      # Horizontal ellipsis (U+2026)
+        'â€¢': '•',      # Bullet (U+2022)
+        '\u00e2\u0080\u00a6': '...',  # UTF-8 bytes for ellipsis -> simple dots
+        '\u00e2\u0080\u00a2': '•',   # UTF-8 bytes for bullet
+        
+        # Common accented characters (double-encoded)
+        'Ã©': 'é',       # é (e with acute)
+        'Ã': 'à',       # à (a with grave)
+        'Ã¡': 'á',       # á (a with acute)
+        'Ã­': 'í',       # í (i with acute)
+        'Ã³': 'ó',       # ó (o with acute)
+        'Ãº': 'ú',       # ú (u with acute)
+        'Ã±': 'ñ',       # ñ (n with tilde)
+        'Ã§': 'ç',       # ç (c with cedilla)
+        
+        # Stray characters
+        'Â': '',         # Often appears as stray character (U+00C2)
+        'Ã‚': '',        # Another stray
+        
+        # Zero-width and spacing characters
+        'â€‹': '',       # Zero width space (U+200B)
+        'â€‚': ' ',       # En space (U+2002)
+        'â€ƒ': ' ',       # Em space (U+2003)
+        'â€‰': ' ',       # Thin space (U+2009)
+        'â€Š': ' ',       # Hair space (U+200A)
+        'â€Œ': '',       # Zero width non-joiner (U+200C)
+        'â€': '',       # Zero width joiner (U+200D)
+        'â€Ž': '',       # Left-to-right mark (U+200E)
+        'â€': '',       # Right-to-left mark (U+200F)
+        
+        # Windows-1252 to UTF-8 mojibake patterns
+        '\x91': "'",     # LEFT SINGLE QUOTATION MARK in Windows-1252
+        '\x92': "'",     # RIGHT SINGLE QUOTATION MARK in Windows-1252
+        '\x93': '"',     # LEFT DOUBLE QUOTATION MARK in Windows-1252
+        '\x94': '"',     # RIGHT DOUBLE QUOTATION MARK in Windows-1252
+        '\x96': '–',     # EN DASH in Windows-1252
+        '\x97': '—',     # EM DASH in Windows-1252
     }
     
     for mojibake, correct in replacements.items():
