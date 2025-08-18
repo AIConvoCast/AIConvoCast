@@ -206,38 +206,133 @@ def download_mp3_file_from_gcs(blob_name):
 def upload_text_to_gcs(text_content, destination_blob_name):
     """Uploads text content to Google Cloud Storage and returns the public URL."""
     try:
+        print(f"🔍 upload_text_to_gcs: Starting with text length {len(str(text_content))}")
+        
         # Ensure text content is properly encoded as UTF-8
         if isinstance(text_content, bytes):
             text_content = text_content.decode('utf-8')
         elif not isinstance(text_content, str):
             text_content = str(text_content)
 
+        # COMPREHENSIVE MOJIBAKE DETECTION - Check initial state
+        initial_sample = text_content[:300]
+        print(f"🔍 Initial text sample: {initial_sample}")
+        
         # Apply encoding fix before saving
         text_content = fix_text_encoding(text_content)
 
-        # FINAL CHECK: Force clean all mojibake and print debug info
-        before = text_content[:200]
+        # AGGRESSIVE MOJIBAKE CLEANING - Apply multiple passes
+        # Pass 1: Standard force_clean_mojibake
+        before_first_pass = text_content[:300]
         text_content = force_clean_mojibake(text_content)
-        after = text_content[:200]
+        after_first_pass = text_content[:300]
         
-        # Check for any remaining mojibake patterns
-        mojibake_patterns = ['â€™', 'â€œ', 'â€', 'â€"', 'â€¦', 'â€¢', '\u00e2\u0080\u0099', '\u00e2\u0080\u009c']
-        found_mojibake = any(pattern in before for pattern in mojibake_patterns)
-        still_has_mojibake = any(pattern in after for pattern in mojibake_patterns)
+        # Pass 2: Additional aggressive pattern matching for persistent cases
+        additional_patterns = {
+            # Even more specific byte sequences that might slip through
+            '\xe2\x80\x99': "'",     # UTF-8 bytes for right single quotation mark
+            '\xe2\x80\x9c': '"',     # UTF-8 bytes for left double quotation mark
+            '\xe2\x80\x9d': '"',     # UTF-8 bytes for right double quotation mark
+            '\xe2\x80\x94': '—',     # UTF-8 bytes for em dash
+            '\xe2\x80\x93': '–',     # UTF-8 bytes for en dash
+            '\xe2\x80\xa6': '...',   # UTF-8 bytes for ellipsis
+            
+            # Raw byte representations that might appear
+            b'\xe2\x80\x99'.decode('latin1'): "'",
+            b'\xe2\x80\x9c'.decode('latin1'): '"',
+            b'\xe2\x80\x9d'.decode('latin1'): '"',
+            
+            # Windows-1252 double-encoding patterns
+            'â€™': "'",
+            'â€œ': '"',
+            'â€': '"',
+            'â€"': '—',
+            'â€"': '–',
+            'â€¦': '...',
+            'â€¢': '•',
+            'â€˜': "'",
+            
+            # ISO-8859-1 misinterpretations
+            'Ã¢â‚¬â„¢': "'",
+            'Ã¢â‚¬Å"': '"',
+            'Ã¢â‚¬Â': '"',
+        }
         
-        if found_mojibake:
-            print("❗ Mojibake detected and cleaned before saving to GCS")
-            print(f"Before: {before}")
-            print(f"After:  {after}")
-            if still_has_mojibake:
-                print("⚠️ WARNING: Some mojibake patterns may still remain!")
-            else:
-                print("✅ All mojibake patterns successfully cleaned")
+        before_second_pass = text_content[:300]
+        for bad_pattern, good_replacement in additional_patterns.items():
+            if bad_pattern in text_content:
+                text_content = text_content.replace(bad_pattern, good_replacement)
+                print(f"🔧 Replaced pattern: {repr(bad_pattern)} → {repr(good_replacement)}")
+        
+        after_second_pass = text_content[:300]
+        
+        # Pass 3: Character-by-character scan for any remaining problematic sequences
+        # Look for the specific problematic sequences mentioned by user
+        final_check_patterns = ['â€™', 'â€', 'â€œ', 'â€"', 'â€¦']
+        before_final_check = text_content
+        
+        for pattern in final_check_patterns:
+            if pattern in text_content:
+                print(f"⚠️ CRITICAL: Found persistent mojibake pattern: {repr(pattern)}")
+                # Apply more aggressive replacement
+                if pattern == 'â€™':
+                    text_content = text_content.replace(pattern, "'")
+                elif pattern == 'â€':
+                    text_content = text_content.replace(pattern, '"')
+                elif pattern == 'â€œ':
+                    text_content = text_content.replace(pattern, '"')
+                elif pattern == 'â€"':
+                    text_content = text_content.replace(pattern, '—')
+                elif pattern == 'â€¦':
+                    text_content = text_content.replace(pattern, '...')
+                print(f"🔧 AGGRESSIVE: Replaced {repr(pattern)} → appropriate character")
+        
+        # COMPREHENSIVE MOJIBAKE VERIFICATION
+        final_sample = text_content[:300]
+        all_mojibake_patterns = [
+            'â€™', 'â€œ', 'â€', 'â€"', 'â€¦', 'â€¢', 'â€˜',
+            '\u00e2\u0080\u0099', '\u00e2\u0080\u009c', '\u00e2\u0080\u009d',
+            '\xe2\x80\x99', '\xe2\x80\x9c', '\xe2\x80\x9d'
+        ]
+        
+        remaining_issues = [pattern for pattern in all_mojibake_patterns if pattern in text_content]
+        
+        print(f"🔍 Mojibake cleaning summary:")
+        print(f"   Initial:     {initial_sample}")
+        print(f"   After pass 1: {after_first_pass}")
+        print(f"   After pass 2: {after_second_pass}")
+        print(f"   Final:       {final_sample}")
+        print(f"   Remaining mojibake patterns: {len(remaining_issues)}")
+        
+        if remaining_issues:
+            print(f"⚠️ CRITICAL WARNING: {len(remaining_issues)} mojibake patterns still present!")
+            for issue in remaining_issues:
+                print(f"   - Found: {repr(issue)}")
+        else:
+            print("✅ All known mojibake patterns successfully removed")
 
-        # Create temporary file
+        # Verify the text before writing to file
+        print(f"🔍 Final verification - text length: {len(text_content)}")
+        print(f"🔍 Final text sample: {text_content[:200]}{'...' if len(text_content) > 200 else ''}")
+
+        # Create temporary file with explicit UTF-8 encoding
         temp_path = MP3_OUTPUT_DIR / f"temp_text_{int(time.time())}.txt"
-        with open(temp_path, 'w', encoding='utf-8') as f:
+        with open(temp_path, 'w', encoding='utf-8', newline='') as f:
             f.write(text_content)
+        
+        # Verify the file was written correctly
+        with open(temp_path, 'r', encoding='utf-8') as f:
+            read_back = f.read()
+        
+        if read_back != text_content:
+            print("⚠️ WARNING: File read-back doesn't match written content!")
+        
+        # Check for mojibake in the read-back content
+        read_back_issues = [pattern for pattern in all_mojibake_patterns if pattern in read_back]
+        if read_back_issues:
+            print(f"⚠️ CRITICAL: Mojibake found in file read-back: {read_back_issues}")
+        else:
+            print("✅ File verification passed - no mojibake in written file")
 
         # Upload to GCS
         result = upload_file_to_gcs(temp_path, destination_blob_name)
@@ -1404,7 +1499,22 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                 # Clean up timer if it exists
                 if timer:
                     timer.cancel()
-                return fix_text_encoding(response.choices[0].message.content.strip())
+                raw_response = response.choices[0].message.content.strip()
+                # Apply comprehensive encoding fixes to OpenAI response
+                fixed_response = fix_text_encoding(raw_response)
+                before_mojibake_fix = fixed_response[:200]
+                fixed_response = force_clean_mojibake(fixed_response)
+                after_mojibake_fix = fixed_response[:200]
+                
+                # Log if mojibake was found and fixed
+                mojibake_patterns = ['â€™', 'â€œ', 'â€', '\u00e2\u0080\u0099', '\u00e2\u0080\u009c']
+                had_mojibake = any(pattern in before_mojibake_fix for pattern in mojibake_patterns)
+                if had_mojibake:
+                    print("🔧 OpenAI response mojibake detected and cleaned")
+                    print(f"Before: {before_mojibake_fix}")
+                    print(f"After:  {after_mojibake_fix}")
+                
+                return fixed_response
             log_error(f"OpenAI ChatCompletions: Unexpected empty or malformed response. Full response: {response}")
             sys.exit(1)
     except Exception as e:
@@ -1480,7 +1590,21 @@ def call_anthropic_model(prompt, model="claude-3-sonnet", temperature=0.8, web_s
             if text_blocks:
                 # Join all text blocks into a single response
                 full_response = '\n\n'.join(text_blocks)
-                return fix_text_encoding(full_response)
+                # Apply comprehensive encoding fixes to Anthropic response
+                fixed_response = fix_text_encoding(full_response)
+                before_mojibake_fix = fixed_response[:200]
+                fixed_response = force_clean_mojibake(fixed_response)
+                after_mojibake_fix = fixed_response[:200]
+                
+                # Log if mojibake was found and fixed
+                mojibake_patterns = ['â€™', 'â€œ', 'â€', '\u00e2\u0080\u0099', '\u00e2\u0080\u009c']
+                had_mojibake = any(pattern in before_mojibake_fix for pattern in mojibake_patterns)
+                if had_mojibake:
+                    print("🔧 Anthropic response mojibake detected and cleaned")
+                    print(f"Before: {before_mojibake_fix}")
+                    print(f"After:  {after_mojibake_fix}")
+                
+                return fixed_response
         
         print(f"Anthropic: Unexpected empty or malformed response. Full response: {response}")
         sys.exit(1)
@@ -1515,7 +1639,21 @@ def call_google_model(prompt, model="gemini-2.0-flash", temperature=0.8):
         
         if hasattr(response, 'text'):
             raw_response = response.text.strip()
-            return fix_text_encoding(raw_response)
+            # Apply comprehensive encoding fixes to Google Gemini response
+            fixed_response = fix_text_encoding(raw_response)
+            before_mojibake_fix = fixed_response[:200]
+            fixed_response = force_clean_mojibake(fixed_response)
+            after_mojibake_fix = fixed_response[:200]
+            
+            # Log if mojibake was found and fixed
+            mojibake_patterns = ['â€™', 'â€œ', 'â€', '\u00e2\u0080\u0099', '\u00e2\u0080\u009c']
+            had_mojibake = any(pattern in before_mojibake_fix for pattern in mojibake_patterns)
+            if had_mojibake:
+                print("🔧 Google Gemini response mojibake detected and cleaned")
+                print(f"Before: {before_mojibake_fix}")
+                print(f"After:  {after_mojibake_fix}")
+            
+            return fixed_response
         
         print(f"Google Gemini: Unexpected empty or malformed response. Full response: {response}")
         sys.exit(1)
@@ -2612,9 +2750,50 @@ if __name__ == '__main__':
                     log_msg = ''
                     if 0 <= resp_idx < len(all_outputs):
                         response_to_save = all_outputs[resp_idx]
+                        
+                        # COMPREHENSIVE ENCODING AND MOJIBAKE FIXING
+                        print(f"🔍 Save-only step: Processing response {resp_idx+1}")
+                        original_sample = str(response_to_save)[:200]
+                        print(f"🔍 Original response sample: {original_sample}")
+                        
                         # Always fix encoding before saving
                         response_to_save = fix_text_encoding(response_to_save)
+                        after_encoding_fix = str(response_to_save)[:200]
+                        
                         response_to_save = force_clean_mojibake(response_to_save)
+                        after_mojibake_fix = str(response_to_save)[:200]
+                        
+                        # Additional aggressive cleaning for persistent patterns
+                        critical_patterns = ['â€™', 'â€', 'â€œ', 'â€"', 'â€¦']
+                        found_critical = []
+                        for pattern in critical_patterns:
+                            if pattern in response_to_save:
+                                found_critical.append(pattern)
+                                if pattern == 'â€™':
+                                    response_to_save = response_to_save.replace(pattern, "'")
+                                elif pattern == 'â€':
+                                    response_to_save = response_to_save.replace(pattern, '"')
+                                elif pattern == 'â€œ':
+                                    response_to_save = response_to_save.replace(pattern, '"')
+                                elif pattern == 'â€"':
+                                    response_to_save = response_to_save.replace(pattern, '—')
+                                elif pattern == 'â€¦':
+                                    response_to_save = response_to_save.replace(pattern, '...')
+                        
+                        if found_critical:
+                            print(f"🔧 Save-only step: Found and cleaned critical patterns: {found_critical}")
+                        
+                        final_sample = str(response_to_save)[:200]
+                        print(f"🔍 After encoding fix: {after_encoding_fix}")
+                        print(f"🔍 After mojibake fix: {after_mojibake_fix}")
+                        print(f"🔍 Final cleaned text: {final_sample}")
+                        
+                        # Final verification
+                        remaining_issues = [p for p in critical_patterns if p in response_to_save]
+                        if remaining_issues:
+                            print(f"⚠️ CRITICAL: Save-only step still has mojibake: {remaining_issues}")
+                        else:
+                            print("✅ Save-only step: Text is clean, ready for saving")
                         loc_row = locations_df[locations_df['Location ID'].astype(str) == location_id]
                         if not loc_row.empty:
                             folder_url = loc_row.iloc[0]['Location']
