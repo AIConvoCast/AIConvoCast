@@ -1377,8 +1377,8 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
     
     # Timeout handling
     timeout_occurred = False
-    # Use a strict 120s timeout for any web_search; otherwise 15 minutes for deep-research models
-    configured_timeout = 300 if web_search else (900 if "deep-research" in model else None)
+    # Use a strict 500s timeout for any web_search; otherwise 15 minutes for deep-research models
+    configured_timeout = 500 if web_search else (900 if "deep-research" in model else None)
     
     def timeout_handler():
         nonlocal timeout_occurred
