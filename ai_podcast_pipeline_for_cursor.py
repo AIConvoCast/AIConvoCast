@@ -520,7 +520,7 @@ except Exception as e:
     google_tts_client = None
 
 # Configure OpenAI client for predictable timeouts and no hidden retries
-client = OpenAI(api_key=OPENAI_API_KEY, timeout=75, max_retries=0)
+client = OpenAI(api_key=OPENAI_API_KEY, timeout=600, max_retries=0)
 
 print(f"[DEBUG] Python version: {sys.version}")
 print(f"[DEBUG] requests version: {requests.__version__}")
@@ -930,7 +930,7 @@ Topic to generate Title and Description based:'''],
 def fetch_openai_models():
     """Fetch the latest models from OpenAI API."""
     try:
-        client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'), timeout=75, max_retries=0)
+        client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'), timeout=600, max_retries=0)
         models_response = client.models.list()
         
         # Filter for text-based chat models (excluding vision, audio, embedding models)
@@ -1377,8 +1377,8 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
     
     # Timeout handling
     timeout_occurred = False
-    # Use a strict 500s timeout for any web_search; otherwise 15 minutes for deep-research models
-    configured_timeout = 500 if web_search else (900 if "deep-research" in model else None)
+    # Use a strict 700s timeout for any web_search; otherwise 15 minutes for deep-research models
+    configured_timeout = 700 if web_search else (900 if "deep-research" in model else None)
     
     def timeout_handler():
         nonlocal timeout_occurred
