@@ -51,6 +51,96 @@ def get_gcs_client():
 def upload_file_to_gcs(file_path, destination_blob_name):
     """Upload a file to Google Cloud Storage and return the public URL."""
     try:
+        # FINAL MOJIBAKE PROTECTION FOR TEXT FILES
+        if str(file_path).endswith('.txt') or destination_blob_name.endswith('.txt'):
+            print(f"🔍 upload_file_to_gcs: Detected text file upload, applying final mojibake protection")
+            print(f"🔍 File: {file_path} → {destination_blob_name}")
+            
+            # Read the file content and apply comprehensive cleaning
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                
+                original_sample = content[:200]
+                print(f"🔍 Original file content sample: {original_sample}")
+                
+                # Apply all our encoding fixes
+                content = fix_text_encoding(content)
+                content = force_clean_mojibake(content)
+                
+                # ULTRA-AGGRESSIVE FINAL CLEANING
+                ultra_aggressive_patterns = {
+                    # Visual mojibake patterns
+                    'â€™': "'",    # Right single quotation mark
+                    'â€œ': '"',    # Left double quotation mark  
+                    'â€': '"',     # Right double quotation mark
+                    'â€"': '—',    # Em dash
+                    'â€"': '–',    # En dash
+                    'â€¦': '...',  # Ellipsis
+                    'â€¢': '•',    # Bullet
+                    'â€˜': "'",    # Left single quotation mark
+                    
+                    # UTF-8 byte sequences
+                    '\u00e2\u0080\u0099': "'",  # Right single quotation mark
+                    '\u00e2\u0080\u009c': '"',  # Left double quotation mark
+                    '\u00e2\u0080\u009d': '"',  # Right double quotation mark
+                    '\u00e2\u0080\u0094': '—',  # Em dash
+                    '\u00e2\u0080\u0093': '–',  # En dash
+                    '\u00e2\u0080\u00a6': '...', # Ellipsis
+                    
+                    # Raw UTF-8 bytes
+                    '\xe2\x80\x99': "'",
+                    '\xe2\x80\x9c': '"',
+                    '\xe2\x80\x9d': '"',
+                    '\xe2\x80\x94': '—',
+                    '\xe2\x80\x93': '–',
+                    '\xe2\x80\xa6': '...',
+                    
+                    # Windows-1252 patterns
+                    '\x91': "'",  # LEFT SINGLE QUOTATION MARK
+                    '\x92': "'",  # RIGHT SINGLE QUOTATION MARK
+                    '\x93': '"',  # LEFT DOUBLE QUOTATION MARK
+                    '\x94': '"',  # RIGHT DOUBLE QUOTATION MARK
+                    '\x96': '–',  # EN DASH
+                    '\x97': '—',  # EM DASH
+                }
+                
+                # Apply ultra-aggressive cleaning
+                changes_made = 0
+                for bad_pattern, good_replacement in ultra_aggressive_patterns.items():
+                    if bad_pattern in content:
+                        content = content.replace(bad_pattern, good_replacement)
+                        changes_made += 1
+                        print(f"🔧 ULTRA-AGGRESSIVE: Replaced {repr(bad_pattern)} → {repr(good_replacement)}")
+                
+                if changes_made > 0:
+                    print(f"🔧 ULTRA-AGGRESSIVE: Made {changes_made} mojibake replacements")
+                
+                # FINAL VERIFICATION
+                final_sample = content[:200]
+                print(f"🔍 Final cleaned content sample: {final_sample}")
+                
+                # Check for any remaining mojibake
+                remaining_mojibake = []
+                for pattern in ultra_aggressive_patterns.keys():
+                    if pattern in content:
+                        remaining_mojibake.append(pattern)
+                
+                if remaining_mojibake:
+                    print(f"⚠️ CRITICAL WARNING: Still found mojibake after ultra-aggressive cleaning: {remaining_mojibake}")
+                else:
+                    print("✅ ULTRA-AGGRESSIVE: File is completely clean of all mojibake patterns")
+                
+                # Write the cleaned content back to the file
+                with open(file_path, 'w', encoding='utf-8', newline='') as f:
+                    f.write(content)
+                
+                print(f"✅ Text file cleaned and ready for GCS upload")
+                
+            except Exception as e:
+                print(f"⚠️ Warning: Could not apply final mojibake protection to text file: {e}")
+                # Continue with upload even if cleaning fails
+        
         client = get_gcs_client()
         if not client:
             return None
