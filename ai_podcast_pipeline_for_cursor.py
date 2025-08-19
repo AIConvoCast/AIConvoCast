@@ -1480,7 +1480,7 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                 return "⏰ Research timeout reached. Please try with a more specific request or use a different model."
             
             # Attempt with basic limits; handle rate limits with a quick backoff and reduced budget
-            resp_max_tokens = 3000
+            resp_max_tokens = 10000
             try:
                 _model_lower = str(model).lower()
                 _is_gpt5 = _model_lower.startswith("gpt-5")
@@ -1496,13 +1496,16 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                 responses_kwargs = {
                     "model": model,
                     "tools": [tools_config],
-                    "input": [{"role": "user",
-                                "content": [{"type": "input_text", "text": limited_prompt}]}],
+                    # Use plain string input per recommended API usage
+                    "input": limited_prompt,
+                    "tool_choice": "auto",
                     "text": text_cfg,
                     "max_output_tokens": resp_max_tokens
                 }
-                # Do not request reasoning traces to avoid encrypted reasoning wrappers
-                # (We want the assistant's final answer only.)
+                # Add reasoning effort for GPT-5 internal thinking, but don't request summaries or encrypted content
+                if _is_gpt5:
+                    responses_kwargs["reasoning"] = {"effort": "low"}
+                    # DO NOT add: reasoning={"summary": "auto"} or include=["reasoning.encrypted_content"]
 
                 response = client.responses.create(**responses_kwargs)
             except Exception as e:
@@ -1525,12 +1528,15 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                     responses_kwargs_retry = {
                         "model": model,
                         "tools": [tools_config],
-                        "input": [{"role": "user",
-                                    "content": [{"type": "input_text", "text": limited_prompt[:1000]}]}],
+                        # Use plain string input per recommended API usage (truncated on retry)
+                        "input": limited_prompt[:1000],
+                        "tool_choice": "auto",
                         "text": text_cfg_retry,
                         "max_output_tokens": resp_max_tokens
                     }
-                    # Do not request reasoning traces on retry either
+                    # Add reasoning effort for GPT-5 on retry too, but no summaries/encrypted content
+                    if _is_gpt5:
+                        responses_kwargs_retry["reasoning"] = {"effort": "low"}
 
                     response = client.responses.create(**responses_kwargs_retry)
                 else:
@@ -1539,16 +1545,39 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
             if hasattr(response, 'error') and response.error:
                 log_error(f"OpenAI Responses error: {response.error}\nFull response: {response}")
                 sys.exit(1)
+            # Use the recommended approach: extract output_text directly
+            print("[DEBUG] Using GPT-5 Responses API output_text extraction...")
+            
+            # First try the direct output_text attribute (recommended approach)
+            if hasattr(response, 'output_text') and response.output_text:
+                raw_response = response.output_text.strip()
+                print(f"[DEBUG] Found direct output_text: {raw_response[:100]}...")
+                if timer:
+                    timer.cancel()
+                # Apply encoding fixes and mojibake cleaning
+                fixed_response = fix_text_encoding(raw_response)
+                before_mojibake_fix = fixed_response[:200]
+                fixed_response = force_clean_mojibake(fixed_response)
+                after_mojibake_fix = fixed_response[:200]
+                
+                # Log mojibake detection
+                if before_mojibake_fix != after_mojibake_fix:
+                    print(f"🔧 Mojibake detected and cleaned in GPT-5 response")
+                    print(f"Before: {before_mojibake_fix}")
+                    print(f"After: {after_mojibake_fix}")
+                
+                return fixed_response
+            
+            # Fallback: Parse output items but only look for assistant messages (no reasoning items)
             try:
-                print("[DEBUG] Parsing GPT-5 responses API format...")
+                print("[DEBUG] Fallback: Parsing output items for assistant messages only...")
                 text_responses = []
-                reasoning_summaries = []
                 
                 for item in getattr(response, 'output', []):
                     item_type = getattr(item, 'type', None)
                     print(f"[DEBUG] Processing output item: type={item_type}")
                     
-                    # Look for assistant messages with output_text
+                    # Only look for assistant messages - ignore reasoning items to avoid encrypted content
                     role = getattr(item, 'role', None)
                     if role == "assistant":
                         content_list = getattr(item, 'content', None)
@@ -1558,54 +1587,59 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                                 text = getattr(content, 'text', None)
                                 if ctype == "output_text" and text:
                                     text_responses.append(text.strip())
-                    
-                    # Look for reasoning items with summaries
-                    elif item_type == "reasoning":
-                        # Check for summary content
-                        summary = getattr(item, 'summary', None)
-                        if summary:
-                            for summary_item in summary:
-                                if hasattr(summary_item, 'text') and summary_item.text:
-                                    reasoning_summaries.append(summary_item.text.strip())
-                        
-                        # Check for content field
-                        content_field = getattr(item, 'content', None)
-                        if content_field:
-                            for content_item in content_field:
-                                if hasattr(content_item, 'text') and content_item.text:
-                                    reasoning_summaries.append(content_item.text.strip())
                 
-                # Return text responses if available, otherwise reasoning summaries
                 if text_responses:
                     combined_response = '\n\n'.join(text_responses)
-                    print(f"[DEBUG] Found {len(text_responses)} text responses")
+                    print(f"[DEBUG] Found {len(text_responses)} assistant text responses")
                     if timer:
                         timer.cancel()
-                    return fix_text_encoding(combined_response)
-                elif reasoning_summaries:
-                    combined_response = '\n\n'.join(reasoning_summaries)
-                    print(f"[DEBUG] Found {len(reasoning_summaries)} reasoning summaries")
+                    # Apply encoding fixes and mojibake cleaning
+                    fixed_response = fix_text_encoding(combined_response)
+                    fixed_response = force_clean_mojibake(fixed_response)
+                    return fixed_response
+                
+                # If we get here, there might be an issue with the response format
+                print("[DEBUG] No assistant text responses found - checking response structure")
+                if hasattr(response, 'output'):
+                    output_items = getattr(response, 'output', [])
+                    print(f"[DEBUG] Response has {len(output_items)} output items")
+                    for i, item in enumerate(output_items):
+                        item_type = getattr(item, 'type', 'unknown')
+                        role = getattr(item, 'role', 'unknown')
+                        print(f"[DEBUG] Item {i}: type={item_type}, role={role}")
+                
+                # Last resort - issue a simplified follow-up call without tools to force final text
+                print("[DEBUG] Issuing simplified follow-up Responses API call without tools to force final text...")
+                followup_kwargs = {
+                    "model": model,
+                    "input": limited_prompt,
+                    "text": {"format": {"type": "text"}, "verbosity": "medium"},
+                    "max_output_tokens": 10000
+                }
+                if str(model).lower().startswith("gpt-5"):
+                    followup_kwargs["reasoning"] = {"effort": "low"}
+                followup_response = client.responses.create(**followup_kwargs)
+                if hasattr(followup_response, 'output_text') and followup_response.output_text:
+                    final_text = followup_response.output_text.strip()
                     if timer:
                         timer.cancel()
-                    return fix_text_encoding(combined_response)
+                    final_text = fix_text_encoding(final_text)
+                    final_text = force_clean_mojibake(final_text)
+                    print("[DEBUG] Follow-up call produced output_text successfully")
+                    return final_text
                 
-                # If no readable content found, check if this is due to reasoning being encrypted
-                reasoning_items = [item for item in getattr(response, 'output', []) if getattr(item, 'type', None) == 'reasoning']
-                web_search_items = [item for item in getattr(response, 'output', []) if getattr(item, 'type', None) == 'web_search_call']
+                # If still nothing accessible, return an error message
+                error_response = "GPT-5 response received but no accessible text content found. The model may not have generated a proper response or the response format is unexpected."
+                print(f"[DEBUG] Returning error response: {error_response}")
+                if timer:
+                    timer.cancel()
+                return error_response
                 
-                if reasoning_items and web_search_items:
-                    # GPT-5 performed web searches and reasoning but content is encrypted
-                    placeholder_response = f"[GPT-5 Response] Completed {len(web_search_items)} web searches and {len(reasoning_items)} reasoning steps. The model processed your request but the reasoning content is encrypted and not directly accessible. Please try adjusting the model configuration or use a different approach."
-                    print(f"[DEBUG] Generated placeholder for encrypted reasoning response")
-                    if timer:
-                        timer.cancel()
-                    return placeholder_response
-                
-                log_error(f"OpenAI Responses: Unexpected empty or malformed response. Full response: {response}")
-                sys.exit(1)
-            except Exception as e:
-                log_error(f"Error parsing OpenAI web search response: {e}\nRaw response: {response}")
-                sys.exit(1)
+            except Exception as parse_error:
+                log_error(f"Error parsing GPT-5 response structure: {parse_error}")
+                if timer:
+                    timer.cancel()
+                return f"Error parsing GPT-5 response: {parse_error}"
         # Case 3: Standard Chat Completions
         else:
             # Always omit temperature for models that don't support custom temperature
