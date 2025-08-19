@@ -1489,7 +1489,7 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                 text_cfg = {"format": {"type": "text"}}
                 # Set verbosity per model family capabilities
                 if _is_gpt5:
-                    text_cfg["verbosity"] = "low"
+                    text_cfg["verbosity"] = "medium"
                 elif _is_gpt4o:
                     text_cfg["verbosity"] = "medium"
 
@@ -1501,9 +1501,8 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                     "text": text_cfg,
                     "max_output_tokens": resp_max_tokens
                 }
-                # Include reasoning.effort only for GPT-5 models
-                if _is_gpt5:
-                    responses_kwargs["reasoning"] = {"effort": "low"}
+                # Do not request reasoning traces to avoid encrypted reasoning wrappers
+                # (We want the assistant's final answer only.)
 
                 response = client.responses.create(**responses_kwargs)
             except Exception as e:
@@ -1519,7 +1518,7 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                     # Retry once with reduced budgets and truncated prompt
                     text_cfg_retry = {"format": {"type": "text"}}
                     if _is_gpt5:
-                        text_cfg_retry["verbosity"] = "low"
+                        text_cfg_retry["verbosity"] = "medium"
                     elif _is_gpt4o:
                         text_cfg_retry["verbosity"] = "medium"
 
@@ -1531,8 +1530,7 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                         "text": text_cfg_retry,
                         "max_output_tokens": resp_max_tokens
                     }
-                    if _is_gpt5:
-                        responses_kwargs_retry["reasoning"] = {"effort": "low"}
+                    # Do not request reasoning traces on retry either
 
                     response = client.responses.create(**responses_kwargs_retry)
                 else:

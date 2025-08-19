@@ -3,10 +3,13 @@ const RSS_FEED_URL = "https://anchor.fm/s/101530384/podcast/rss";
 const CACHE_KEY = "aiconvocast_rss_cache";
 const CACHE_TIME = 2 * 60 * 60 * 1000; // 2 hours
 
+// Decode HTML entities (e.g., &#39;, &quot;) and strip any HTML tags safely
 function sanitizeHTML(str) {
+  if (str == null) return '';
   const temp = document.createElement('div');
-  temp.textContent = str;
-  return temp.innerHTML;
+  // Assign as HTML so entities are decoded, then read text to avoid rendering tags
+  temp.innerHTML = String(str);
+  return temp.textContent || '';
 }
 
 function formatDate(dateStr) {
@@ -53,7 +56,7 @@ function renderEpisodes(doc) {
     const title = sanitizeHTML(latest.querySelector("title")?.textContent || "Untitled");
     const pubDate = formatDate(latest.querySelector("pubDate")?.textContent || "");
     const descRaw = latest.querySelector("description")?.textContent || "";
-    const desc = sanitizeHTML(descRaw.replace(/<[^>]+>/g, ''));
+    const desc = sanitizeHTML(descRaw);
     const audioUrl = latest.querySelector("enclosure")?.getAttribute("url") || "";
     let imgUrl = getImageFromItem(latest);
     if (!imgUrl || imgUrl.includes('placeholder')) {
@@ -82,7 +85,7 @@ function renderEpisodes(doc) {
     const title = sanitizeHTML(item.querySelector("title")?.textContent || "Untitled");
     const pubDate = formatDate(item.querySelector("pubDate")?.textContent || "");
     const descRaw = item.querySelector("description")?.textContent || "";
-    const desc = sanitizeHTML(descRaw.replace(/<[^>]+>/g, ''));
+    const desc = sanitizeHTML(descRaw);
     const excerptText = excerpt(desc, 100);
     const audioUrl = item.querySelector("enclosure")?.getAttribute("url") || "";
     let imgUrl = getImageFromItem(item);
