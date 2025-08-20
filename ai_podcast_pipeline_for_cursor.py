@@ -148,7 +148,19 @@ def upload_file_to_gcs(file_path, destination_blob_name):
         bucket = client.bucket(GCS_BUCKET_NAME)
         blob = bucket.blob(destination_blob_name)
         
-        blob.upload_from_filename(file_path)
+        # Ensure correct Content-Type for text files so browsers use UTF-8
+        if str(file_path).endswith('.txt') or destination_blob_name.endswith('.txt'):
+            blob.upload_from_filename(file_path, content_type='text/plain; charset=utf-8')
+            try:
+                blob.content_type = 'text/plain; charset=utf-8'
+                # Optional: avoid stale cached incorrect headers
+                blob.cache_control = 'no-cache'
+                blob.patch()
+                print("✅ Set GCS metadata: Content-Type text/plain; charset=utf-8, Cache-Control no-cache")
+            except Exception as meta_err:
+                print(f"⚠️ Warning: Failed to set GCS metadata for text file: {meta_err}")
+        else:
+            blob.upload_from_filename(file_path)
         
         # For uniform bucket-level access, we don't need to make individual objects public
         # The bucket's IAM permissions control access
@@ -2968,6 +2980,10 @@ if __name__ == '__main__':
         if not title:
             return None
         
+        # Remove common leading tokens like 'Podcast', 'Podcast_', 'Podcast-', 'Podcast:' anywhere in the title
+        # Do this before generic symbol cleanup to avoid leaving stray separators
+        title = re.sub(r'(?i)\bpodcast\b[_\-:\s]*', '', str(title))
+
         # Remove special characters, keep only alphanumeric, spaces, hyphens, underscores
         cleaned = re.sub(r'[^\w\s\-]', '', title)
         # Replace multiple spaces/newlines with single space
