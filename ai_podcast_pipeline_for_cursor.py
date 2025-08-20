@@ -1504,7 +1504,7 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                 }
                 # Add reasoning effort for GPT-5 internal thinking, but don't request summaries or encrypted content
                 if _is_gpt5:
-                    responses_kwargs["reasoning"] = {"effort": "low"}
+                    responses_kwargs["reasoning"] = {"effort": "medium"}
                     # DO NOT add: reasoning={"summary": "auto"} or include=["reasoning.encrypted_content"]
 
                 response = client.responses.create(**responses_kwargs)
@@ -1536,7 +1536,7 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                     }
                     # Add reasoning effort for GPT-5 on retry too, but no summaries/encrypted content
                     if _is_gpt5:
-                        responses_kwargs_retry["reasoning"] = {"effort": "low"}
+                        responses_kwargs_retry["reasoning"] = {"effort": "medium"}
 
                     response = client.responses.create(**responses_kwargs_retry)
                 else:
@@ -1617,7 +1617,7 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                     "max_output_tokens": 10000
                 }
                 if str(model).lower().startswith("gpt-5"):
-                    followup_kwargs["reasoning"] = {"effort": "low"}
+                    followup_kwargs["reasoning"] = {"effort": "medium"}
                 followup_response = client.responses.create(**followup_kwargs)
                 if hasattr(followup_response, 'output_text') and followup_response.output_text:
                     final_text = followup_response.output_text.strip()
