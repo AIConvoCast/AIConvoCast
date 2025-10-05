@@ -6,6 +6,14 @@
   <meta name="description" content="Contact the AI Convo Cast team. We welcome your feedback, questions, and partnership inquiries.">
   <meta name="robots" content="index,follow">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="canonical" href="https://aiconvocast.com/contact.html">
+  <meta name="theme-color" content="#0b132b">
+  <meta name="author" content="AI Convo Cast">
+  <!-- Security meta (best effort for static hosting) -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' https: data:; script-src 'self' 'unsafe-inline' https:; style-src 'self' 'unsafe-inline' https:; font-src https: data:; connect-src https:; frame-ancestors 'none'; base-uri 'self'; form-action https://formspree.io 'self'; upgrade-insecure-requests">
+  <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin">
+  <meta http-equiv="X-Frame-Options" content="DENY">
+  <meta http-equiv="X-Content-Type-Options" content="nosniff">
   <link rel="icon" href="favicon.ico">
   <link rel="apple-touch-icon" href="favicon.ico">
   <link rel="manifest" href="manifest.json">
@@ -85,7 +93,9 @@
       fetch(form.action, {
         method: 'POST',
         body: data,
-        headers: { 'Accept': 'application/json' }
+        headers: { 'Accept': 'application/json' },
+        mode: 'cors',
+        credentials: 'omit'
       }).then(function(resp) {
         if (resp.ok) {
           form.style.display = 'none';

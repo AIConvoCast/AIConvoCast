@@ -924,7 +924,7 @@ Topic to generate Title and Description based:'''],
     ], columns=["Location ID", "Location Description", "Type", "File Or Folder", "Location", "Latest"])
 
     eleven = pd.DataFrame([
-        [1, "Liam", "eleven_multilingual_v2", 0.39, 0.7, 0.5, 1.06]
+        [1, "Liam", "eleven_v3", 0.5, 0.7, 0.5, 1.06]
     ], columns=["Eleven ID", "Voice", "Model", "Stability", "Similarity Boost", "Style", "Speed"])
 
     return {
@@ -1992,10 +1992,11 @@ def call_google_model(prompt, model="gemini-2.0-flash", temperature=0.8):
         sys.exit(1)
 
 
-def split_text_into_chunks(text, max_length=2500):
+def split_text_into_chunks(text, max_length=2900):
     """
     Splits text into chunks of up to max_length characters, preferably on sentence boundaries.
     If a sentence is longer than max_length, it is split into hard chunks.
+    Default max_length is 2900 to stay under Eleven Labs v3's 3000 character limit.
     """
     import re
     
@@ -2074,29 +2075,29 @@ def generate_voice_audio(text, voice_id, output_path, eleven_config=None):
     """
     try:
         from elevenlabs.client import ElevenLabs
-        # Split text into <=2500 character chunks
-        chunks = split_text_into_chunks(text, max_length=2500)
+        # Split text into <=2900 character chunks (Eleven Labs v3 limit is 3000)
+        chunks = split_text_into_chunks(text, max_length=2900)
         print(f"[DEBUG] generate_voice_audio: Preparing to send {len(chunks)} chunk(s) to Eleven Labs API.")
         if len(chunks) == 1:
             chunk_text = chunks[0]
             client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
             if eleven_config:
                 voice_settings = {
-                    "stability": float(eleven_config.get('Stability', 0.39)),
+                    "stability": float(eleven_config.get('Stability', 0.5)),  # v3: must be 0.0, 0.5, or 1.0
                     "similarity_boost": float(eleven_config.get('Similarity Boost', 0.7)),
                     "style": float(eleven_config.get('Style', 0.5)),
                     "speed": float(eleven_config.get('Speed', 1.06))
                 }
                 try:
-                    print(f"[DEBUG] Using model: {eleven_config.get('Model', 'eleven_multilingual_v2') if eleven_config else 'eleven_multilingual_v2'}, voice_id: {voice_id}")
-                    if len(chunk_text) > 2000:
+                    print(f"[DEBUG] Using model: {eleven_config.get('Model', 'eleven_v3') if eleven_config else 'eleven_v3'}, voice_id: {voice_id}")
+                    if len(chunk_text) > 2900:
                         print(f"[WARNING] Chunk is very long ({len(chunk_text)} chars). Consider splitting further if you see timeouts.")
                     start_time = time.time()
                     audio_stream = client.text_to_speech.convert(
                         text=chunk_text,
                         voice_id=voice_id,
                         voice_settings=voice_settings,
-                        model_id=eleven_config.get('Model', 'eleven_multilingual_v2')
+                        model_id=eleven_config.get('Model', 'eleven_v3')
                     )
                     elapsed = time.time() - start_time
                     print(f"[DEBUG] ElevenLabs SDK call returned in {elapsed:.3f}s (streaming)")
@@ -2108,14 +2109,14 @@ def generate_voice_audio(text, voice_id, output_path, eleven_config=None):
                     return generate_voice_audio_rest(text, voice_id, output_path, eleven_config)
             else:
                 try:
-                    print(f"[DEBUG] Using model: {eleven_config.get('Model', 'eleven_multilingual_v2') if eleven_config else 'eleven_multilingual_v2'}, voice_id: {voice_id}")
-                    if len(chunk_text) > 2000:
+                    print(f"[DEBUG] Using model: {eleven_config.get('Model', 'eleven_v3') if eleven_config else 'eleven_v3'}, voice_id: {voice_id}")
+                    if len(chunk_text) > 2900:
                         print(f"[WARNING] Chunk is very long ({len(chunk_text)} chars). Consider splitting further if you see timeouts.")
                     start_time = time.time()
                     audio_stream = client.text_to_speech.convert(
                         text=chunk_text,
                         voice_id=voice_id,
-                        model_id="eleven_multilingual_v2"
+                        model_id="eleven_v3"
                     )
                     elapsed = time.time() - start_time
                     print(f"[DEBUG] ElevenLabs SDK call returned in {elapsed:.3f}s (streaming)")
@@ -2140,21 +2141,21 @@ def generate_voice_audio(text, voice_id, output_path, eleven_config=None):
                 print(f"[DEBUG] Chunk {idx+1} preview: {chunk_text[:100]}")
                 if eleven_config:
                     voice_settings = {
-                        "stability": float(eleven_config.get('Stability', 0.39)),
+                        "stability": float(eleven_config.get('Stability', 0.5)),  # v3: must be 0.0, 0.5, or 1.0
                         "similarity_boost": float(eleven_config.get('Similarity Boost', 0.7)),
                         "style": float(eleven_config.get('Style', 0.5)),
                         "speed": float(eleven_config.get('Speed', 1.06))
                     }
                     try:
-                        print(f"[DEBUG] Using model: {eleven_config.get('Model', 'eleven_multilingual_v2') if eleven_config else 'eleven_multilingual_v2'}, voice_id: {voice_id}")
-                        if len(chunk_text) > 2000:
+                        print(f"[DEBUG] Using model: {eleven_config.get('Model', 'eleven_v3') if eleven_config else 'eleven_v3'}, voice_id: {voice_id}")
+                        if len(chunk_text) > 2900:
                             print(f"[WARNING] Chunk {idx+1} is very long ({len(chunk_text)} chars). Consider splitting further if you see timeouts.")
                         start_time = time.time()
                         audio_stream = client.text_to_speech.convert(
                             text=chunk_text,
                             voice_id=voice_id,
                             voice_settings=voice_settings,
-                            model_id=eleven_config.get('Model', 'eleven_multilingual_v2')
+                            model_id=eleven_config.get('Model', 'eleven_v3')
                         )
                         elapsed = time.time() - start_time
                         print(f"[DEBUG] ElevenLabs SDK call for chunk {idx+1} returned in {elapsed:.3f}s (streaming)")
@@ -2169,14 +2170,14 @@ def generate_voice_audio(text, voice_id, output_path, eleven_config=None):
                         return generate_voice_audio_rest(text, voice_id, output_path, eleven_config)
                 else:
                     try:
-                        print(f"[DEBUG] Using model: {eleven_config.get('Model', 'eleven_multilingual_v2') if eleven_config else 'eleven_multilingual_v2'}, voice_id: {voice_id}")
-                        if len(chunk_text) > 2000:
+                        print(f"[DEBUG] Using model: {eleven_config.get('Model', 'eleven_v3') if eleven_config else 'eleven_v3'}, voice_id: {voice_id}")
+                        if len(chunk_text) > 2900:
                             print(f"[WARNING] Chunk {idx+1} is very long ({len(chunk_text)} chars). Consider splitting further if you see timeouts.")
                         start_time = time.time()
                         audio_stream = client.text_to_speech.convert(
                             text=chunk_text,
                             voice_id=voice_id,
-                            model_id="eleven_multilingual_v2"
+                            model_id="eleven_v3"
                         )
                         elapsed = time.time() - start_time
                         print(f"[DEBUG] ElevenLabs SDK call for chunk {idx+1} returned in {elapsed:.3f}s (streaming)")
@@ -2224,9 +2225,9 @@ def generate_voice_audio_rest(text, voice_id, output_path, eleven_config=None):
         if eleven_config:
             payload = {
                 "text": chunk_text,
-                "model_id": eleven_config.get('Model', 'eleven_multilingual_v2'),
+                "model_id": eleven_config.get('Model', 'eleven_v3'),
                 "voice_settings": {
-                    "stability": float(eleven_config.get('Stability', 0.39)),
+                    "stability": float(eleven_config.get('Stability', 0.5)),  # v3: must be 0.0, 0.5, or 1.0
                     "similarity_boost": float(eleven_config.get('Similarity Boost', 0.7)),
                     "style": float(eleven_config.get('Style', 0.5)),
                     "speed": float(eleven_config.get('Speed', 1.06))
@@ -2235,7 +2236,7 @@ def generate_voice_audio_rest(text, voice_id, output_path, eleven_config=None):
         else:
             payload = {
                 "text": chunk_text,
-                "model_id": "eleven_multilingual_v2",
+                "model_id": "eleven_v3",
                 "voice_settings": {
                     "stability": 0.5,
                     "similarity_boost": 0.7
@@ -2281,8 +2282,8 @@ def generate_voice_audio_rest(text, voice_id, output_path, eleven_config=None):
             traceback.print_exc()
             return None
 
-    # Split text into <=2500 character chunks
-    chunks = split_text_into_chunks(text, max_length=2500)
+    # Split text into <=2900 character chunks (Eleven Labs v3 limit is 3000)
+    chunks = split_text_into_chunks(text, max_length=2900)
     if len(chunks) == 1:
         return _single_chunk(chunks[0], output_path)
     else:
@@ -3442,7 +3443,7 @@ if __name__ == '__main__':
                     else:
                         audio_filename = f'{timestamp}_workflow_{workflow_id}_step_{i+1}_{eleven_config["Voice"]}.mp3'
                     try:
-                        print(f"[DEBUG] Using model: {eleven_config.get('Model', 'eleven_multilingual_v2') if eleven_config else 'eleven_multilingual_v2'}, voice_id: {voice_id}")
+                        print(f"[DEBUG] Using model: {eleven_config.get('Model', 'eleven_v3') if eleven_config else 'eleven_v3'}, voice_id: {voice_id}")
                         start_time = time.time()
                         if os.path.exists(audio_path):
                             # Clean up the path to avoid double slashes

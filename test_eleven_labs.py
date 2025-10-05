@@ -94,16 +94,17 @@ def test_voice_generation():
         print(f"   Using voice ID: {voice_id}")
         
         # Generate audio with custom settings (returns a generator)
+        # Note: v3 requires stability to be exactly 0.0, 0.5, or 1.0
         audio_stream = client.text_to_speech.convert(
             text=test_text,
             voice_id=voice_id,
             voice_settings={
-                "stability": 0.39,
+                "stability": 0.5,  # v3: 0.0=Creative, 0.5=Natural, 1.0=Robust
                 "similarity_boost": 0.7,
                 "style": 0.5,
                 "speed": 1.06
             },
-            model_id="eleven_multilingual_v2"
+            model_id="eleven_v3"
         )
         
         # Save the audio file
@@ -134,9 +135,9 @@ def test_voice_generation_rest():
     
     payload = {
         "text": test_text,
-        "model_id": "eleven_multilingual_v2",
+        "model_id": "eleven_v3",
         "voice_settings": {
-            "stability": 0.39,
+            "stability": 0.5,  # v3: 0.0=Creative, 0.5=Natural, 1.0=Robust
             "similarity_boost": 0.7,
             "style": 0.5,
             "speed": 1.06
@@ -182,16 +183,17 @@ def test_specific_chunk():
         print(f"   Using voice ID: {voice_id}")
 
         # Generate audio with custom settings (returns a generator)
+        # Note: v3 requires stability to be exactly 0.0, 0.5, or 1.0
         audio_stream = client.text_to_speech.convert(
             text=test_chunk,
             voice_id=voice_id,
             voice_settings={
-                "stability": 0.39,
+                "stability": 0.5,  # v3: 0.0=Creative, 0.5=Natural, 1.0=Robust
                 "similarity_boost": 0.7,
                 "style": 0.5,
                 "speed": 1.06
             },
-            model_id="eleven_multilingual_v2"
+            model_id="eleven_v3"
         )
 
         # Save the audio file
