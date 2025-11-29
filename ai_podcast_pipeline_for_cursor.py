@@ -498,6 +498,13 @@ def upload_text_to_gcs(text_content, destination_blob_name):
 # -----------------------------------------
 # CONFIGURATION - Customize as needed
 # -----------------------------------------
+# DEFAULT WORKFLOW REFERENCE:
+# Workflow ID 43: "Full Workflow with Eleven Voice and 5.1 for web search"
+#   - Uses GPT 5.1 (Model ID 124) for web search capabilities
+#   - Uses Claude Sonnet 4.5 (Model ID 145) for script generation and title/description
+#   - Workflow Code: PPU,PPL15,P10&P8&R2M124,P4&R3M145,P12&R4M145,R5SL10T5,R4SL7T5,L8E1SL4T5,L1&L9&L2SL3T5
+#   - This is the recommended default workflow for production use
+#
 EXCEL_FILENAME = 'ai_podcast_workflow.xlsx'
 EXCEL_BACKUP = 'backup_ai_podcast_workflow.xlsx'
 GOOGLE_CREDS_JSON = 'jmio-google-api.json'
@@ -991,9 +998,13 @@ def fetch_anthropic_models():
         client = anthropic.Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
         
         # Anthropic models are typically hardcoded since they don't have a models.list() endpoint
-        # Complete list of current Claude models available via API (as of January 2025)
+        # Complete list of current Claude models available via API (updated November 2025)
         anthropic_models = [
-            # Claude 4 Series (Latest - May 2025)
+            # Claude 4.5 Series (Latest - November 2025)
+            'claude-opus-4-5-20251101',
+            'claude-sonnet-4-5-20250929',
+            
+            # Claude 4 Series (May 2025)
             'claude-opus-4-20250514',
             'claude-sonnet-4-20250514',
             
@@ -1019,8 +1030,10 @@ def fetch_anthropic_models():
         
         text_models = []
         for model_id in anthropic_models:
-            # Check if model supports web search API (available for specific Claude models as of May 2025)
+            # Check if model supports web search API (available for specific Claude models)
             web_search_supported = model_id in [
+                'claude-opus-4-5-20251101',
+                'claude-sonnet-4-5-20250929',
                 'claude-3-7-sonnet-20250219',
                 'claude-3-5-sonnet-20241022', 
                 'claude-3-5-haiku',
@@ -1496,6 +1509,7 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
             try:
                 _model_lower = str(model).lower()
                 _is_gpt5 = _model_lower.startswith("gpt-5")
+                _is_gpt51 = "gpt-5.1" in _model_lower or "gpt-5-1" in _model_lower
                 _is_gpt4o = _model_lower.startswith("gpt-4o")
 
                 text_cfg = {"format": {"type": "text"}}
@@ -1515,8 +1529,10 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                     "max_output_tokens": resp_max_tokens
                 }
                 # Add reasoning effort for GPT-5 internal thinking, but don't request summaries or encrypted content
+                # GPT 5.1 models require "medium" effort, other GPT-5 models use "low"
                 if _is_gpt5:
-                    responses_kwargs["reasoning"] = {"effort": "low"}
+                    reasoning_effort = "medium" if _is_gpt51 else "low"
+                    responses_kwargs["reasoning"] = {"effort": reasoning_effort}
                     # DO NOT add: reasoning={"summary": "auto"} or include=["reasoning.encrypted_content"]
 
                 response = client.responses.create(**responses_kwargs)
@@ -1547,8 +1563,10 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                         "max_output_tokens": resp_max_tokens
                     }
                     # Add reasoning effort for GPT-5 on retry too, but no summaries/encrypted content
+                    # GPT 5.1 models require "medium" effort, other GPT-5 models use "low"
                     if _is_gpt5:
-                        responses_kwargs_retry["reasoning"] = {"effort": "low"}
+                        reasoning_effort = "medium" if _is_gpt51 else "low"
+                        responses_kwargs_retry["reasoning"] = {"effort": reasoning_effort}
 
                     response = client.responses.create(**responses_kwargs_retry)
                 else:
@@ -1628,8 +1646,12 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                     "text": {"format": {"type": "text"}, "verbosity": "medium"},
                     "max_output_tokens": 10000
                 }
-                if str(model).lower().startswith("gpt-5"):
-                    followup_kwargs["reasoning"] = {"effort": "low"}
+                _model_lower_followup = str(model).lower()
+                if _model_lower_followup.startswith("gpt-5"):
+                    # GPT 5.1 models require "medium" effort, other GPT-5 models use "low"
+                    _is_gpt51_followup = "gpt-5.1" in _model_lower_followup or "gpt-5-1" in _model_lower_followup
+                    reasoning_effort = "medium" if _is_gpt51_followup else "low"
+                    followup_kwargs["reasoning"] = {"effort": reasoning_effort}
                 followup_response = client.responses.create(**followup_kwargs)
                 if hasattr(followup_response, 'output_text') and followup_response.output_text:
                     final_text = followup_response.output_text.strip()
@@ -2808,6 +2830,7 @@ if __name__ == '__main__':
         return None
 
     # Helper to get default model for workflow
+    # Note: Workflow ID 43 uses GPT 5.1 (M124) for web search and Claude Sonnet 4.5 (M145) for generation
     def get_workflow_default_model(workflow_row):
         return workflow_row['Model Default'] if 'Model Default' in workflow_row else 'gpt-4o'
 
@@ -3009,6 +3032,7 @@ if __name__ == '__main__':
 
     # Main workflow loop - now reads from Workflows tab instead of Requests tab
     # Check if a specific workflow ID is requested via environment variable
+    # Default recommended workflow: Workflow ID 43 (uses GPT 5.1 + Claude Sonnet 4.5)
     requested_workflow_id = os.getenv('WORKFLOW_ID')
     
     for workflow_idx, workflow_row in workflow_df.iterrows():
