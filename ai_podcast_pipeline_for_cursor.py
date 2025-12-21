@@ -1510,6 +1510,7 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                 _model_lower = str(model).lower()
                 _is_gpt5 = _model_lower.startswith("gpt-5")
                 _is_gpt51 = "gpt-5.1" in _model_lower or "gpt-5-1" in _model_lower
+                _is_gpt52 = "gpt-5.2" in _model_lower or "gpt-5-2" in _model_lower
                 _is_gpt4o = _model_lower.startswith("gpt-4o")
 
                 text_cfg = {"format": {"type": "text"}}
@@ -1529,9 +1530,9 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                     "max_output_tokens": resp_max_tokens
                 }
                 # Add reasoning effort for GPT-5 internal thinking, but don't request summaries or encrypted content
-                # GPT 5.1 models require "medium" effort, other GPT-5 models use "low"
+                # GPT 5.1 and GPT 5.2 models require "medium" effort, other GPT-5 models use "low"
                 if _is_gpt5:
-                    reasoning_effort = "medium" if _is_gpt51 else "low"
+                    reasoning_effort = "medium" if (_is_gpt51 or _is_gpt52) else "low"
                     responses_kwargs["reasoning"] = {"effort": reasoning_effort}
                     # DO NOT add: reasoning={"summary": "auto"} or include=["reasoning.encrypted_content"]
 
@@ -1563,9 +1564,9 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                         "max_output_tokens": resp_max_tokens
                     }
                     # Add reasoning effort for GPT-5 on retry too, but no summaries/encrypted content
-                    # GPT 5.1 models require "medium" effort, other GPT-5 models use "low"
+                    # GPT 5.1 and GPT 5.2 models require "medium" effort, other GPT-5 models use "low"
                     if _is_gpt5:
-                        reasoning_effort = "medium" if _is_gpt51 else "low"
+                        reasoning_effort = "medium" if (_is_gpt51 or _is_gpt52) else "low"
                         responses_kwargs_retry["reasoning"] = {"effort": reasoning_effort}
 
                     response = client.responses.create(**responses_kwargs_retry)
@@ -1648,9 +1649,10 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                 }
                 _model_lower_followup = str(model).lower()
                 if _model_lower_followup.startswith("gpt-5"):
-                    # GPT 5.1 models require "medium" effort, other GPT-5 models use "low"
+                    # GPT 5.1 and GPT 5.2 models require "medium" effort, other GPT-5 models use "low"
                     _is_gpt51_followup = "gpt-5.1" in _model_lower_followup or "gpt-5-1" in _model_lower_followup
-                    reasoning_effort = "medium" if _is_gpt51_followup else "low"
+                    _is_gpt52_followup = "gpt-5.2" in _model_lower_followup or "gpt-5-2" in _model_lower_followup
+                    reasoning_effort = "medium" if (_is_gpt51_followup or _is_gpt52_followup) else "low"
                     followup_kwargs["reasoning"] = {"effort": reasoning_effort}
                 followup_response = client.responses.create(**followup_kwargs)
                 if hasattr(followup_response, 'output_text') and followup_response.output_text:
