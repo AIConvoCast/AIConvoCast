@@ -2091,11 +2091,53 @@ def split_text_into_chunks(text, max_length=2900):
         print(f"[DEBUG]   Chunk {i+1} length: {len(chunk)}")
     return chunks
 
+def is_elevenlabs_credit_quota_error(error_message, status_code=None):
+    """
+    Check if an ElevenLabs error is related to credits/quota/subscription.
+    
+    Args:
+        error_message: The error message string
+        status_code: Optional HTTP status code
+        
+    Returns:
+        bool: True if the error is credit/quota related
+    """
+    if not error_message:
+        return False
+    
+    error_lower = str(error_message).lower()
+    
+    # Check for credit/quota related keywords
+    credit_keywords = [
+        'credit', 'quota', 'insufficient', 'balance', 'subscription',
+        'payment required', 'upgrade', 'limit exceeded', 'billing'
+    ]
+    
+    if any(keyword in error_lower for keyword in credit_keywords):
+        return True
+    
+    # Check status codes
+    if status_code:
+        # 402 = Payment Required (credit/quota)
+        # 429 = Too Many Requests (could be quota/rate limit)
+        if status_code == 402:
+            return True
+        # For 429, we'll check the error message more carefully
+        if status_code == 429 and ('quota' in error_lower or 'credit' in error_lower):
+            return True
+    
+    return False
+
+
 def generate_voice_audio(text, voice_id, output_path, eleven_config=None):
     """
     Enhanced Eleven Labs API call using the official Python client.
     Handles chunking for long texts and merges resulting audio files.
     Falls back to REST API if the client fails.
+    
+    Returns:
+        str or None: Path to generated audio file, or None if failed
+        On credit/quota errors, raises ValueError with error details
     """
     try:
         from elevenlabs.client import ElevenLabs
@@ -2184,9 +2226,22 @@ def generate_voice_audio(text, voice_id, output_path, eleven_config=None):
                         elapsed = time.time() - start_time
                         print(f"[DEBUG] ElevenLabs SDK call for chunk {idx+1} returned in {elapsed:.3f}s (streaming)")
                         print(f"[DEBUG] ElevenLabs SDK: Received audio stream for chunk {idx+1}. Saving to file {temp_path}...")
+                    except ValueError:
+                        # Re-raise credit/quota errors
+                        for p in temp_audio_paths:
+                            try: os.remove(p)
+                            except: pass
+                        raise
                     except Exception as e:
+                        error_msg = str(e)
                         print(f"[ERROR] Failed on chunk {idx+1}/{len(chunks)}. First 100 chars: {chunk_text[:100]}")
                         traceback.print_exc()
+                        # Check if this is a credit/quota error
+                        if is_elevenlabs_credit_quota_error(error_msg, None):
+                            for p in temp_audio_paths:
+                                try: os.remove(p)
+                                except: pass
+                            raise ValueError(f"ElevenLabs credit/quota error: {error_msg}")
                         print("[DEBUG] Falling back to REST API...")
                         for p in temp_audio_paths:
                             try: os.remove(p)
@@ -2206,9 +2261,22 @@ def generate_voice_audio(text, voice_id, output_path, eleven_config=None):
                         elapsed = time.time() - start_time
                         print(f"[DEBUG] ElevenLabs SDK call for chunk {idx+1} returned in {elapsed:.3f}s (streaming)")
                         print(f"[DEBUG] ElevenLabs SDK: Received audio stream for chunk {idx+1}. Saving to file {temp_path}...")
+                    except ValueError:
+                        # Re-raise credit/quota errors
+                        for p in temp_audio_paths:
+                            try: os.remove(p)
+                            except: pass
+                        raise
                     except Exception as e:
+                        error_msg = str(e)
                         print(f"[ERROR] Failed on chunk {idx+1}/{len(chunks)}. First 100 chars: {chunk_text[:100]}")
                         traceback.print_exc()
+                        # Check if this is a credit/quota error
+                        if is_elevenlabs_credit_quota_error(error_msg, None):
+                            for p in temp_audio_paths:
+                                try: os.remove(p)
+                                except: pass
+                            raise ValueError(f"ElevenLabs credit/quota error: {error_msg}")
                         print("[DEBUG] Falling back to REST API...")
                         for p in temp_audio_paths:
                             try: os.remove(p)
@@ -2280,16 +2348,25 @@ def generate_voice_audio_rest(text, voice_id, output_path, eleven_config=None):
                 print(f"✅ Audio chunk received and saved: {temp_path}")
                 return temp_path
             else:
-                print(f"❌ ElevenLabs REST API error: {response.status_code} {response.text}")
+                error_text = response.text
+                status_code = response.status_code
+                print(f"❌ ElevenLabs REST API error: {status_code} {error_text}")
                 # Try to print error message from JSON if available
+                error_message = error_text
                 try:
                     error_json = response.json()
                     if 'error' in error_json:
-                        print(f"❌ ElevenLabs API error message: {error_json['error']}")
+                        error_message = str(error_json['error'])
+                        print(f"❌ ElevenLabs API error message: {error_message}")
                     else:
                         print(f"❌ ElevenLabs API error JSON: {error_json}")
                 except Exception:
                     print(f"❌ ElevenLabs API error (non-JSON): {response.content[:500]}")
+                
+                # Check if this is a credit/quota error
+                if is_elevenlabs_credit_quota_error(error_message, status_code):
+                    raise ValueError(f"ElevenLabs credit/quota error: {error_message} (status: {status_code})")
+                
                 return None
         except requests.exceptions.Timeout:
             print("❌ ElevenLabs REST API error: Request timed out after 120 seconds.")
@@ -2298,12 +2375,25 @@ def generate_voice_audio_rest(text, voice_id, output_path, eleven_config=None):
         except requests.exceptions.RequestException as e:
             print(f"❌ ElevenLabs REST API error: {e}")
             traceback.print_exc()
+            error_message = str(e)
+            status_code = None
             if hasattr(e, 'response') and e.response is not None:
-                print(f"❌ ElevenLabs REST API error response: {e.response.text}")
+                error_message = e.response.text
+                status_code = e.response.status_code
+                print(f"❌ ElevenLabs REST API error response: {error_message}")
+            # Check if this is a credit/quota error
+            if is_elevenlabs_credit_quota_error(error_message, status_code):
+                raise ValueError(f"ElevenLabs credit/quota error: {error_message} (status: {status_code})")
             return None
+        except ValueError:
+            # Re-raise credit/quota errors
+            raise
         except Exception as e:
             print(f"❌ ElevenLabs REST API error: {e}")
             traceback.print_exc()
+            # Check if this might be a credit/quota error
+            if is_elevenlabs_credit_quota_error(str(e), None):
+                raise ValueError(f"ElevenLabs credit/quota error: {e}")
             return None
 
     # Split text into <=2900 character chunks (Eleven Labs v3 limit is 3000)
@@ -3416,25 +3506,113 @@ if __name__ == '__main__':
                     # Generate audio using Eleven Labs
                     print(f"    > Generating audio with voice: {eleven_config['Voice']}")
                     temp_audio_path = MP3_OUTPUT_DIR / f"temp_audio_{workflow_id}_step_{i+1}.mp3"
-                    audio_path = generate_voice_audio(text_content, voice_id, temp_audio_path, eleven_config)
                     
-                    if not audio_path:
-                        log_msg = f"Failed to generate audio with Eleven Labs for step {i+1}. Aborting workflow."
-                        print(f"    > {log_msg}")
-                        workflow_steps_records.append([
-                            get_next_workflow_steps_id() + i + 0.1,
-                            output_record['Triggered Date'],
-                            workflow_id,
-                            workflow_id,
-                            workflow_code,
-                            step,
-                            text_content,
-                            '',
-                            log_msg
-                        ])
-                        # End the entire workflow immediately
-                        print("[FATAL] Eleven Labs API error encountered. Exiting workflow.")
-                        sys.exit(1)
+                    # Try ElevenLabs, catch credit/quota errors for fallback to Google Voice
+                    try:
+                        audio_path = generate_voice_audio(text_content, voice_id, temp_audio_path, eleven_config)
+                        
+                        if not audio_path:
+                            log_msg = f"Failed to generate audio with Eleven Labs for step {i+1}. Aborting workflow."
+                            print(f"    > {log_msg}")
+                            workflow_steps_records.append([
+                                get_next_workflow_steps_id() + i + 0.1,
+                                output_record['Triggered Date'],
+                                workflow_id,
+                                workflow_id,
+                                workflow_code,
+                                step,
+                                text_content,
+                                '',
+                                log_msg
+                            ])
+                            # End the entire workflow immediately
+                            print("[FATAL] Eleven Labs API error encountered. Exiting workflow.")
+                            sys.exit(1)
+                    except ValueError as e:
+                        # Check if this is a credit/quota error
+                        error_msg = str(e)
+                        if "credit/quota" in error_msg.lower() or is_elevenlabs_credit_quota_error(error_msg, None):
+                            print(f"    > ⚠️ ElevenLabs credit/quota error detected: {error_msg}")
+                            print(f"    > 🔄 Falling back to Google Voice (GV1) instead of E1")
+                            
+                            # Log the fallback in workflow steps
+                            workflow_steps_records.append([
+                                get_next_workflow_steps_id() + i + 0.05,
+                                output_record['Triggered Date'],
+                                workflow_id,
+                                workflow_id,
+                                workflow_code,
+                                step,
+                                text_content,
+                                '',
+                                f"ElevenLabs credit/quota error: {error_msg}. Falling back to Google Voice."
+                            ])
+                            
+                            # Fallback to Google Voice (GV1) - use same location IDs
+                            # Map voice IDs to voice names (GV1 = Alnilam)
+                            google_voice_mapping = {
+                                "1": "Alnilam",
+                                "2": "Achernar",   # Female
+                                "3": "Achird",     # Male  
+                                "4": "Algenib",    # Male
+                                "5": "Algieba",    # Male
+                                "6": "Aoede",      # Female
+                                "7": "Autonoe",    # Female
+                                "8": "Callirrhoe", # Female
+                                "9": "Charon",     # Male
+                                "10": "Despina",   # Female
+                                "11": "Enceladus", # Male
+                                "12": "Erinome",   # Female
+                                "13": "Fenrir",    # Male
+                                "14": "Gacrux",    # Female
+                                "15": "Iapetus",   # Male
+                                "16": "Kore",      # Female
+                                "17": "Laomedeia", # Female
+                                "18": "Leda",      # Female
+                                "19": "Orus",      # Male
+                                "20": "Pulcherrima", # Female
+                                "21": "Puck",      # Male
+                                "22": "Rasalgethi", # Male
+                                "23": "Sadachbia", # Male
+                                "24": "Sadaltager", # Male
+                                "25": "Schedar",   # Male
+                                "26": "Sulafat",   # Female
+                                "27": "Umbriel",   # Male
+                                "28": "Vindemiatrix", # Female
+                                "29": "Zephyr",    # Female
+                                "30": "Zubenelgenubi" # Male
+                            }
+                            
+                            # Use GV1 (Alnilam) as fallback
+                            voice_name = google_voice_mapping.get("1", "Alnilam")
+                            
+                            print(f"    > Generating audio with Google Voice: {voice_name}")
+                            temp_audio_path = MP3_OUTPUT_DIR / f"temp_google_audio_{workflow_id}_step_{i+1}.mp3"
+                            audio_path = generate_google_voice_audio(text_content, voice_name, temp_audio_path)
+                            
+                            if not audio_path:
+                                log_msg = f"Failed to generate audio with Google Voice fallback for step {i+1}. Aborting workflow."
+                                print(f"    > {log_msg}")
+                                workflow_steps_records.append([
+                                    get_next_workflow_steps_id() + i + 0.1,
+                                    output_record['Triggered Date'],
+                                    workflow_id,
+                                    workflow_id,
+                                    workflow_code,
+                                    step,
+                                    text_content,
+                                    '',
+                                    log_msg
+                                ])
+                                print("[FATAL] Google Voice fallback failed. Exiting workflow.")
+                                sys.exit(1)
+                            
+                            # Google Voice fallback succeeded - continue with upload using same save location
+                            # The upload code below will handle it (using save_location_id that's already set)
+                            print(f"    > ✅ Google Voice fallback succeeded, continuing with upload")
+                        else:
+                            # Not a credit/quota error, re-raise
+                            raise
                     
                     # Upload audio to destination location
                     save_location = get_location_by_id(save_location_id)
@@ -3458,6 +3636,8 @@ if __name__ == '__main__':
                     timestamp = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
                     
                     # Check if custom title is requested
+                    # Determine voice name for filename (could be ElevenLabs or Google Voice fallback)
+                    voice_name_for_filename = eleven_config.get('Voice', 'Unknown') if eleven_config else 'Unknown'
                     if title_resp_idx is not None and 0 <= title_resp_idx < len(all_outputs):
                         title_text = all_outputs[title_resp_idx]
                         extracted_title = extract_title_from_text(title_text)
@@ -3465,9 +3645,9 @@ if __name__ == '__main__':
                         if clean_title:
                             audio_filename = f'{timestamp}_{clean_title}.mp3'
                         else:
-                            audio_filename = f'{timestamp}_workflow_{workflow_id}_step_{i+1}_{eleven_config["Voice"]}.mp3'
+                            audio_filename = f'{timestamp}_workflow_{workflow_id}_step_{i+1}_{voice_name_for_filename}.mp3'
                     else:
-                        audio_filename = f'{timestamp}_workflow_{workflow_id}_step_{i+1}_{eleven_config["Voice"]}.mp3'
+                        audio_filename = f'{timestamp}_workflow_{workflow_id}_step_{i+1}_{voice_name_for_filename}.mp3'
                     try:
                         print(f"[DEBUG] Using model: {eleven_config.get('Model', 'eleven_v3') if eleven_config else 'eleven_v3'}, voice_id: {voice_id}")
                         start_time = time.time()
