@@ -990,39 +990,74 @@ def fetch_openai_models():
         return []
 
 
+def anthropic_model_supports_web_search(model_id):
+    """Determine if an Anthropic model supports web search based on known patterns."""
+    if not model_id:
+        return False
+    lower = str(model_id).lower()
+    # Claude 4.x Opus/Sonnet and Claude 3.5/3.7 support web search
+    return (
+        'opus-4' in lower or
+        'sonnet-4' in lower or
+        '-3-7-' in lower or
+        '-3-5-' in lower or
+        'claude-3-5-haiku' in lower
+    )
+
+
 def fetch_anthropic_models():
-    """Fetch the latest models from Anthropic API."""
+    """Fetch the latest models from Anthropic API. Uses API models.list() when available,
+    falls back to hardcoded list if API is unavailable. New models (e.g. Claude Opus 4.6)
+    populate automatically when fetched from API."""
     try:
         import anthropic
         
-        client = anthropic.Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
+        api_key = os.getenv('ANTHROPIC_API_KEY')
+        if not api_key:
+            print("⚠️ ANTHROPIC_API_KEY not set, skipping Anthropic models")
+            return []
         
-        # Anthropic models are typically hardcoded since they don't have a models.list() endpoint
-        # Complete list of current Claude models available via API (updated November 2025)
+        client = anthropic.Anthropic(api_key=api_key)
+        
+        # Try to fetch models from Anthropic API (available in newer SDK)
+        try:
+            models_response = client.models.list(limit=1000)
+            api_model_ids = []
+            if hasattr(models_response, 'data'):
+                api_model_ids = [m.id for m in models_response.data]
+            elif hasattr(models_response, '__iter__'):
+                api_model_ids = [m.id for m in models_response]
+            
+            if api_model_ids:
+                text_models = []
+                for model_id in api_model_ids:
+                    text_models.append({
+                        'id': model_id,
+                        'provider': 'anthropic',
+                        'web_search': anthropic_model_supports_web_search(model_id)
+                    })
+                print(f"[DEBUG] Fetched {len(text_models)} Anthropic models from API")
+                return text_models
+        except AttributeError:
+            pass  # SDK may not have models.list
+        except Exception as api_err:
+            print(f"[DEBUG] Anthropic API models.list not available: {api_err}, using fallback list")
+        
+        # Fallback: hardcoded list when API list is unavailable
         anthropic_models = [
-            # Claude 4.5 Series (Latest - November 2025)
+            'claude-opus-4-6',
             'claude-opus-4-5-20251101',
             'claude-sonnet-4-5-20250929',
-            
-            # Claude 4 Series (May 2025)
             'claude-opus-4-20250514',
             'claude-sonnet-4-20250514',
-            
-            # Claude 3.7 Series (February 2025)
             'claude-3-7-sonnet-20250219',
-            
-            # Claude 3.5 Series
             'claude-3-5-sonnet-20241022',
             'claude-3-5-sonnet-20240620',
             'claude-3-5-sonnet',
             'claude-3-5-haiku',
-            
-            # Claude 3 Series (Core models)
             'claude-3-opus-20240229',
             'claude-3-sonnet-20240229',
             'claude-3-haiku-20240307',
-            
-            # Legacy models (still available)
             'claude-instant-1.2',
             'claude-2.1',
             'claude-2.0'
@@ -1030,21 +1065,10 @@ def fetch_anthropic_models():
         
         text_models = []
         for model_id in anthropic_models:
-            # Check if model supports web search API (available for specific Claude models)
-            web_search_supported = model_id in [
-                'claude-opus-4-5-20251101',
-                'claude-sonnet-4-5-20250929',
-                'claude-3-7-sonnet-20250219',
-                'claude-3-5-sonnet-20241022', 
-                'claude-3-5-haiku',
-                'claude-opus-4-20250514',
-                'claude-sonnet-4-20250514'
-            ]
-            
             text_models.append({
                 'id': model_id,
                 'provider': 'anthropic',
-                'web_search': web_search_supported
+                'web_search': anthropic_model_supports_web_search(model_id)
             })
         
         return text_models
@@ -1402,8 +1426,8 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
     
     # Timeout handling
     timeout_occurred = False
-    # Use a strict 700s timeout for any web_search; otherwise 15 minutes for deep-research models
-    configured_timeout = 700 if web_search else (900 if "deep-research" in model else None)
+    # Web search with high reasoning may need more time; 900s for web_search, 15min for deep-research
+    configured_timeout = 900 if web_search else (900 if "deep-research" in model else None)
     
     def timeout_handler():
         nonlocal timeout_occurred
@@ -1416,12 +1440,15 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
         timer.start()
         print(f"⏱️ Starting request with {configured_timeout}-second timeout for model {model}")
         
-    # Limit prompt length and scope when doing web search to reduce tokens and time
+    # Web search: use quality-focused research prompt for podcast/news workflows
+    # (Previous "concise, 2 sources, 300 words" was too restrictive for finding best articles)
     if web_search:
         limited_prompt = (
-            "Please answer concisely. Use at most 2 recent, credible sources. "
-            "Focus on 3-5 key points. Keep output under ~300 words. "
-            "Stop searching after the first high-quality results.\n\nRequest: " + str(prompt)
+            "Conduct thorough research for a high-quality podcast. Use 5-10+ credible sources when available. "
+            "Include specific details, quotes, dates, and company names. Validate recency and accuracy. "
+            "Prioritize comprehensive coverage and the most newsworthy, engaging stories. "
+            "Output can be 600-1200 words for thorough research. Search multiple sources before concluding.\n\n"
+            "Request: " + str(prompt)
         )
     else:
         limited_prompt = prompt
@@ -1529,8 +1556,7 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                     "text": text_cfg,
                     "max_output_tokens": resp_max_tokens
                 }
-                # Add reasoning effort for GPT-5 internal thinking, but don't request summaries or encrypted content
-                # GPT 5.1 and GPT 5.2 models require "medium" effort, other GPT-5 models use "low"
+                # Add reasoning effort for GPT-5. gpt-5.2-chat-latest only supports "medium" (not "high")
                 if _is_gpt5:
                     reasoning_effort = "medium" if (_is_gpt51 or _is_gpt52) else "low"
                     responses_kwargs["reasoning"] = {"effort": reasoning_effort}
@@ -1563,8 +1589,7 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                         "text": text_cfg_retry,
                         "max_output_tokens": resp_max_tokens
                     }
-                    # Add reasoning effort for GPT-5 on retry too, but no summaries/encrypted content
-                    # GPT 5.1 and GPT 5.2 models require "medium" effort, other GPT-5 models use "low"
+                    # Add reasoning effort for GPT-5 on retry (use medium to avoid timeout on retry)
                     if _is_gpt5:
                         reasoning_effort = "medium" if (_is_gpt51 or _is_gpt52) else "low"
                         responses_kwargs_retry["reasoning"] = {"effort": reasoning_effort}
@@ -1904,14 +1929,8 @@ def call_anthropic_model(prompt, model="claude-3-sonnet", temperature=0.8, web_s
             print(msg)
             sys.exit(1)
         
-        # Check if web search is requested and model supports it
-        web_search_models = [
-            'claude-3-7-sonnet-20250219',
-            'claude-3-5-sonnet-20241022', 
-            'claude-3-5-haiku',
-            'claude-opus-4-20250514',
-            'claude-sonnet-4-20250514'
-        ]
+        # Check if web search is requested and model supports it (uses pattern for new models)
+        model_supports_web_search = anthropic_model_supports_web_search(model)
         
         # Build the API call parameters
         api_params = {
@@ -1921,7 +1940,7 @@ def call_anthropic_model(prompt, model="claude-3-sonnet", temperature=0.8, web_s
         }
         
         # Add web search tool if supported and requested
-        if web_search and model in web_search_models:
+        if web_search and model_supports_web_search:
             api_params["tools"] = [
                 {
                     "type": "web_search_20250305",
@@ -4070,7 +4089,9 @@ if __name__ == '__main__':
                         log_error(msg)
                         response = "[Web search not supported by your OpenAI Python package version]"
                     else:
-                        response = call_model(input_text, model_to_use, web_search=web_search_enabled)
+                        # Use higher temperature (0.85) for script/title generation when web_search off
+                        temp = 0.85 if not web_search_enabled else 0.8
+                        response = call_model(input_text, model_to_use, temperature=temp, web_search=web_search_enabled)
                 
                 # Ensure response is properly encoded as UTF-8
                 if isinstance(response, bytes):
