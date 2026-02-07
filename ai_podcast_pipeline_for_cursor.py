@@ -691,7 +691,8 @@ def get_template_dataframes():
         [21, "Update Posted Podcasts, Retrieve last 5 episodes, Get top stories, Select top 3 stories, Get latest on stories, Generate script with 40", "PPU,PPL15,P1M1,P2&R3&P8&R2M13,P3&R4M1,P4&R5M13,P5&R6M37,R6SL7", "N", ""],
         [22, "Update Posted Podcasts, Retrieve last 5 episodes, Get top stories, Select top 3 stories, Get latest on stories, Generate script 4.5, send to eleven and combine", "PPU,PPL15,P1M1,P2&R3&P8&R2M13,P3&R4M1,P4&R5M13,P5&R6M37,R6SL7,L8E1SL4,L1&L9&L2SL3", "N", ""],
         [23, "Update PPU, Retrieve last 5, Get top stories, Select top 3 stories, Get latest on stories, Generate script with 4.1", "PPU,PPL5,P1M1,P2&R3&P8&R2M1,P3&R4M1,P4&R5M73,P5&R6M73", "Y", ""],
-        [24, "Update Models Tab with latest model", "UM", "N", ""]
+        [24, "Update Models Tab with latest model", "UM", "N", ""],
+        [36, "Custom Topic to Podcast", "P4&C1M165,P5&R1M165,R2SL10T2,R1SL7T2,L8E1SL4T2,L1&L9&L2SL3T2", "N", ""]
     ], columns=["Workflow ID", "Workflow Title", "Workflow Code", "Active", "Custom Topic If Required"])
 
     outputs = pd.DataFrame(columns=[
@@ -723,7 +724,8 @@ def get_template_dataframes():
         [21, 21, '', 'N', 'Update Posted Podcasts, Retrieve last 5 episodes, Get top stories, Select top 3 stories, Get latest on stories, Generate script'],
         [22, 22, '', 'N', 'Update Posted Podcasts, Retrieve last 5 episodes, Get top stories, Select top 3 stories, Get latest on stories, Generate script 4.5'],
         [23, 23, '', 'N', 'Update PPU, Retrieve last 5, Get top stories, Select top 3 stories, Get latest on stories, Generate script with 4.1'],
-        [24, 24, '', 'N', 'Update Models Tab with latest Models']
+        [24, 24, '', 'N', 'Update Models Tab with latest Models'],
+        [36, 36, '', 'N', 'Custom topic to script, title, ElevenLabs, merge']
     ], columns=["Request ID", "Workflow ID", "Custom Topic If Required", "Active", "Comments"])
 
     prompts = pd.DataFrame([
@@ -732,7 +734,7 @@ def get_template_dataframes():
         [3, "Generate All On Appendend Topic", "Generate all details related to the news stories below from the last 24-48 hours. Please make sure to include any and all quotes from participants, companies or even social media reactions that have received significant engagement. Please also include technical specifications if required. Please ensure complete coverage provided  details to ensure comprehensive coverage of story. Stories to retrieve all relevant details on:"],
         [4, "Create Script Based on Material", '''Create a podcast script for the "AI Convo Cast" podcast, which is a daily AI news and technology podcast. We will be adding a standard intro and outro to the podcast script you provide on our end, so only generate the main body of the episode script and always start with:
 "Today we will be..."
-Since we will add intro and outro on our end, please do not make references to the podcast, simply generate the script going over the topics provided along with a very brief and positive 1 sentence summary of topics covered. The script should be written in plain, conversational language that is casual, concise and assumes the listener is familiar with AI model generally and just wants to hear the facts. Use quotes from company representatives when possible. Design the content for a natural 15-minute runtime with smooth transitions and integrated summary breakpoints (without explicit headings or titles) that lead into a high-level, abstract summary tying together broader implications, but leaning towards a positive perspective on the AI's advancement and an eagerness to embrace it. Podcast script should contain between 4,750 and 7,000 characters.
+Since we will add intro and outro on our end, please do not make references to the podcast, simply generate the script going over the topics provided along with a very brief and positive 1 sentence summary of topics covered. The script should be written in plain, conversational language that is casual, concise and assumes the listener is familiar with AI model generally and just wants to hear the facts. Use quotes from company representatives when possible. When the provided material is lengthy or technical, distill the most newsworthy and engaging storylines while preserving key facts, benchmarks, and quotes—prioritize clarity for listening over exhaustive detail. Design the content for a natural 15-minute runtime with smooth transitions and integrated summary breakpoints (without explicit headings or titles) that lead into a high-level, abstract summary tying together broader implications, but leaning towards a positive perspective on the AI's advancement and an eagerness to embrace it. Podcast script should contain between 4,750 and 7,000 characters.
 Output must be pure plain text (UTF‑8 encoded) with no hyperlinks, citations, markdown formatting, extraneous symbols, or any headings like "Summary." Do not include any non-text elements or words/phrases ending in ".com." Adjust tone, style, or content as clarified by the user while always prioritizing a clean, accessible, and entertaining spoken presentation. Avoid numbering or bullet points and refrain from using corny sayings. Please also always remove dashes from names (e.g. GPT-4.5 should be GPT 4.5). When converting this text to speech, automatically replace 'GPT 4o' with 'GPT Four-Oh', 'DALL-E' with 'Dolly'. Avoid corny transitions like "speaking of". Transitions should be smooth or simply go into next topic.
 
 Podcast Material for to Base Script On:'''],
@@ -1708,7 +1710,8 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
             is_gpt5 = str(model).lower().startswith("gpt-5")
             kwargs = {
                 "model": model,
-                "messages": [{"role": "user", "content": limited_prompt}]
+                "messages": [{"role": "user", "content": limited_prompt}],
+                "max_tokens": 8192  # Full script + title/description output
             }
             # Only include temperature when supported (not GPT-5 and not in explicit no-temp list)
             if (model not in models_without_temp) and (not is_gpt5) and (temperature is not None):
@@ -1932,10 +1935,10 @@ def call_anthropic_model(prompt, model="claude-3-sonnet", temperature=0.8, web_s
         # Check if web search is requested and model supports it (uses pattern for new models)
         model_supports_web_search = anthropic_model_supports_web_search(model)
         
-        # Build the API call parameters
+        # Build the API call parameters (8192 tokens for full script + title/description output)
         api_params = {
             "model": model,
-            "max_tokens": 4000,
+            "max_tokens": 8192,
             "messages": [{"role": "user", "content": prompt}]
         }
         
@@ -1997,10 +2000,10 @@ def call_google_model(prompt, model="gemini-2.0-flash", temperature=0.8):
             print(msg)
             sys.exit(1)
         
-        # Configure the model
+        # Configure the model (8192 tokens for full script + title/description output)
         generation_config = genai.types.GenerationConfig(
             temperature=temperature,
-            max_output_tokens=4000,
+            max_output_tokens=8192,
         )
         
         # Create the model instance
