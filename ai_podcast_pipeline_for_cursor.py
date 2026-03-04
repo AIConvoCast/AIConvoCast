@@ -1007,6 +1007,19 @@ def anthropic_model_supports_web_search(model_id):
     )
 
 
+def model_requires_forced_web_search(model_id):
+    """Models that should force tool use when Web Search is enabled."""
+    if not model_id:
+        return False
+    lower = str(model_id).lower()
+    return (
+        ('gpt-5.2' in lower) or
+        ('gpt-5-2' in lower) or
+        ('claude-opus-4-6' in lower) or
+        ('claude-opus-4.6' in lower)
+    )
+
+
 def fetch_anthropic_models():
     """Fetch the latest models from Anthropic API. Uses API models.list() when available,
     falls back to hardcoded list if API is unavailable. New models (e.g. Claude Opus 4.6)
@@ -1444,6 +1457,7 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
         
     # Web search: use quality-focused research prompt for podcast/news workflows
     # (Previous "concise, 2 sources, 300 words" was too restrictive for finding best articles)
+    force_web_tool_use = web_search and model_requires_forced_web_search(model)
     if web_search:
         limited_prompt = (
             "Conduct thorough research for a high-quality podcast. Use 5-10+ credible sources when available. "
@@ -1452,6 +1466,11 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
             "Output can be 600-1200 words for thorough research. Search multiple sources before concluding.\n\n"
             "Request: " + str(prompt)
         )
+        if force_web_tool_use:
+            limited_prompt = (
+                "You must use web search tool calls to gather the latest information before answering.\n\n"
+                + limited_prompt
+            )
     else:
         limited_prompt = prompt
     try:
@@ -1554,7 +1573,7 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                     "tools": [tools_config],
                     # Use plain string input per recommended API usage
                     "input": limited_prompt,
-                    "tool_choice": "auto",
+                    "tool_choice": "required" if force_web_tool_use else "auto",
                     "text": text_cfg,
                     "max_output_tokens": resp_max_tokens
                 }
@@ -1587,7 +1606,7 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                         "tools": [tools_config],
                         # Use plain string input per recommended API usage (truncated on retry)
                         "input": limited_prompt[:1000],
-                        "tool_choice": "auto",
+                        "tool_choice": "required" if force_web_tool_use else "auto",
                         "text": text_cfg_retry,
                         "max_output_tokens": resp_max_tokens
                     }
@@ -1934,6 +1953,7 @@ def call_anthropic_model(prompt, model="claude-3-sonnet", temperature=0.8, web_s
         
         # Check if web search is requested and model supports it (uses pattern for new models)
         model_supports_web_search = anthropic_model_supports_web_search(model)
+        force_web_tool_use = web_search and model_requires_forced_web_search(model)
         
         # Build the API call parameters (8192 tokens for full script + title/description output)
         api_params = {
@@ -1950,6 +1970,15 @@ def call_anthropic_model(prompt, model="claude-3-sonnet", temperature=0.8, web_s
                     "name": "web_search"
                 }
             ]
+            if force_web_tool_use:
+                api_params["tool_choice"] = {"type": "tool", "name": "web_search"}
+                api_params["messages"] = [{
+                    "role": "user",
+                    "content": (
+                        "You must use the web search tool to retrieve and validate the latest information before answering.\n\n"
+                        + str(prompt)
+                    )
+                }]
             print(f"🔍 Web search enabled for model: {model}")
         
         response = client.messages.create(**api_params)
@@ -2931,9 +2960,15 @@ if __name__ == '__main__':
 
     # Helper to get web search flag for a model by name (first match)
     def get_model_web_search_by_name(model_name):
-        row = models_df[models_df['Model Name'] == model_name]
-        if not row.empty:
-            return str(row.iloc[0].get('Web Search', 'N')).strip().upper() == 'Y'
+        rows = models_df[models_df['Model Name'] == model_name]
+        if not rows.empty:
+            # Prefer non-deprecated entries when available
+            if 'Deprecated' in rows.columns:
+                active_rows = rows[rows['Deprecated'].astype(str).str.strip().str.upper() != 'Y']
+                if not active_rows.empty:
+                    rows = active_rows
+            # If any matching row has Web Search=Y, treat this model as web-search enabled
+            return any(rows['Web Search'].astype(str).str.strip().str.upper() == 'Y')
         return False
 
     # Helper to get prompt description by Prompt ID
@@ -4082,9 +4117,12 @@ if __name__ == '__main__':
                     if model_override and model_id_override:
                         model_to_use = model_override
                         web_search_enabled = get_model_web_search_by_id(model_id_override)
+                    elif model_id_override:
+                        model_to_use = get_model_name(model_id_override) or default_model
+                        web_search_enabled = get_model_web_search_by_id(model_id_override)
                     else:
                         model_to_use = default_model
-                        web_search_enabled = get_model_web_search_by_id(default_model_id)
+                        web_search_enabled = get_model_web_search_by_name(default_model)
                     print(f"  - Step {i+1}: {step} (Model: {model_to_use}, Web Search: {web_search_enabled})")
                     # Fallback for OpenAI client if responses.create is not available
                     if web_search_enabled and not hasattr(client, 'responses'):
