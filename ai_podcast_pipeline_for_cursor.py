@@ -1100,6 +1100,7 @@ def model_requires_forced_web_search(model_id):
         return False
     lower = str(model_id).lower()
     return (
+        lower.startswith('gpt-5') or
         ('gpt-5.2' in lower) or
         ('gpt-5-2' in lower) or
         ('claude-opus-4-6' in lower) or
