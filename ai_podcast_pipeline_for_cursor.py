@@ -1823,14 +1823,24 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                         role = getattr(item, 'role', 'unknown')
                         print(f"[DEBUG] Item {i}: type={item_type}, role={role}")
                 
-                # Last resort - issue a simplified follow-up call without tools to force final text
-                print("[DEBUG] Issuing simplified follow-up Responses API call without tools to force final text...")
+                # Last resort - issue a continuation call that keeps web-search tools enabled.
+                # Avoid a no-tools fallback, which can cause "no browsing tool available" responses.
+                print("[DEBUG] Issuing Responses API continuation call with tools enabled to force final text...")
+                followup_input = (
+                    "Using the web results gathered so far, provide the final plain-text answer now. "
+                    "Do not claim you lack web access. If needed, perform additional web searches before finalizing.\n\n"
+                    + str(limited_prompt)
+                )
                 followup_kwargs = {
                     "model": model,
-                    "input": limited_prompt,
+                    "input": followup_input,
+                    "tools": [tools_config],
+                    "tool_choice": "required" if force_web_tool_use else "auto",
                     "text": {"format": {"type": "text"}, "verbosity": "medium"},
                     "max_output_tokens": 10000
                 }
+                if hasattr(response, 'id') and response.id:
+                    followup_kwargs["previous_response_id"] = response.id
                 _model_lower_followup = str(model).lower()
                 if _model_lower_followup.startswith("gpt-5"):
                     # Keep GPT-5.1/5.2/5.4 at medium effort for balanced quality and runtime.
