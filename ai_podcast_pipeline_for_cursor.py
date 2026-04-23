@@ -1100,7 +1100,8 @@ def model_requires_forced_web_search(model_id):
         return False
     lower = str(model_id).lower()
     return (
-        lower.startswith('gpt-5') or
+        # Keep GPT-5.4 on auto tool choice; forcing can cause long tool-call loops
+        # with no assistant text returned for this workflow.
         ('gpt-5.2' in lower) or
         ('gpt-5-2' in lower) or
         ('claude-opus-4-6' in lower) or
@@ -1555,6 +1556,24 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
             "cloudflare", "web server is returning an unknown error",
             "<!doctype html>", "<html"
         ])
+
+    def looks_like_incomplete_table_output(text):
+        """Detect partial markdown-table outputs that should be retried in plain text."""
+        if not text:
+            return False
+        t = str(text).strip()
+        if "| # | Headline" not in t:
+            return False
+        table_lines = [line.strip() for line in t.splitlines() if line.strip().startswith("|")]
+        # Header-only or near-header-only table is usually an incomplete response.
+        if len(table_lines) <= 2:
+            return True
+        # If only one data row exists, it is likely truncated for this workflow.
+        data_rows = [
+            line for line in table_lines
+            if not line.startswith("| # |") and not line.startswith("|---")
+        ]
+        return len(data_rows) < 2
         
     # Web search: quality-focused research prompt tuned for comprehensive but time-efficient coverage.
     force_web_tool_use = web_search and model_requires_forced_web_search(model)
@@ -1767,6 +1786,29 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
             if hasattr(response, 'output_text') and response.output_text:
                 raw_response = response.output_text.strip()
                 print(f"[DEBUG] Found direct output_text: {raw_response[:100]}...")
+                if web_search and looks_like_incomplete_table_output(raw_response):
+                    print("[DEBUG] Detected incomplete table output; issuing continuation call for full plain-text synthesis...")
+                    continuation_kwargs = {
+                        "model": model,
+                        "input": (
+                            "Your prior answer appears truncated and started a markdown table. "
+                            "Return a complete plain-text answer now (no markdown table), with clear sections and bullet points. "
+                            "Keep web-search tools enabled and run additional searches if needed."
+                        ),
+                        "tools": [tools_config],
+                        "tool_choice": "required" if force_web_tool_use else "auto",
+                        "text": {"format": {"type": "text"}, "verbosity": "medium"},
+                        "max_output_tokens": resp_max_tokens
+                    }
+                    if hasattr(response, 'id') and response.id:
+                        continuation_kwargs["previous_response_id"] = response.id
+                    if _is_gpt5:
+                        reasoning_effort = "medium" if (_is_gpt51 or _is_gpt52 or _is_gpt54) else "low"
+                        continuation_kwargs["reasoning"] = {"effort": reasoning_effort}
+                    response = client.responses.create(**continuation_kwargs)
+                    if hasattr(response, 'output_text') and response.output_text:
+                        raw_response = response.output_text.strip()
+                        print(f"[DEBUG] Continuation produced output_text: {raw_response[:100]}...")
                 if timer:
                     timer.cancel()
                 # Apply encoding fixes and mojibake cleaning
@@ -1823,19 +1865,16 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                         role = getattr(item, 'role', 'unknown')
                         print(f"[DEBUG] Item {i}: type={item_type}, role={role}")
                 
-                # Last resort - issue a continuation call that keeps web-search tools enabled.
-                # Avoid a no-tools fallback, which can cause "no browsing tool available" responses.
-                print("[DEBUG] Issuing Responses API continuation call with tools enabled to force final text...")
+                # Last resort - issue a finalization turn using previous_response_id.
+                # This avoids web-search tool loops while preserving prior reasoning/tool context.
+                print("[DEBUG] Issuing Responses API finalization call (previous_response_id, no tools) to force final text...")
                 followup_input = (
-                    "Using the web results gathered so far, provide the final plain-text answer now. "
-                    "Do not claim you lack web access. If needed, perform additional web searches before finalizing.\n\n"
-                    + str(limited_prompt)
+                    "Using the web results and reasoning already gathered in this conversation, provide the final plain-text "
+                    "answer now. Do not output markdown tables. Do not say you lack web access."
                 )
                 followup_kwargs = {
                     "model": model,
                     "input": followup_input,
-                    "tools": [tools_config],
-                    "tool_choice": "required" if force_web_tool_use else "auto",
                     "text": {"format": {"type": "text"}, "verbosity": "medium"},
                     "max_output_tokens": 10000
                 }
@@ -1847,7 +1886,7 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                     _is_gpt51_followup = "gpt-5.1" in _model_lower_followup or "gpt-5-1" in _model_lower_followup
                     _is_gpt52_followup = "gpt-5.2" in _model_lower_followup or "gpt-5-2" in _model_lower_followup
                     _is_gpt54_followup = "gpt-5.4" in _model_lower_followup or "gpt-5-4" in _model_lower_followup
-                    reasoning_effort = "medium" if (_is_gpt51_followup or _is_gpt52_followup or _is_gpt54_followup) else "low"
+                    reasoning_effort = "low" if _is_gpt54_followup else ("medium" if (_is_gpt51_followup or _is_gpt52_followup) else "low")
                     followup_kwargs["reasoning"] = {"effort": reasoning_effort}
                 followup_response = client.responses.create(**followup_kwargs)
                 if hasattr(followup_response, 'output_text') and followup_response.output_text:
