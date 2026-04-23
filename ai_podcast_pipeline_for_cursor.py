@@ -499,10 +499,10 @@ def upload_text_to_gcs(text_content, destination_blob_name):
 # CONFIGURATION - Customize as needed
 # -----------------------------------------
 # DEFAULT WORKFLOW REFERENCE:
-# Workflow ID 43: "Full Workflow with Eleven Voice and 5.1 for web search"
-#   - Uses GPT 5.1 (Model ID 124) for web search capabilities
+# Workflow ID 43: "Full Workflow with Eleven Voice and GPT-5.4 for web search"
+#   - Uses GPT-5.4 (Model ID 188) for web search capabilities
 #   - Uses Claude Sonnet 4.5 (Model ID 145) for script generation and title/description
-#   - Workflow Code: PPU,PPL15,P10&P8&R2M124,P4&R3M145,P12&R4M145,R5SL10T5,R4SL7T5,L8E1SL4T5,L1&L9&L2SL3T5
+#   - Workflow Code: PPU,PPL15,P10&P8&R2M188,P4&R3M145,P12&R4M145,R5SL10T5,R4SL7T5,L8E1SL4T5,L1&L9&L2SL3T5
 #   - This is the recommended default workflow for production use
 #
 EXCEL_FILENAME = 'ai_podcast_workflow.xlsx'
@@ -515,6 +515,79 @@ SHARE_SHEET_WITH_EMAIL = 'AIConvoCast@gmail.com'
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 ELEVENLABS_API_KEY = os.getenv('ELEVENLABS_API_KEY')
 GOOGLE_TTS_SERVICE_ACCOUNT_FILE = 'jmio-google-api.json'  # Same service account file
+
+# Google Chirp 3 configuration (used by GV workflow steps)
+GOOGLE_CHIRP3_VOICE_ID_TO_NAME = {
+    "1": "Alnilam",
+    "2": "Achernar",   # Female
+    "3": "Achird",     # Male
+    "4": "Algenib",    # Male
+    "5": "Algieba",    # Male
+    "6": "Aoede",      # Female
+    "7": "Autonoe",    # Female
+    "8": "Callirrhoe", # Female
+    "9": "Charon",     # Male
+    "10": "Despina",   # Female
+    "11": "Enceladus", # Male
+    "12": "Erinome",   # Female
+    "13": "Fenrir",    # Male
+    "14": "Gacrux",    # Female
+    "15": "Iapetus",   # Male
+    "16": "Kore",      # Female
+    "17": "Laomedeia", # Female
+    "18": "Leda",      # Female
+    "19": "Orus",      # Male
+    "20": "Pulcherrima", # Female
+    "21": "Puck",      # Male
+    "22": "Rasalgethi", # Male
+    "23": "Sadachbia", # Male
+    "24": "Sadaltager", # Male
+    "25": "Schedar",   # Male
+    "26": "Sulafat",   # Female
+    "27": "Umbriel",   # Male
+    "28": "Vindemiatrix", # Female
+    "29": "Zephyr",    # Female
+    "30": "Zubenelgenubi" # Male
+}
+GOOGLE_CHIRP3_DEFAULT_VOICE_ID = "1"  # GV1
+GOOGLE_CHIRP3_DEFAULT_VOICE_NAME = GOOGLE_CHIRP3_VOICE_ID_TO_NAME[GOOGLE_CHIRP3_DEFAULT_VOICE_ID]  # Alnilam
+GOOGLE_CHIRP3_AUDIO_SETTINGS = {
+    # Tuned for podcast narration: slightly faster pace while staying smooth/natural.
+    "speaking_rate": 1.08,
+    "volume_gain_db": 0.0
+}
+
+# Fine-tuning instructions for podcast script generation with Claude Opus 4.7.
+# Applied at runtime for P4/P12 steps so existing sheet prompts can remain mostly unchanged.
+OPUS47_SCRIPT_TUNING_APPENDIX = (
+    "Additional script requirements for this run:\n"
+    "- Target spoken length: 5 to 7 minutes.\n"
+    "- Cover exactly 4 distinct stories when 4+ stories are available in source material.\n"
+    "- Allocate roughly balanced depth across stories while prioritizing the most newsworthy details.\n"
+    "- Keep tone factual and reportorial: accurate, neutral, and concise; avoid speculation.\n"
+    "- Do not add an outro paragraph or closing wrap-up that summarizes all stories together.\n"
+    "- Do not mention the date range coverage in closing language.\n"
+    "- End naturally after the fourth story with a clean final sentence (no sign-off).\n"
+)
+
+# Manual model-ID overrides to support deterministic workflow codes like M188.
+# This keeps workflows resilient even before the Models sheet is updated.
+MODEL_ID_OVERRIDES = {
+    "181": {"name": "gpt-5.4-2026-03-05", "web_search": False},
+    "182": {"name": "gpt-5.4-2026-03-05", "web_search": True},
+    "183": {"name": "gpt-5.4-pro", "web_search": False},
+    "184": {"name": "gpt-5.4-pro", "web_search": True},
+    "185": {"name": "gpt-5.4-pro-2026-03-05", "web_search": False},
+    "186": {"name": "gpt-5.4-pro-2026-03-05", "web_search": True},
+    "187": {"name": "gpt-5.4", "web_search": False},
+    "188": {"name": "gpt-5.4", "web_search": True},
+    "189": {"name": "gpt-5.4-nano-2026-03-17", "web_search": False},
+    "190": {"name": "gpt-5.4-nano-2026-03-17", "web_search": True},
+    "191": {"name": "claude-opus-4-7", "web_search": False},
+    "192": {"name": "claude-opus-4-7", "web_search": True},
+    "193": {"name": "claude-sonnet-4-6", "web_search": False},
+    "194": {"name": "claude-sonnet-4-6", "web_search": True}
+}
 
 # Instantiate the OpenAI client once using the API key from environment variables
 if not OPENAI_API_KEY:
@@ -911,7 +984,21 @@ Topic to generate Title and Description based:'''],
         [119, "gpt-4o-2024-08-06", "N", "Y", "N"],
         [120, "gpt-4o-2024-11-20", "N", "Y", "N"],
         [121, "gpt-5-chat-latest", "N", "Y", "N"],
-        [122, "gpt-5-2025-08-07", "N", "Y", "N"]
+        [122, "gpt-5-2025-08-07", "N", "Y", "N"],
+        [181, "gpt-5.4-2026-03-05", "N", "N", "N"],
+        [182, "gpt-5.4-2026-03-05", "N", "Y", "N"],
+        [183, "gpt-5.4-pro", "N", "N", "N"],
+        [184, "gpt-5.4-pro", "N", "Y", "N"],
+        [185, "gpt-5.4-pro-2026-03-05", "N", "N", "N"],
+        [186, "gpt-5.4-pro-2026-03-05", "N", "Y", "N"],
+        [187, "gpt-5.4", "N", "N", "N"],
+        [188, "gpt-5.4", "N", "Y", "N"],
+        [189, "gpt-5.4-nano-2026-03-17", "N", "N", "N"],
+        [190, "gpt-5.4-nano-2026-03-17", "N", "Y", "N"],
+        [191, "claude-opus-4-7", "N", "N", "N"],
+        [192, "claude-opus-4-7", "N", "Y", "N"],
+        [193, "claude-sonnet-4-6", "N", "N", "N"],
+        [194, "claude-sonnet-4-6", "N", "Y", "N"]
     ], columns=["Model ID", "Model Name", "Model Default", "Web Search", "Deprecated"])
 
     workflow_steps = pd.DataFrame(columns=[
@@ -1454,16 +1541,31 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
         timer = Timer(configured_timeout, timeout_handler)
         timer.start()
         print(f"⏱️ Starting request with {configured_timeout}-second timeout for model {model}")
+
+    def is_transient_openai_error(err_text):
+        """Detect retryable platform-side failures (5xx/timeouts/service unavailable)."""
+        t = str(err_text).lower()
+        return any(token in t for token in [
+            "server_error", "error code: 500", " 500 ", "status code: 500",
+            "error code: 520", " 520 ", "status code: 520",
+            "error code: 502", "error code: 503", "error code: 504",
+            "service unavailable", "bad gateway", "gateway timeout",
+            "temporarily unavailable", "upstream",
+            "cloudflare", "web server is returning an unknown error",
+            "<!doctype html>", "<html"
+        ])
         
-    # Web search: use quality-focused research prompt for podcast/news workflows
-    # (Previous "concise, 2 sources, 300 words" was too restrictive for finding best articles)
+    # Web search: quality-focused research prompt tuned for comprehensive but time-efficient coverage.
     force_web_tool_use = web_search and model_requires_forced_web_search(model)
     if web_search:
         limited_prompt = (
-            "Conduct thorough research for a high-quality podcast. Use 5-10+ credible sources when available. "
-            "Include specific details, quotes, dates, and company names. Validate recency and accuracy. "
-            "Prioritize comprehensive coverage and the most newsworthy, engaging stories. "
-            "Output can be 600-1200 words for thorough research. Search multiple sources before concluding.\n\n"
+            "Conduct a fairly comprehensive but time-efficient AI news scan suitable for a high-quality podcast. "
+            "Prioritize the most important and engaging stories from the last 24-72 hours. "
+            "Use 6-12 credible sources when available, balancing speed and depth. "
+            "For each key story, include what happened, why it matters, date/timing context, and notable quotes if available. "
+            "Favor primary sources (company blogs, official releases, filings, research org posts) plus reputable reporting. "
+            "Avoid low-signal repetition across near-duplicate articles. "
+            "Return a clean plain-text summary in approximately 700-1100 words.\n\n"
             "Request: " + str(prompt)
         )
         if force_web_tool_use:
@@ -1503,26 +1605,42 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                 )
             except Exception as e:
                 err_text = str(e)
-                if ("rate limit" in err_text.lower() or "429" in err_text) and not timeout_occurred:
+                if (("rate limit" in err_text.lower() or "429" in err_text) or is_transient_openai_error(err_text)) and not timeout_occurred:
                     # Parse suggested wait if present
                     import re
+                    import time
                     m = re.search(r"try again in ([0-9]+\.?[0-9]*)s", err_text)
-                    wait_s = float(m.group(1)) if m else 5.0
+                    # Longer default wait for 5xx transient platform errors
+                    wait_s = float(m.group(1)) if m else (8.0 if is_transient_openai_error(err_text) else 5.0)
                     # Reduce budgets
                     cc_max_tokens = max(300, cc_max_tokens // 2)
                     cc_search_context_size = "low"
                     remaining = configured_timeout if configured_timeout else 0
                     if remaining:
                         # Best-effort sleep bounded by remaining time
-                        from time import sleep
-                        sleep(min(wait_s, max(0.0, remaining - 2)))
-                    # Retry once with reduced budgets
-                    response = client.chat.completions.create(
-                        model=model,
-                        messages=[{"role": "user", "content": limited_prompt[:1000]}],
-                        web_search_options={**web_search_options, "search_context_size": cc_search_context_size},
-                        max_tokens=cc_max_tokens
-                    )
+                        time.sleep(min(wait_s, max(0.0, remaining - 2)))
+                    # Retry with reduced budgets; allow extra attempts for transient upstream 5xx/520.
+                    max_attempts = 3 if is_transient_openai_error(err_text) else 1
+                    last_retry_error = None
+                    response = None
+                    for attempt in range(max_attempts):
+                        try:
+                            if attempt > 0:
+                                print(f"⚠️ Retrying transient web-search error ({attempt+1}/{max_attempts}) for model {model}...")
+                                time.sleep(min(4 * attempt, 10))
+                            response = client.chat.completions.create(
+                                model=model,
+                                messages=[{"role": "user", "content": limited_prompt[:1000]}],
+                                web_search_options={**web_search_options, "search_context_size": cc_search_context_size},
+                                max_tokens=cc_max_tokens
+                            )
+                            break
+                        except Exception as retry_error:
+                            last_retry_error = retry_error
+                            if not is_transient_openai_error(str(retry_error)):
+                                raise
+                    if response is None and last_retry_error:
+                        raise last_retry_error
                 else:
                     raise
             # Robust error logging for chat completions
@@ -1553,12 +1671,14 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                 return "⏰ Research timeout reached. Please try with a more specific request or use a different model."
             
             # Attempt with basic limits; handle rate limits with a quick backoff and reduced budget
-            resp_max_tokens = 10000
+            # Keep enough room for detailed synthesis without encouraging excessive verbosity/latency.
+            resp_max_tokens = 8000
             try:
                 _model_lower = str(model).lower()
                 _is_gpt5 = _model_lower.startswith("gpt-5")
                 _is_gpt51 = "gpt-5.1" in _model_lower or "gpt-5-1" in _model_lower
                 _is_gpt52 = "gpt-5.2" in _model_lower or "gpt-5-2" in _model_lower
+                _is_gpt54 = "gpt-5.4" in _model_lower or "gpt-5-4" in _model_lower
                 _is_gpt4o = _model_lower.startswith("gpt-4o")
 
                 text_cfg = {"format": {"type": "text"}}
@@ -1577,19 +1697,20 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                     "text": text_cfg,
                     "max_output_tokens": resp_max_tokens
                 }
-                # Add reasoning effort for GPT-5. gpt-5.2-chat-latest only supports "medium" (not "high")
+                # Add reasoning effort for GPT-5. Keep medium for balanced quality and runtime.
                 if _is_gpt5:
-                    reasoning_effort = "medium" if (_is_gpt51 or _is_gpt52) else "low"
+                    reasoning_effort = "medium" if (_is_gpt51 or _is_gpt52 or _is_gpt54) else "low"
                     responses_kwargs["reasoning"] = {"effort": reasoning_effort}
                     # DO NOT add: reasoning={"summary": "auto"} or include=["reasoning.encrypted_content"]
 
                 response = client.responses.create(**responses_kwargs)
             except Exception as e:
                 err_text = str(e)
-                if ("rate limit" in err_text.lower() or "429" in err_text) and not timeout_occurred:
+                if (("rate limit" in err_text.lower() or "429" in err_text) or is_transient_openai_error(err_text)) and not timeout_occurred:
                     import re, time
                     m = re.search(r"try again in ([0-9]+\.?[0-9]*)s", err_text)
-                    wait_s = float(m.group(1)) if m else 5.0
+                    # Longer default wait for 5xx transient platform errors
+                    wait_s = float(m.group(1)) if m else (10.0 if is_transient_openai_error(err_text) else 5.0)
                     # Reduce budgets
                     resp_max_tokens = max(400, resp_max_tokens // 2)
                     # Sleep bounded by remaining time
@@ -1610,12 +1731,28 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                         "text": text_cfg_retry,
                         "max_output_tokens": resp_max_tokens
                     }
-                    # Add reasoning effort for GPT-5 on retry (use medium to avoid timeout on retry)
+                    # Add reasoning effort for GPT-5 on retry
                     if _is_gpt5:
-                        reasoning_effort = "medium" if (_is_gpt51 or _is_gpt52) else "low"
+                        reasoning_effort = "medium" if (_is_gpt51 or _is_gpt52 or _is_gpt54) else "low"
                         responses_kwargs_retry["reasoning"] = {"effort": reasoning_effort}
 
-                    response = client.responses.create(**responses_kwargs_retry)
+                    max_attempts = 3 if is_transient_openai_error(err_text) else 1
+                    last_retry_error = None
+                    response = None
+                    for attempt in range(max_attempts):
+                        try:
+                            if attempt > 0:
+                                print(f"⚠️ Retrying transient web-search error ({attempt+1}/{max_attempts}) for model {model}...")
+                                time.sleep(min(5 * attempt, 12))
+                            response = client.responses.create(**responses_kwargs_retry)
+                            break
+                        except Exception as retry_error:
+                            retry_text = str(retry_error)
+                            last_retry_error = retry_error
+                            if not (is_transient_openai_error(retry_text) and not timeout_occurred):
+                                raise
+                    if response is None and last_retry_error:
+                        raise last_retry_error
                 else:
                     raise
             # Robust error logging for responses.create
@@ -1695,10 +1832,11 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                 }
                 _model_lower_followup = str(model).lower()
                 if _model_lower_followup.startswith("gpt-5"):
-                    # GPT 5.1 and GPT 5.2 models require "medium" effort, other GPT-5 models use "low"
+                    # Keep GPT-5.1/5.2/5.4 at medium effort for balanced quality and runtime.
                     _is_gpt51_followup = "gpt-5.1" in _model_lower_followup or "gpt-5-1" in _model_lower_followup
                     _is_gpt52_followup = "gpt-5.2" in _model_lower_followup or "gpt-5-2" in _model_lower_followup
-                    reasoning_effort = "medium" if (_is_gpt51_followup or _is_gpt52_followup) else "low"
+                    _is_gpt54_followup = "gpt-5.4" in _model_lower_followup or "gpt-5-4" in _model_lower_followup
+                    reasoning_effort = "medium" if (_is_gpt51_followup or _is_gpt52_followup or _is_gpt54_followup) else "low"
                     followup_kwargs["reasoning"] = {"effort": reasoning_effort}
                 followup_response = client.responses.create(**followup_kwargs)
                 if hasattr(followup_response, 'output_text') and followup_response.output_text:
@@ -2545,45 +2683,15 @@ def generate_google_voice_audio(text, voice_name, output_path):
         return None
 
 
+def get_google_chirp3_voice_name_by_id(voice_id):
+    """Resolve a GV voice ID (e.g., '1') to a Chirp 3 voice name."""
+    return GOOGLE_CHIRP3_VOICE_ID_TO_NAME.get(str(voice_id), GOOGLE_CHIRP3_DEFAULT_VOICE_NAME)
+
+
 def _generate_single_google_chunk(text, voice_name, output_path):
     """Generate a single audio chunk using Google TTS."""
     try:
-        # Map voice name to full Google voice identifier
-        # Based on the documentation, Alnilam is a male voice in Chirp 3 HD
-        voice_mapping = {
-            "Alnilam": "en-US-Chirp3-HD-Alnilam",
-            "Achernar": "en-US-Chirp3-HD-Achernar",  # Female
-            "Achird": "en-US-Chirp3-HD-Achird",      # Male
-            "Algenib": "en-US-Chirp3-HD-Algenib",    # Male
-            "Algieba": "en-US-Chirp3-HD-Algieba",    # Male
-            "Aoede": "en-US-Chirp3-HD-Aoede",        # Female
-            "Autonoe": "en-US-Chirp3-HD-Autonoe",    # Female
-            "Callirrhoe": "en-US-Chirp3-HD-Callirrhoe", # Female
-            "Charon": "en-US-Chirp3-HD-Charon",      # Male
-            "Despina": "en-US-Chirp3-HD-Despina",    # Female
-            "Enceladus": "en-US-Chirp3-HD-Enceladus", # Male
-            "Erinome": "en-US-Chirp3-HD-Erinome",    # Female
-            "Fenrir": "en-US-Chirp3-HD-Fenrir",      # Male
-            "Gacrux": "en-US-Chirp3-HD-Gacrux",      # Female
-            "Iapetus": "en-US-Chirp3-HD-Iapetus",    # Male
-            "Kore": "en-US-Chirp3-HD-Kore",          # Female
-            "Laomedeia": "en-US-Chirp3-HD-Laomedeia", # Female
-            "Leda": "en-US-Chirp3-HD-Leda",          # Female
-            "Orus": "en-US-Chirp3-HD-Orus",          # Male
-            "Pulcherrima": "en-US-Chirp3-HD-Pulcherrima", # Female
-            "Puck": "en-US-Chirp3-HD-Puck",          # Male
-            "Rasalgethi": "en-US-Chirp3-HD-Rasalgethi", # Male
-            "Sadachbia": "en-US-Chirp3-HD-Sadachbia", # Male
-            "Sadaltager": "en-US-Chirp3-HD-Sadaltager", # Male
-            "Schedar": "en-US-Chirp3-HD-Schedar",    # Male
-            "Sulafat": "en-US-Chirp3-HD-Sulafat",    # Female
-            "Umbriel": "en-US-Chirp3-HD-Umbriel",    # Male
-            "Vindemiatrix": "en-US-Chirp3-HD-Vindemiatrix", # Female
-            "Zephyr": "en-US-Chirp3-HD-Zephyr",      # Female
-            "Zubenelgenubi": "en-US-Chirp3-HD-Zubenelgenubi" # Male
-        }
-        
-        full_voice_name = voice_mapping.get(voice_name, f"en-US-Chirp3-HD-{voice_name}")
+        full_voice_name = f"en-US-Chirp3-HD-{voice_name}"
         
         # MOJIBAKE CHECK BEFORE GOOGLE TTS
         print(f"🔍 _generate_single_google_chunk: Checking text before TTS")
@@ -2636,18 +2744,51 @@ def _generate_single_google_chunk(text, voice_name, output_path):
             name=full_voice_name
         )
         
-        # Set up the audio config
-        audio_config = texttospeech.AudioConfig(
-            audio_encoding=texttospeech.AudioEncoding.MP3
-        )
+        # Chirp voices can reject some audio params; try optimized first, then degrade gracefully.
+        audio_config_variants = [
+            (
+                "optimized",
+                texttospeech.AudioConfig(
+                    audio_encoding=texttospeech.AudioEncoding.MP3,
+                    speaking_rate=GOOGLE_CHIRP3_AUDIO_SETTINGS["speaking_rate"],
+                    volume_gain_db=GOOGLE_CHIRP3_AUDIO_SETTINGS["volume_gain_db"]
+                )
+            ),
+            (
+                "rate_only",
+                texttospeech.AudioConfig(
+                    audio_encoding=texttospeech.AudioEncoding.MP3,
+                    speaking_rate=GOOGLE_CHIRP3_AUDIO_SETTINGS["speaking_rate"]
+                )
+            ),
+            (
+                "safe_default",
+                texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
+            )
+        ]
         
         start_time = time.time()
         print(f"[DEBUG] Calling Google TTS API with voice: {full_voice_name}")
         
-        # Perform the text-to-speech request
-        response = google_tts_client.synthesize_speech(
-            input=synthesis_input, voice=voice, audio_config=audio_config
-        )
+        response = None
+        last_error = None
+        for config_name, audio_config in audio_config_variants:
+            try:
+                if config_name != "optimized":
+                    print(f"[DEBUG] Retrying Google TTS with fallback config: {config_name}")
+                response = google_tts_client.synthesize_speech(
+                    input=synthesis_input, voice=voice, audio_config=audio_config
+                )
+                break
+            except Exception as call_error:
+                last_error = call_error
+                error_text = str(call_error).lower()
+                if "does not support" in error_text or "invalid argument" in error_text:
+                    continue
+                raise
+        
+        if response is None:
+            raise last_error if last_error else RuntimeError("Google TTS failed without a specific error")
         
         elapsed = time.time() - start_time
         print(f"[DEBUG] Google TTS API call returned in {elapsed:.3f}s")
@@ -2914,6 +3055,56 @@ if __name__ == '__main__':
 
     logs_df = pd.DataFrame(logs_ws.get_all_records()) if logs_ws else pd.DataFrame(columns=["Log ID", "Log Timestamp", "Log Message"])
 
+    def _excel_col_letter(col_idx_1_based):
+        result = ''
+        n = int(col_idx_1_based)
+        while n > 0:
+            n, remainder = divmod(n - 1, 26)
+            result = chr(65 + remainder) + result
+        return result
+
+    def sync_script_prompt_tuning_to_prompts_tab(prompts_ws_obj, prompts_dataframe):
+        """
+        Persist script tuning instructions in the Prompts tab so edits are visible and trackable there.
+        Targets Prompt ID 4 and Prompt ID 12 when present.
+        """
+        if prompts_dataframe.empty:
+            return prompts_dataframe
+
+        required_cols = {"Prompt ID", "Prompt Description"}
+        if not required_cols.issubset(set(prompts_dataframe.columns)):
+            return prompts_dataframe
+
+        prompt_desc_col_idx = list(prompts_dataframe.columns).index("Prompt Description") + 1
+        prompt_desc_col_letter = _excel_col_letter(prompt_desc_col_idx)
+        target_prompt_ids = {"4", "12"}
+        updates_applied = 0
+
+        for df_idx, row in prompts_dataframe.iterrows():
+            prompt_id = str(row.get("Prompt ID", "")).strip()
+            if prompt_id not in target_prompt_ids:
+                continue
+
+            existing_desc = str(row.get("Prompt Description", "") or "")
+            if OPUS47_SCRIPT_TUNING_APPENDIX.strip() in existing_desc:
+                continue
+
+            updated_desc = f"{existing_desc}\n\n{OPUS47_SCRIPT_TUNING_APPENDIX}".strip()
+            prompts_dataframe.at[df_idx, "Prompt Description"] = updated_desc
+            sheet_row_number = int(df_idx) + 2  # +1 for header, +1 for 1-based indexing
+            cell_ref = f"{prompt_desc_col_letter}{sheet_row_number}"
+            try:
+                prompts_ws_obj.update(cell_ref, [[updated_desc]])
+                updates_applied += 1
+            except Exception as e:
+                print(f"⚠️ Could not update Prompts tab cell {cell_ref} for Prompt ID {prompt_id}: {e}")
+
+        if updates_applied > 0:
+            print(f"✅ Synced Opus 4.7 script tuning to Prompts tab for {updates_applied} prompt(s).")
+        return prompts_dataframe
+
+    prompts_df = sync_script_prompt_tuning_to_prompts_tab(prompts_ws, prompts_df)
+
     def get_next_log_id():
         if logs_df.empty or 'Log ID' not in logs_df.columns:
             return 1
@@ -2939,6 +3130,9 @@ if __name__ == '__main__':
 
     # Helper to get model name by Model ID
     def get_model_name(model_id):
+        override = MODEL_ID_OVERRIDES.get(str(model_id))
+        if override:
+            return override["name"]
         row = models_df[models_df['Model ID'].astype(str) == str(model_id)]
         if not row.empty:
             return row.iloc[0]['Model Name']
@@ -2953,6 +3147,9 @@ if __name__ == '__main__':
 
     # Helper to get web search flag for a model by Model ID
     def get_model_web_search_by_id(model_id):
+        override = MODEL_ID_OVERRIDES.get(str(model_id))
+        if override:
+            return bool(override["web_search"])
         row = models_df[models_df['Model ID'].astype(str) == str(model_id)]
         if not row.empty:
             return str(row.iloc[0].get('Web Search', 'N')).strip().upper() == 'Y'
@@ -2979,7 +3176,7 @@ if __name__ == '__main__':
         return None
 
     # Helper to get default model for workflow
-    # Note: Workflow ID 43 uses GPT 5.1 (M124) for web search and Claude Sonnet 4.5 (M145) for generation
+    # Note: Workflow ID 43 uses GPT-5.4 (M188) for web search and Claude Sonnet 4.5 (M145) for generation
     def get_workflow_default_model(workflow_row):
         return workflow_row['Model Default'] if 'Model Default' in workflow_row else 'gpt-4o'
 
@@ -3124,6 +3321,21 @@ if __name__ == '__main__':
         # Only print the first 100 characters of the final input
         print(f"    Input (first 100): {input_text[:100]}{'...' if len(input_text) > 100 else ''}")
         return input_text, model_override, model_id_override
+
+    def apply_podcast_script_tuning(input_text, step, model_name):
+        """Apply targeted runtime tuning for podcast script-writing steps."""
+        model_lower = str(model_name or "").lower()
+        if "claude-opus-4-7" not in model_lower:
+            return input_text
+
+        # Tune only script-writing steps in this workflow family.
+        is_script_step = ("P4" in str(step)) or ("P12" in str(step))
+        if not is_script_step:
+            return input_text
+
+        if OPUS47_SCRIPT_TUNING_APPENDIX.strip() not in str(input_text):
+            return f"{input_text}\n\n{OPUS47_SCRIPT_TUNING_APPENDIX}"
+        return input_text
 
     # Add to_native helper at top-level so it is available everywhere
     def to_native(val):
@@ -3605,43 +3817,8 @@ if __name__ == '__main__':
                                 f"ElevenLabs credit/quota error: {error_msg}. Falling back to Google Voice."
                             ])
                             
-                            # Fallback to Google Voice (GV1) - use same location IDs
-                            # Map voice IDs to voice names (GV1 = Alnilam)
-                            google_voice_mapping = {
-                                "1": "Alnilam",
-                                "2": "Achernar",   # Female
-                                "3": "Achird",     # Male  
-                                "4": "Algenib",    # Male
-                                "5": "Algieba",    # Male
-                                "6": "Aoede",      # Female
-                                "7": "Autonoe",    # Female
-                                "8": "Callirrhoe", # Female
-                                "9": "Charon",     # Male
-                                "10": "Despina",   # Female
-                                "11": "Enceladus", # Male
-                                "12": "Erinome",   # Female
-                                "13": "Fenrir",    # Male
-                                "14": "Gacrux",    # Female
-                                "15": "Iapetus",   # Male
-                                "16": "Kore",      # Female
-                                "17": "Laomedeia", # Female
-                                "18": "Leda",      # Female
-                                "19": "Orus",      # Male
-                                "20": "Pulcherrima", # Female
-                                "21": "Puck",      # Male
-                                "22": "Rasalgethi", # Male
-                                "23": "Sadachbia", # Male
-                                "24": "Sadaltager", # Male
-                                "25": "Schedar",   # Male
-                                "26": "Sulafat",   # Female
-                                "27": "Umbriel",   # Male
-                                "28": "Vindemiatrix", # Female
-                                "29": "Zephyr",    # Female
-                                "30": "Zubenelgenubi" # Male
-                            }
-                            
-                            # Use GV1 (Alnilam) as fallback
-                            voice_name = google_voice_mapping.get("1", "Alnilam")
+                            # Fallback to Google Voice GV1 (Chirp 3 Alnilam) using same location IDs
+                            voice_name = get_google_chirp3_voice_name_by_id(GOOGLE_CHIRP3_DEFAULT_VOICE_ID)
                             
                             print(f"    > Generating audio with Google Voice: {voice_name}")
                             temp_audio_path = MP3_OUTPUT_DIR / f"temp_google_audio_{workflow_id}_step_{i+1}.mp3"
@@ -3755,41 +3932,7 @@ if __name__ == '__main__':
                     save_location_id = google_voice_match.group(3)
                     title_resp_idx = int(google_voice_match.group(4)) - 1 if google_voice_match.group(4) else None
                     
-                    # Map voice IDs to voice names (GV1 = Alnilam)
-                    google_voice_mapping = {
-                        "1": "Alnilam",
-                        "2": "Achernar",   # Female
-                        "3": "Achird",     # Male  
-                        "4": "Algenib",    # Male
-                        "5": "Algieba",    # Male
-                        "6": "Aoede",      # Female
-                        "7": "Autonoe",    # Female
-                        "8": "Callirrhoe", # Female
-                        "9": "Charon",     # Male
-                        "10": "Despina",   # Female
-                        "11": "Enceladus", # Male
-                        "12": "Erinome",   # Female
-                        "13": "Fenrir",    # Male
-                        "14": "Gacrux",    # Female
-                        "15": "Iapetus",   # Male
-                        "16": "Kore",      # Female
-                        "17": "Laomedeia", # Female
-                        "18": "Leda",      # Female
-                        "19": "Orus",      # Male
-                        "20": "Pulcherrima", # Female
-                        "21": "Puck",      # Male
-                        "22": "Rasalgethi", # Male
-                        "23": "Sadachbia", # Male
-                        "24": "Sadaltager", # Male
-                        "25": "Schedar",   # Male
-                        "26": "Sulafat",   # Female
-                        "27": "Umbriel",   # Male
-                        "28": "Vindemiatrix", # Female
-                        "29": "Zephyr",    # Female
-                        "30": "Zubenelgenubi" # Male
-                    }
-                    
-                    voice_name = google_voice_mapping.get(voice_id, "Alnilam")
+                    voice_name = get_google_chirp3_voice_name_by_id(voice_id)
                     
                     # Get location details for source folder
                     source_location = get_location_by_id(location_id)
@@ -4124,6 +4267,7 @@ if __name__ == '__main__':
                         model_to_use = default_model
                         web_search_enabled = get_model_web_search_by_name(default_model)
                     print(f"  - Step {i+1}: {step} (Model: {model_to_use}, Web Search: {web_search_enabled})")
+                    input_text = apply_podcast_script_tuning(input_text, step, model_to_use)
                     # Fallback for OpenAI client if responses.create is not available
                     if web_search_enabled and not hasattr(client, 'responses'):
                         msg = "❌ Web search requested but your OpenAI Python package does not support responses.create. Please upgrade openai to the latest version."
@@ -4132,6 +4276,9 @@ if __name__ == '__main__':
                     else:
                         # Use higher temperature (0.85) for script/title generation when web_search off
                         temp = 0.85 if not web_search_enabled else 0.8
+                        # Slightly lower temperature for Opus 4.7 to improve factual consistency and structure.
+                        if not web_search_enabled and "claude-opus-4-7" in str(model_to_use).lower():
+                            temp = 0.7
                         response = call_model(input_text, model_to_use, temperature=temp, web_search=web_search_enabled)
                 
                 # Ensure response is properly encoded as UTF-8
