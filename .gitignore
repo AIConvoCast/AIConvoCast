@@ -41,6 +41,7 @@ Thumbs.db
 
 # Credentials
 *.json
+!manifest.json
 jmio-google-api.json
 client_secret.json
 token.pickle

@@ -11,6 +11,13 @@ import requests
 load_dotenv()
 
 ELEVENLABS_API_KEY = os.getenv('ELEVENLABS_API_KEY')
+ELEVENLABS_MODEL_ID = "eleven_v3"
+ELEVENLABS_VOICE_SETTINGS = {
+    "stability": 0.5,
+    "similarity_boost": 0.7,
+    "style": 0.0,
+    "speed": 1.06,
+}
 
 def test_eleven_labs_connection():
     """Test basic Eleven Labs API connection using official client"""
@@ -94,17 +101,11 @@ def test_voice_generation():
         print(f"   Using voice ID: {voice_id}")
         
         # Generate audio with custom settings (returns a generator)
-        # Note: v3 requires stability to be exactly 0.0, 0.5, or 1.0
         audio_stream = client.text_to_speech.convert(
             text=test_text,
             voice_id=voice_id,
-            voice_settings={
-                "stability": 0.5,  # v3: 0.0=Creative, 0.5=Natural, 1.0=Robust
-                "similarity_boost": 0.7,
-                "style": 0.5,
-                "speed": 1.06
-            },
-            model_id="eleven_v3"
+            voice_settings=ELEVENLABS_VOICE_SETTINGS,
+            model_id=ELEVENLABS_MODEL_ID
         )
         
         # Save the audio file
@@ -130,23 +131,19 @@ def test_voice_generation_rest():
     url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
     headers = {
         "xi-api-key": ELEVENLABS_API_KEY,
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "Accept": "audio/mpeg"
     }
     
     payload = {
         "text": test_text,
-        "model_id": "eleven_v3",
-        "voice_settings": {
-            "stability": 0.5,  # v3: 0.0=Creative, 0.5=Natural, 1.0=Robust
-            "similarity_boost": 0.7,
-            "style": 0.5,
-            "speed": 1.06
-        }
+        "model_id": ELEVENLABS_MODEL_ID,
+        "voice_settings": ELEVENLABS_VOICE_SETTINGS
     }
     
     try:
         print(f"🎤 Testing voice generation with REST API...")
-        response = requests.post(url, json=payload, headers=headers)
+        response = requests.post(url, json=payload, headers=headers, timeout=180)
         
         if response.status_code == 200:
             # Save the audio file
@@ -183,17 +180,11 @@ def test_specific_chunk():
         print(f"   Using voice ID: {voice_id}")
 
         # Generate audio with custom settings (returns a generator)
-        # Note: v3 requires stability to be exactly 0.0, 0.5, or 1.0
         audio_stream = client.text_to_speech.convert(
             text=test_chunk,
             voice_id=voice_id,
-            voice_settings={
-                "stability": 0.5,  # v3: 0.0=Creative, 0.5=Natural, 1.0=Robust
-                "similarity_boost": 0.7,
-                "style": 0.5,
-                "speed": 1.06
-            },
-            model_id="eleven_v3"
+            voice_settings=ELEVENLABS_VOICE_SETTINGS,
+            model_id=ELEVENLABS_MODEL_ID
         )
 
         # Save the audio file
@@ -246,4 +237,4 @@ if __name__ == "__main__":
         print("\n⚠️  Some tests failed. Please check your configuration.")
         print("   - Ensure ELEVENLABS_API_KEY is set in .env file")
         print("   - Verify your API key is valid")
-        print("   - Install elevenlabs package: pip install elevenlabs") 
+        print("   - Install elevenlabs package: pip install elevenlabs")

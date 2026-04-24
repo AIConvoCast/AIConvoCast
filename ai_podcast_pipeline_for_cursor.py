@@ -554,14 +554,20 @@ GOOGLE_CHIRP3_DEFAULT_VOICE_NAME = GOOGLE_CHIRP3_VOICE_ID_TO_NAME[GOOGLE_CHIRP3_
 GOOGLE_CHIRP3_AUDIO_SETTINGS = {
     # Tuned for podcast narration: slightly faster pace while staying smooth/natural.
     "speaking_rate": 1.08,
-    "volume_gain_db": 0.0
+    "volume_gain_db": 0.0,
+    # Request uncompressed audio from Google, then encode once locally for podcast delivery.
+    "audio_encoding": texttospeech.AudioEncoding.LINEAR16,
+    "mp3_bitrate": "192k",
+    "effects_profile_id": []
 }
+DEFAULT_MP3_EXPORT_BITRATE = "192k"
 
 # Fine-tuning instructions for podcast script generation with Claude Opus 4.7.
 # Applied at runtime for P4/P12 steps so existing sheet prompts can remain mostly unchanged.
 OPUS47_SCRIPT_TUNING_APPENDIX = (
     "Additional script requirements for this run:\n"
-    "- Target spoken length: 5 to 7 minutes.\n"
+    "- Target spoken length: roughly 6 to 8 minutes.\n"
+    "- Let the length vary based on how much genuinely interesting, useful, and newsworthy detail is available in the source material.\n"
     "- Cover exactly 4 distinct stories when 4+ stories are available in source material.\n"
     "- Allocate roughly balanced depth across stories while prioritizing the most newsworthy details.\n"
     "- Keep tone factual and reportorial: accurate, neutral, and concise; avoid speculation.\n"
@@ -587,6 +593,20 @@ MODEL_ID_OVERRIDES = {
     "192": {"name": "claude-opus-4-7", "web_search": True},
     "193": {"name": "claude-sonnet-4-6", "web_search": False},
     "194": {"name": "claude-sonnet-4-6", "web_search": True}
+}
+
+ELEVENLABS_DEFAULT_MODEL_ID = "eleven_v3"
+ELEVENLABS_V3_MAX_CHARS = 3000
+ELEVENLABS_CHUNK_MAX_CHARS = 2900
+ELEVENLABS_DEFAULT_VOICE_SETTINGS = {
+    "stability": 0.5,
+    "similarity_boost": 0.7,
+    "style": 0.0,
+    "speed": 1.06,
+}
+ELEVENLABS_MODEL_ID_ALIASES = {
+    "eleven_v2": ELEVENLABS_DEFAULT_MODEL_ID,
+    "eleven_multilingual_v2": ELEVENLABS_DEFAULT_MODEL_ID,
 }
 
 # Instantiate the OpenAI client once using the API key from environment variables
@@ -1020,7 +1040,15 @@ Topic to generate Title and Description based:'''],
     ], columns=["Location ID", "Location Description", "Type", "File Or Folder", "Location", "Latest"])
 
     eleven = pd.DataFrame([
-        [1, "Liam", "eleven_v3", 0.5, 0.7, 0.5, 1.06]
+        [
+            1,
+            "Liam",
+            ELEVENLABS_DEFAULT_MODEL_ID,
+            ELEVENLABS_DEFAULT_VOICE_SETTINGS["stability"],
+            ELEVENLABS_DEFAULT_VOICE_SETTINGS["similarity_boost"],
+            ELEVENLABS_DEFAULT_VOICE_SETTINGS["style"],
+            ELEVENLABS_DEFAULT_VOICE_SETTINGS["speed"],
+        ]
     ], columns=["Eleven ID", "Voice", "Model", "Stability", "Similarity Boost", "Style", "Speed"])
 
     return {
@@ -2255,11 +2283,11 @@ def call_google_model(prompt, model="gemini-2.0-flash", temperature=0.8):
         sys.exit(1)
 
 
-def split_text_into_chunks(text, max_length=2900):
+def split_text_into_chunks(text, max_length=ELEVENLABS_CHUNK_MAX_CHARS):
     """
     Splits text into chunks of up to max_length characters, preferably on sentence boundaries.
     If a sentence is longer than max_length, it is split into hard chunks.
-    Default max_length is 2900 to stay under Eleven Labs v3's 3000 character limit.
+    Default max_length stays below Eleven Labs v3's 3000 character limit.
     """
     import re
     
@@ -2368,6 +2396,74 @@ def is_elevenlabs_credit_quota_error(error_message, status_code=None):
     return False
 
 
+def get_elevenlabs_model_id(eleven_config=None):
+    if eleven_config:
+        model_id = eleven_config.get("Model")
+        if model_id is not None and not pd.isna(model_id):
+            model_id = str(model_id).strip()
+            if model_id:
+                return ELEVENLABS_MODEL_ID_ALIASES.get(model_id.lower(), model_id)
+    return ELEVENLABS_DEFAULT_MODEL_ID
+
+
+def _coerce_elevenlabs_float(value, default, min_value, max_value):
+    if value is None:
+        return default
+    try:
+        if pd.isna(value):
+            return default
+    except TypeError:
+        pass
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return default
+    return max(min_value, min(max_value, number))
+
+
+def build_elevenlabs_voice_settings(eleven_config=None):
+    settings = dict(ELEVENLABS_DEFAULT_VOICE_SETTINGS)
+    if eleven_config:
+        settings["stability"] = _coerce_elevenlabs_float(
+            eleven_config.get("Stability"),
+            settings["stability"],
+            0.0,
+            1.0,
+        )
+        settings["similarity_boost"] = _coerce_elevenlabs_float(
+            eleven_config.get("Similarity Boost"),
+            settings["similarity_boost"],
+            0.0,
+            1.0,
+        )
+        settings["style"] = _coerce_elevenlabs_float(
+            eleven_config.get("Style"),
+            settings["style"],
+            0.0,
+            1.0,
+        )
+        settings["speed"] = _coerce_elevenlabs_float(
+            eleven_config.get("Speed"),
+            settings["speed"],
+            0.7,
+            1.2,
+        )
+    return settings
+
+
+def build_elevenlabs_tts_payload(chunk_text, eleven_config=None, previous_text=None, next_text=None):
+    payload = {
+        "text": chunk_text,
+        "model_id": get_elevenlabs_model_id(eleven_config),
+        "voice_settings": build_elevenlabs_voice_settings(eleven_config),
+    }
+    if previous_text:
+        payload["previous_text"] = previous_text[-ELEVENLABS_CHUNK_MAX_CHARS:]
+    if next_text:
+        payload["next_text"] = next_text[:ELEVENLABS_CHUNK_MAX_CHARS]
+    return payload
+
+
 def generate_voice_audio(text, voice_id, output_path, eleven_config=None):
     """
     Enhanced Eleven Labs API call using the official Python client.
@@ -2380,29 +2476,23 @@ def generate_voice_audio(text, voice_id, output_path, eleven_config=None):
     """
     try:
         from elevenlabs.client import ElevenLabs
-        # Split text into <=2900 character chunks (Eleven Labs v3 limit is 3000)
-        chunks = split_text_into_chunks(text, max_length=2900)
+        chunks = split_text_into_chunks(text, max_length=ELEVENLABS_CHUNK_MAX_CHARS)
         print(f"[DEBUG] generate_voice_audio: Preparing to send {len(chunks)} chunk(s) to Eleven Labs API.")
         if len(chunks) == 1:
             chunk_text = chunks[0]
             client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
             if eleven_config:
-                voice_settings = {
-                    "stability": float(eleven_config.get('Stability', 0.5)),  # v3: must be 0.0, 0.5, or 1.0
-                    "similarity_boost": float(eleven_config.get('Similarity Boost', 0.7)),
-                    "style": float(eleven_config.get('Style', 0.5)),
-                    "speed": float(eleven_config.get('Speed', 1.06))
-                }
+                voice_settings = build_elevenlabs_voice_settings(eleven_config)
                 try:
-                    print(f"[DEBUG] Using model: {eleven_config.get('Model', 'eleven_v3') if eleven_config else 'eleven_v3'}, voice_id: {voice_id}")
-                    if len(chunk_text) > 2900:
+                    print(f"[DEBUG] Using model: {get_elevenlabs_model_id(eleven_config)}, voice_id: {voice_id}")
+                    if len(chunk_text) > ELEVENLABS_CHUNK_MAX_CHARS:
                         print(f"[WARNING] Chunk is very long ({len(chunk_text)} chars). Consider splitting further if you see timeouts.")
                     start_time = time.time()
                     audio_stream = client.text_to_speech.convert(
                         text=chunk_text,
                         voice_id=voice_id,
                         voice_settings=voice_settings,
-                        model_id=eleven_config.get('Model', 'eleven_v3')
+                        model_id=get_elevenlabs_model_id(eleven_config)
                     )
                     elapsed = time.time() - start_time
                     print(f"[DEBUG] ElevenLabs SDK call returned in {elapsed:.3f}s (streaming)")
@@ -2414,14 +2504,15 @@ def generate_voice_audio(text, voice_id, output_path, eleven_config=None):
                     return generate_voice_audio_rest(text, voice_id, output_path, eleven_config)
             else:
                 try:
-                    print(f"[DEBUG] Using model: {eleven_config.get('Model', 'eleven_v3') if eleven_config else 'eleven_v3'}, voice_id: {voice_id}")
-                    if len(chunk_text) > 2900:
+                    print(f"[DEBUG] Using model: {ELEVENLABS_DEFAULT_MODEL_ID}, voice_id: {voice_id}")
+                    if len(chunk_text) > ELEVENLABS_CHUNK_MAX_CHARS:
                         print(f"[WARNING] Chunk is very long ({len(chunk_text)} chars). Consider splitting further if you see timeouts.")
                     start_time = time.time()
                     audio_stream = client.text_to_speech.convert(
                         text=chunk_text,
                         voice_id=voice_id,
-                        model_id="eleven_v3"
+                        voice_settings=build_elevenlabs_voice_settings(),
+                        model_id=ELEVENLABS_DEFAULT_MODEL_ID
                     )
                     elapsed = time.time() - start_time
                     print(f"[DEBUG] ElevenLabs SDK call returned in {elapsed:.3f}s (streaming)")
@@ -2442,25 +2533,24 @@ def generate_voice_audio(text, voice_id, output_path, eleven_config=None):
             client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
             for idx, chunk_text in enumerate(chunks):
                 temp_path = MP3_OUTPUT_DIR / f"temp_audio_{int(time.time())}_{os.getpid()}_chunk_{idx+1}.mp3"
+                previous_text = chunks[idx - 1] if idx > 0 else None
+                next_text = chunks[idx + 1] if idx + 1 < len(chunks) else None
                 print(f"[DEBUG] Sending chunk {idx+1}/{len(chunks)} to Eleven Labs API (length: {len(chunk_text)})")
                 print(f"[DEBUG] Chunk {idx+1} preview: {chunk_text[:100]}")
                 if eleven_config:
-                    voice_settings = {
-                        "stability": float(eleven_config.get('Stability', 0.5)),  # v3: must be 0.0, 0.5, or 1.0
-                        "similarity_boost": float(eleven_config.get('Similarity Boost', 0.7)),
-                        "style": float(eleven_config.get('Style', 0.5)),
-                        "speed": float(eleven_config.get('Speed', 1.06))
-                    }
+                    voice_settings = build_elevenlabs_voice_settings(eleven_config)
                     try:
-                        print(f"[DEBUG] Using model: {eleven_config.get('Model', 'eleven_v3') if eleven_config else 'eleven_v3'}, voice_id: {voice_id}")
-                        if len(chunk_text) > 2900:
+                        print(f"[DEBUG] Using model: {get_elevenlabs_model_id(eleven_config)}, voice_id: {voice_id}")
+                        if len(chunk_text) > ELEVENLABS_CHUNK_MAX_CHARS:
                             print(f"[WARNING] Chunk {idx+1} is very long ({len(chunk_text)} chars). Consider splitting further if you see timeouts.")
                         start_time = time.time()
                         audio_stream = client.text_to_speech.convert(
                             text=chunk_text,
                             voice_id=voice_id,
                             voice_settings=voice_settings,
-                            model_id=eleven_config.get('Model', 'eleven_v3')
+                            model_id=get_elevenlabs_model_id(eleven_config),
+                            previous_text=previous_text,
+                            next_text=next_text
                         )
                         elapsed = time.time() - start_time
                         print(f"[DEBUG] ElevenLabs SDK call for chunk {idx+1} returned in {elapsed:.3f}s (streaming)")
@@ -2488,14 +2578,17 @@ def generate_voice_audio(text, voice_id, output_path, eleven_config=None):
                         return generate_voice_audio_rest(text, voice_id, output_path, eleven_config)
                 else:
                     try:
-                        print(f"[DEBUG] Using model: {eleven_config.get('Model', 'eleven_v3') if eleven_config else 'eleven_v3'}, voice_id: {voice_id}")
-                        if len(chunk_text) > 2900:
+                        print(f"[DEBUG] Using model: {ELEVENLABS_DEFAULT_MODEL_ID}, voice_id: {voice_id}")
+                        if len(chunk_text) > ELEVENLABS_CHUNK_MAX_CHARS:
                             print(f"[WARNING] Chunk {idx+1} is very long ({len(chunk_text)} chars). Consider splitting further if you see timeouts.")
                         start_time = time.time()
                         audio_stream = client.text_to_speech.convert(
                             text=chunk_text,
                             voice_id=voice_id,
-                            model_id="eleven_v3"
+                            voice_settings=build_elevenlabs_voice_settings(),
+                            model_id=ELEVENLABS_DEFAULT_MODEL_ID,
+                            previous_text=previous_text,
+                            next_text=next_text
                         )
                         elapsed = time.time() - start_time
                         print(f"[DEBUG] ElevenLabs SDK call for chunk {idx+1} returned in {elapsed:.3f}s (streaming)")
@@ -2549,34 +2642,16 @@ def generate_voice_audio_rest(text, voice_id, output_path, eleven_config=None):
     url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
     headers = {
         "xi-api-key": ELEVENLABS_API_KEY,
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "Accept": "audio/mpeg"
     }
     
-    def _single_chunk(chunk_text, temp_path):
-        if eleven_config:
-            payload = {
-                "text": chunk_text,
-                "model_id": eleven_config.get('Model', 'eleven_v3'),
-                "voice_settings": {
-                    "stability": float(eleven_config.get('Stability', 0.5)),  # v3: must be 0.0, 0.5, or 1.0
-                    "similarity_boost": float(eleven_config.get('Similarity Boost', 0.7)),
-                    "style": float(eleven_config.get('Style', 0.5)),
-                    "speed": float(eleven_config.get('Speed', 1.06))
-                }
-            }
-        else:
-            payload = {
-                "text": chunk_text,
-                "model_id": "eleven_v3",
-                "voice_settings": {
-                    "stability": 0.5,
-                    "similarity_boost": 0.7
-                }
-            }
+    def _single_chunk(chunk_text, temp_path, previous_text=None, next_text=None):
+        payload = build_elevenlabs_tts_payload(chunk_text, eleven_config, previous_text, next_text)
         try:
             print(f"[DEBUG] ElevenLabs API payload: {json.dumps(payload)[:500]}{'...' if len(json.dumps(payload)) > 500 else ''}")
             start_time = time.time()
-            response = requests.post(url, json=payload, headers=headers, timeout=120)
+            response = requests.post(url, json=payload, headers=headers, timeout=180)
             elapsed = time.time() - start_time
             print(f"[DEBUG] ElevenLabs API call took {elapsed:.2f} seconds")
             print(f"[DEBUG] ElevenLabs REST API response status: {response.status_code}")
@@ -2608,7 +2683,7 @@ def generate_voice_audio_rest(text, voice_id, output_path, eleven_config=None):
                 
                 return None
         except requests.exceptions.Timeout:
-            print("❌ ElevenLabs REST API error: Request timed out after 120 seconds.")
+            print("❌ ElevenLabs REST API error: Request timed out after 180 seconds.")
             traceback.print_exc()
             return None
         except requests.exceptions.RequestException as e:
@@ -2635,15 +2710,16 @@ def generate_voice_audio_rest(text, voice_id, output_path, eleven_config=None):
                 raise ValueError(f"ElevenLabs credit/quota error: {e}")
             return None
 
-    # Split text into <=2900 character chunks (Eleven Labs v3 limit is 3000)
-    chunks = split_text_into_chunks(text, max_length=2900)
+    chunks = split_text_into_chunks(text, max_length=ELEVENLABS_CHUNK_MAX_CHARS)
     if len(chunks) == 1:
         return _single_chunk(chunks[0], output_path)
     else:
         temp_audio_paths = []
         for idx, chunk_text in enumerate(chunks):
             temp_path = MP3_OUTPUT_DIR / f"temp_audio_{int(time.time())}_{os.getpid()}_chunk_{idx+1}.mp3"
-            result = _single_chunk(chunk_text, temp_path)
+            previous_text = chunks[idx - 1] if idx > 0 else None
+            next_text = chunks[idx + 1] if idx + 1 < len(chunks) else None
+            result = _single_chunk(chunk_text, temp_path, previous_text, next_text)
             if result:
                 temp_audio_paths.append(result)
             else:
@@ -2738,6 +2814,34 @@ def get_google_chirp3_voice_name_by_id(voice_id):
     return GOOGLE_CHIRP3_VOICE_ID_TO_NAME.get(str(voice_id), GOOGLE_CHIRP3_DEFAULT_VOICE_NAME)
 
 
+def build_google_chirp3_audio_config(include_volume_gain=True, include_speaking_rate=True, include_effects_profile=True):
+    audio_config_kwargs = {
+        "audio_encoding": GOOGLE_CHIRP3_AUDIO_SETTINGS["audio_encoding"],
+    }
+    if include_speaking_rate:
+        audio_config_kwargs["speaking_rate"] = GOOGLE_CHIRP3_AUDIO_SETTINGS["speaking_rate"]
+    if include_volume_gain:
+        audio_config_kwargs["volume_gain_db"] = GOOGLE_CHIRP3_AUDIO_SETTINGS["volume_gain_db"]
+    effects_profile_id = GOOGLE_CHIRP3_AUDIO_SETTINGS.get("effects_profile_id") or []
+    if include_effects_profile and effects_profile_id:
+        audio_config_kwargs["effects_profile_id"] = effects_profile_id
+    return texttospeech.AudioConfig(**audio_config_kwargs)
+
+
+def write_google_tts_audio_content(audio_content, output_path):
+    if GOOGLE_CHIRP3_AUDIO_SETTINGS["audio_encoding"] == texttospeech.AudioEncoding.LINEAR16:
+        audio = AudioSegment.from_file(io.BytesIO(audio_content), format="wav")
+        audio.export(
+            output_path,
+            format="mp3",
+            bitrate=GOOGLE_CHIRP3_AUDIO_SETTINGS["mp3_bitrate"],
+        )
+    else:
+        with open(output_path, "wb") as out:
+            out.write(audio_content)
+    return output_path
+
+
 def _generate_single_google_chunk(text, voice_name, output_path):
     """Generate a single audio chunk using Google TTS."""
     try:
@@ -2794,26 +2898,23 @@ def _generate_single_google_chunk(text, voice_name, output_path):
             name=full_voice_name
         )
         
-        # Chirp voices can reject some audio params; try optimized first, then degrade gracefully.
+        # Chirp voices can reject some audio params; try highest-fidelity first, then degrade gracefully.
         audio_config_variants = [
             (
-                "optimized",
-                texttospeech.AudioConfig(
-                    audio_encoding=texttospeech.AudioEncoding.MP3,
-                    speaking_rate=GOOGLE_CHIRP3_AUDIO_SETTINGS["speaking_rate"],
-                    volume_gain_db=GOOGLE_CHIRP3_AUDIO_SETTINGS["volume_gain_db"]
-                )
+                "linear16_rate_volume_effects",
+                build_google_chirp3_audio_config()
             ),
             (
-                "rate_only",
-                texttospeech.AudioConfig(
-                    audio_encoding=texttospeech.AudioEncoding.MP3,
-                    speaking_rate=GOOGLE_CHIRP3_AUDIO_SETTINGS["speaking_rate"]
-                )
+                "linear16_rate_only",
+                build_google_chirp3_audio_config(include_volume_gain=False, include_effects_profile=False)
             ),
             (
-                "safe_default",
-                texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
+                "linear16_natural_rate",
+                build_google_chirp3_audio_config(
+                    include_volume_gain=False,
+                    include_speaking_rate=False,
+                    include_effects_profile=False
+                )
             )
         ]
         
@@ -2824,7 +2925,7 @@ def _generate_single_google_chunk(text, voice_name, output_path):
         last_error = None
         for config_name, audio_config in audio_config_variants:
             try:
-                if config_name != "optimized":
+                if config_name != "linear16_rate_volume_effects":
                     print(f"[DEBUG] Retrying Google TTS with fallback config: {config_name}")
                 response = google_tts_client.synthesize_speech(
                     input=synthesis_input, voice=voice, audio_config=audio_config
@@ -2843,9 +2944,7 @@ def _generate_single_google_chunk(text, voice_name, output_path):
         elapsed = time.time() - start_time
         print(f"[DEBUG] Google TTS API call returned in {elapsed:.3f}s")
         
-        # Write the response to the output file
-        with open(output_path, "wb") as out:
-            out.write(response.audio_content)
+        write_google_tts_audio_content(response.audio_content, output_path)
             
         print(f"✅ Google TTS audio chunk saved: {output_path}")
         return output_path
@@ -2931,7 +3030,7 @@ def merge_audio(intro_path, main_path, outro_path, final_path):
         main = AudioSegment.from_file(main_path)
         outro = AudioSegment.from_file(outro_path)
         final = intro + main + outro
-        final.export(final_path, format="mp3")
+        final.export(final_path, format="mp3", bitrate=DEFAULT_MP3_EXPORT_BITRATE)
         print(f"✅ Merged audio saved: {final_path}")
     except Exception as e:
         print(f"❌ Merge failed: {e}")
@@ -3051,7 +3150,7 @@ def merge_multiple_audio_files(audio_paths, output_path):
             print(f"  - Added: {audio_path}")
         
         # Export the combined audio
-        combined.export(output_path, format="mp3")
+        combined.export(output_path, format="mp3", bitrate=DEFAULT_MP3_EXPORT_BITRATE)
         print(f"✅ Merged audio saved: {output_path}")
         return output_path
         
@@ -3933,7 +4032,7 @@ if __name__ == '__main__':
                     else:
                         audio_filename = f'{timestamp}_workflow_{workflow_id}_step_{i+1}_{voice_name_for_filename}.mp3'
                     try:
-                        print(f"[DEBUG] Using model: {eleven_config.get('Model', 'eleven_v3') if eleven_config else 'eleven_v3'}, voice_id: {voice_id}")
+                        print(f"[DEBUG] Using model: {get_elevenlabs_model_id(eleven_config)}, voice_id: {voice_id}")
                         start_time = time.time()
                         if os.path.exists(audio_path):
                             # Clean up the path to avoid double slashes

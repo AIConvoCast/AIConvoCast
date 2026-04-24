@@ -2,43 +2,48 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Contact – AI Convo Cast</title>
-  <meta name="description" content="Contact the AI Convo Cast team. We welcome your feedback, questions, and partnership inquiries.">
+  <title>Contact - AI Convo Cast</title>
+  <meta name="description" content="Contact AI Convo Cast with feedback, questions, and partnership inquiries.">
   <meta name="robots" content="index,follow">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="canonical" href="https://aiconvocast.com/contact.html">
-  <meta name="theme-color" content="#0b132b">
+  <meta name="theme-color" content="#101820">
   <meta name="author" content="AI Convo Cast">
-  <!-- Security meta (best effort for static hosting) -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' https: data:; script-src 'self' 'unsafe-inline' https:; style-src 'self' 'unsafe-inline' https:; font-src https: data:; connect-src https:; frame-ancestors 'none'; base-uri 'self'; form-action https://formspree.io 'self'; upgrade-insecure-requests">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; connect-src 'self' https://formspree.io; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; frame-ancestors 'none'; base-uri 'self'; form-action https://formspree.io; upgrade-insecure-requests">
   <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin">
-  <meta http-equiv="X-Frame-Options" content="DENY">
-  <meta http-equiv="X-Content-Type-Options" content="nosniff">
-  <link rel="icon" href="favicon.ico">
-  <link rel="apple-touch-icon" href="favicon.ico">
+  <link rel="canonical" href="https://aiconvocast.com/contact.html">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/jpeg" href="ai-convo-cast-logo.jpg">
+  <link rel="apple-touch-icon" href="ai-convo-cast-logo.jpg">
   <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <a href="#main-content" class="skip-link">Skip to main content</a>
-  <header class="header" role="banner">
-    <div class="container flex-row">
-      <nav class="nav" aria-label="Main navigation">
-        <a href="index.html" class="nav-link">Home</a>
+  <header class="header">
+    <nav class="nav" aria-label="Main navigation">
+      <a href="index.html" class="brand" aria-label="AI Convo Cast home">
+        <img src="ai-convo-cast-logo.jpg" alt="" width="36" height="36">
+        <span>AI Convo Cast</span>
+      </a>
+      <div class="nav-links">
         <a href="episodes.html" class="nav-link">Episodes</a>
         <a href="contact.html" class="nav-link nav-link-active">Contact</a>
-      </nav>
-    </div>
+      </div>
+    </nav>
   </header>
+
   <main id="main-content">
-    <section class="hero" style="margin-bottom:2rem;">
-      <img src="ai-convo-cast-logo.jpg" alt="AI Convo Cast Logo" class="hero-logo" width="120" height="120" style="border-radius:24px;object-fit:cover;display:block;margin:0 auto 1.5rem auto;box-shadow:0 8px 32px rgba(0,0,0,0.10);background:#fff;" loading="lazy">
-      <h1>Contact Us</h1>
+    <section class="page-intro">
+      <p class="eyebrow">Say hello</p>
+      <h1>Contact</h1>
+      <p>Send feedback, story ideas, corrections, or partnership notes.</p>
     </section>
-    <section class="contact-section">
-      <form id="contact-form" class="contact-form responsive-form" action="https://formspree.io/f/mnqewqzv" method="POST" novalidate autocomplete="off">
+
+    <section class="contact-section" aria-label="Contact form">
+      <form id="contact-form" class="contact-form" action="https://formspree.io/f/mnqewqzv" method="POST" novalidate autocomplete="on">
         <input type="hidden" name="data-form" value="contact-aiconvocast">
-        <input type="hidden" name="_replyto" value="aiconvocast@gmail.com">
         <div class="form-row">
           <label for="name">Name</label>
           <input id="name" name="name" type="text" required maxlength="60" autocomplete="name">
@@ -51,63 +56,62 @@
           <label for="subject">Subject</label>
           <input id="subject" name="subject" type="text" required maxlength="120" autocomplete="off">
         </div>
-        <div class="form-row form-row-full">
+        <div class="form-row">
           <label for="message">Message</label>
-          <textarea id="message" name="message" rows="5" required maxlength="1000"></textarea>
+          <textarea id="message" name="message" rows="6" required maxlength="1000"></textarea>
         </div>
         <button type="submit" class="cta-btn">Send Message</button>
       </form>
-      <div id="thank-you-message" style="display:none; margin-top:2rem; font-size:1.2rem; color:var(--accent); font-weight:600;">Thank you for contacting us! Redirecting to home...</div>
+      <div id="thank-you-message" class="status-message success-message" role="status" hidden>Thank you for contacting us. Redirecting to home...</div>
     </section>
   </main>
+
   <footer class="footer">
-    <div>
-      &copy; <span id="year"></span> AI Convo Cast &mdash;
-      <a href="privacy.html">Privacy Policy</a> |
-      <a href="https://anchor.fm/s/101530384/podcast/rss" rel="noopener">RSS Feed</a> |
-      <a href="https://github.com/AIConvoCast/AIConvoCast" rel="noopener">GitHub</a>
-    </div>
+    <span>&copy; <span id="year"></span> AI Convo Cast</span>
+    <a href="privacy.html">Privacy</a>
+    <a href="https://anchor.fm/s/101530384/podcast/rss" rel="noopener noreferrer">RSS Feed</a>
+    <a href="https://github.com/AIConvoCast/AIConvoCast" rel="noopener noreferrer">GitHub</a>
   </footer>
   <script>
-    document.getElementById('year').textContent = new Date().getFullYear();
-    document.getElementById('contact-form').addEventListener('submit', function(e) {
-      e.preventDefault();
-      var form = e.target;
+    document.getElementById("year").textContent = new Date().getFullYear();
+    document.getElementById("contact-form").addEventListener("submit", function (event) {
+      event.preventDefault();
+      var form = event.target;
       var valid = true;
-      ['name', 'email', 'subject', 'message'].forEach(function(id) {
-        var el = form[id];
-        if (!el.value.trim()) {
-          el.classList.add('input-error');
+
+      ["name", "email", "subject", "message"].forEach(function (id) {
+        var field = form.elements[id];
+        if (!field.value.trim()) {
+          field.classList.add("input-error");
           valid = false;
         } else {
-          el.classList.remove('input-error');
+          field.classList.remove("input-error");
         }
       });
-      var email = form['email'].value.trim();
-      if (!/^[^@]+@[^@]+\\.[^@]+$/.test(email)) {
-        form['email'].classList.add('input-error');
+
+      var email = form.elements.email.value.trim();
+      if (!/^[^@]+@[^@]+\.[^@]+$/.test(email)) {
+        form.elements.email.classList.add("input-error");
         valid = false;
       }
+
       if (!valid) return;
-      var data = new FormData(form);
+
       fetch(form.action, {
-        method: 'POST',
-        body: data,
-        headers: { 'Accept': 'application/json' },
-        mode: 'cors',
-        credentials: 'omit'
-      }).then(function(resp) {
-        if (resp.ok) {
-          form.style.display = 'none';
-          document.getElementById('thank-you-message').style.display = 'block';
-          setTimeout(function() { window.location.href = '/'; }, 3000);
-        } else {
-          alert('Sorry, there was a problem submitting your message.');
-        }
-      }).catch(function() {
-        alert('Sorry, there was a problem submitting your message.');
+        method: "POST",
+        body: new FormData(form),
+        headers: { Accept: "application/json" },
+        mode: "cors",
+        credentials: "omit"
+      }).then(function (response) {
+        if (!response.ok) throw new Error("Form submission failed");
+        form.hidden = true;
+        document.getElementById("thank-you-message").hidden = false;
+        setTimeout(function () { window.location.href = "/"; }, 2500);
+      }).catch(function () {
+        alert("Sorry, there was a problem submitting your message.");
       });
     });
   </script>
 </body>
-</html> 
+</html>
