@@ -499,10 +499,10 @@ def upload_text_to_gcs(text_content, destination_blob_name):
 # CONFIGURATION - Customize as needed
 # -----------------------------------------
 # DEFAULT WORKFLOW REFERENCE:
-# Workflow ID 43: "Full Workflow with Eleven Voice and GPT-5.4 for web search"
-#   - Uses GPT-5.4 (Model ID 188) for web search capabilities
+# Workflow ID 43/48 family: "Full Workflow with Eleven Voice and GPT-5.x web search"
+#   - Uses a web-search-capable OpenAI model for research (for example, Model ID 198)
 #   - Uses Claude Sonnet 4.5 (Model ID 145) for script generation and title/description
-#   - Workflow Code: PPU,PPL15,P10&P8&R2M188,P4&R3M145,P12&R4M145,R5SL10T5,R4SL7T5,L8E1SL4T5,L1&L9&L2SL3T5
+#   - Workflow Code: PPU,PPL15,P10&P8&R2M198,P4&R3M145,P12&R4M145,R5SL10T5,R4SL7T5,L8E1SL4T5,L1&L9&L2SL3T5
 #   - This is the recommended default workflow for production use
 #
 EXCEL_FILENAME = 'ai_podcast_workflow.xlsx'
@@ -563,20 +563,34 @@ GOOGLE_CHIRP3_AUDIO_SETTINGS = {
 DEFAULT_MP3_EXPORT_BITRATE = "192k"
 
 # Fine-tuning instructions for podcast script generation with Claude Opus 4.7.
-# Applied at runtime for P4/P12 steps so existing sheet prompts can remain mostly unchanged.
+# Applied at runtime for P4 script steps so existing sheet prompts can remain mostly unchanged.
 OPUS47_SCRIPT_TUNING_APPENDIX = (
     "Additional script requirements for this run:\n"
-    "- Target spoken length: roughly 6 to 8 minutes.\n"
-    "- Let the length vary based on how much genuinely interesting, useful, and newsworthy detail is available in the source material.\n"
+    "- Target spoken length: roughly 7 to 9 minutes for the main episode body, before the separate intro and outro are added.\n"
+    "- Target script length: 8,000 to 10,000 characters. Strongly prefer not to fall below 8,000 characters unless the source material is genuinely thin; give each selected story enough room to feel complete.\n"
     "- Cover exactly 4 distinct stories when 4+ stories are available in source material.\n"
-    "- Allocate roughly balanced depth across stories while prioritizing the most newsworthy details.\n"
-    "- Keep tone factual and reportorial: accurate, neutral, and concise; avoid speculation.\n"
+    "- If fewer than 4 distinct stories are available, go deeper on the available stories rather than ending early.\n"
+    "- For each story, lead with the concrete news, then build a richer segment with context, stakes, benchmarks, product specifics, pricing or rollout details, quotes, credible social-media reactions, and user/developer responses found in the source material.\n"
+    "- Use relevant quotes as evidence and color, not filler. Prefer 1 to 2 strong quotes or reactions per story when available, and explain why each one matters.\n"
+    "- Spend roughly 5 to 7 natural spoken paragraphs on each major story when the source material supports it.\n"
+    "- Avoid generic summaries like 'this shows AI is moving fast.' Explain the precise tension, surprise, tradeoff, or implication in each story.\n"
+    "- Keep tone factual and reportorial: accurate, neutral, vivid, and engaging; avoid speculation.\n"
     "- Do not add an outro paragraph or closing wrap-up that summarizes all stories together.\n"
     "- Do not mention the date range coverage in closing language.\n"
     "- End naturally after the fourth story with a clean final sentence (no sign-off).\n"
 )
+CLAUDE_OPUS47_MAX_TOKENS = 10000
+CLAUDE_OPUS47_THINKING_BUDGET_TOKENS = 4096
+CLAUDE_OPUS47_ENABLE_EXTENDED_THINKING = True
 
-# Manual model-ID overrides to support deterministic workflow codes like M188.
+# OpenAI research tuning. GPT-5-family web search should aim to complete quickly,
+# but the timeout should not be the reason it misses a clearly stronger story.
+OPENAI_DEFAULT_TIMEOUT_SECONDS = 1200
+OPENAI_WEB_SEARCH_TIMEOUT_SECONDS = 900
+OPENAI_GPT5_WEB_SEARCH_REASONING_EFFORT = "high"
+OPENAI_GPT5_WEB_SEARCH_RETRY_REASONING_EFFORT = "medium"
+
+# Manual model-ID overrides to support deterministic workflow codes like M198.
 # This keeps workflows resilient even before the Models sheet is updated.
 MODEL_ID_OVERRIDES = {
     "181": {"name": "gpt-5.4-2026-03-05", "web_search": False},
@@ -592,7 +606,15 @@ MODEL_ID_OVERRIDES = {
     "191": {"name": "claude-opus-4-7", "web_search": False},
     "192": {"name": "claude-opus-4-7", "web_search": True},
     "193": {"name": "claude-sonnet-4-6", "web_search": False},
-    "194": {"name": "claude-sonnet-4-6", "web_search": True}
+    "194": {"name": "claude-sonnet-4-6", "web_search": True},
+    "195": {"name": "gpt-5.5-pro-2026-04-23", "web_search": False},
+    "196": {"name": "gpt-5.5-pro-2026-04-23", "web_search": True},
+    "197": {"name": "gpt-5.5", "web_search": False},
+    "198": {"name": "gpt-5.5", "web_search": True},
+    "199": {"name": "gpt-5.5-2026-04-23", "web_search": False},
+    "200": {"name": "gpt-5.5-2026-04-23", "web_search": True},
+    "201": {"name": "gpt-5.5-pro", "web_search": False},
+    "202": {"name": "gpt-5.5-pro", "web_search": True}
 }
 
 ELEVENLABS_DEFAULT_MODEL_ID = "eleven_v3"
@@ -632,7 +654,7 @@ except Exception as e:
     google_tts_client = None
 
 # Configure OpenAI client for predictable timeouts and no hidden retries
-client = OpenAI(api_key=OPENAI_API_KEY, timeout=600, max_retries=0)
+client = OpenAI(api_key=OPENAI_API_KEY, timeout=OPENAI_DEFAULT_TIMEOUT_SECONDS, max_retries=0)
 
 print(f"[DEBUG] Python version: {sys.version}")
 print(f"[DEBUG] requests version: {requests.__version__}")
@@ -822,12 +844,12 @@ def get_template_dataframes():
     ], columns=["Request ID", "Workflow ID", "Custom Topic If Required", "Active", "Comments"])
 
     prompts = pd.DataFrame([
-        [1, "Daily News", "Please provide a comprehensive overview of the most important news in AI that occurred in the last 24-48 hours and mention dates of when the news items or recent updates occurred to confirm occurrence in the last 24-48 hours. AI news can be in relation to AI model releases, Expected tool releases, New enhancements released for AI tools or other interesting topics related to AI technology, AI company announcements, models, tool releases, enhancements, etc. Please be sure to summarize as many sources as possible and also provide numerous quotes from both company representatives, reporters as well as user feedback on social media."],
-        [2, "Top 3 Topics", "Please select the best 3 news stories to include in an AI Techology news podcast episodes. The 3 news stories selected should be the whatever news stories you believe are the most interesting and will be most compelling and interesting to our AI Podcast listeners. The 8 possible new items to choose from are below. Please select the top 3 and provide the exact text of the new items provided below:"],
-        [3, "Generate All On Appendend Topic", "Generate all details related to the news stories below from the last 24-48 hours. Please make sure to include any and all quotes from participants, companies or even social media reactions that have received significant engagement. Please also include technical specifications if required. Please ensure complete coverage provided  details to ensure comprehensive coverage of story. Stories to retrieve all relevant details on:"],
+        [1, "Daily News", "Please provide a concise overview of the most important AI news from the last 24-48 hours and mention dates of when the news items or recent updates occurred to confirm timing. AI news can include model releases, expected tool releases, new AI tool enhancements, company announcements, benchmarks, research, products, startup activity, or other interesting AI technology topics. Prioritize concrete stories with useful details, tension, stakes, surprising reactions, measurable impact, or strong listener interest. Include the best available quotes or meaningful social media responses, but keep the response tight enough to support a fast workflow."],
+        [2, "Top 3 Topics", "Please select the best 3 news stories to include in an AI Technology news podcast episode. Choose stories that are genuinely interesting, concrete, and compelling for AI podcast listeners, not just the biggest company names. Prefer items with strong details, notable quotes, user or developer reactions, measurable stakes, or clear controversy/tradeoffs. The 8 possible news items to choose from are below. Please select the top 3 and provide the exact text of the news items provided below:"],
+        [3, "Generate All On Appendend Topic", "Generate the most important details related to the news stories below from the last 24-48 hours. For each story, retrieve concrete facts, dates, companies, products, technical specifications, benchmarks, user impact, and one or two of the best available quotes or social reactions when they add color. Confirm and validate that the stories occurred or had significant recent updates. Prioritize details that make a podcast segment vivid and less generic, but keep the brief concise enough for the workflow to complete quickly. Stories to retrieve all relevant details on:"],
         [4, "Create Script Based on Material", '''Create a podcast script for the "AI Convo Cast" podcast, which is a daily AI news and technology podcast. We will be adding a standard intro and outro to the podcast script you provide on our end, so only generate the main body of the episode script and always start with:
 "Today we will be..."
-Since we will add intro and outro on our end, please do not make references to the podcast, simply generate the script going over the topics provided along with a very brief and positive 1 sentence summary of topics covered. The script should be written in plain, conversational language that is casual, concise and assumes the listener is familiar with AI model generally and just wants to hear the facts. Use quotes from company representatives when possible. When the provided material is lengthy or technical, distill the most newsworthy and engaging storylines while preserving key facts, benchmarks, and quotes—prioritize clarity for listening over exhaustive detail. Design the content for a natural 15-minute runtime with smooth transitions and integrated summary breakpoints (without explicit headings or titles) that lead into a high-level, abstract summary tying together broader implications, but leaning towards a positive perspective on the AI's advancement and an eagerness to embrace it. Podcast script should contain between 4,750 and 7,000 characters.
+Since we will add intro and outro on our end, please do not make references to the podcast, simply generate the script going over the topics provided along with a very brief and positive 1 sentence summary of topics covered. The script should be written in plain, conversational language that is casual, informed, and assumes the listener is familiar with AI models generally and just wants to hear the facts. Make the episode more interesting by using the strongest available quotes, credible social media reactions, user/developer responses, benchmark details, product specifics, contradictions, and stakes from the source material. Do not rely on generic AI commentary; for every story, explain what is surprising, consequential, controversial, useful, or revealing. When the provided material is lengthy or technical, distill the most newsworthy and engaging storylines while preserving key facts, benchmarks, and quotes. Prioritize clarity for listening, but keep the pacing lively without compressing key details. Design the content for a natural 7-9 minute main-body runtime with smooth transitions and integrated summary breakpoints without explicit headings or titles. Podcast script should contain between 8,000 and 10,000 characters, and should strongly prefer not to fall below 8,000 characters unless the source material is genuinely thin.
 Output must be pure plain text (UTF‑8 encoded) with no hyperlinks, citations, markdown formatting, extraneous symbols, or any headings like "Summary." Do not include any non-text elements or words/phrases ending in ".com." Adjust tone, style, or content as clarified by the user while always prioritizing a clean, accessible, and entertaining spoken presentation. Avoid numbering or bullet points and refrain from using corny sayings. Please also always remove dashes from names (e.g. GPT-4.5 should be GPT 4.5). When converting this text to speech, automatically replace 'GPT 4o' with 'GPT Four-Oh', 'DALL-E' with 'Dolly'. Avoid corny transitions like "speaking of". Transitions should be smooth or simply go into next topic.
 
 Podcast Material for to Base Script On:'''],
@@ -876,9 +898,9 @@ Disclaimer:
 This podcast is an independent production and is not affiliated with, endorsed by, or sponsored by Namecheap or any other entities mentioned unless explicitly mentioned. This episode was generated using AI tools for entertainment purposes only."
 
 Topic to generate Title and Description based:'''],
-        [6, "Top 3 Topics and Validate", "Please select the top 3 news stories to include in an AI Techology news podcast episodes. The 3 news stories selected should be the whatever news stories you believe are the most interesting and will be most compelling and interesting to our AI Podcast listeners. The 8 possible new items to choose from are below. Please select the top 3 and provide the exact text of the new items provided below. Please also validate that the news item has recently ocurred and provide any additional context you can find through web search along with the news story:"],
-        [7, "Top 5 Topics and Validate", "Please select the top 5 news stories to include in an AI Techology news podcast episodes. The 5 news stories selected should be the whatever news stories you believe are the most interesting and will be most compelling and interesting to our AI Podcast listeners. The 8 possible news items to choose from are below. Please select the best 5 and provide the exact text of the news items provided below. Please also validate that the news item has recently ocurred and provide any additional context you can find through web search along with the news story:"],
-        [8, "Do not select topics previously covered", "Please ensure news items selected do not exactly cover topics previously discuss below. Updates to these new items should still be included. Previously Covered News Items to avoid unless it is an an update on previously covered story:"]
+        [6, "Top 3 Topics and Validate", "Please select the top 4 news stories to include in an AI Technology news podcast episode. Choose stories that are genuinely interesting and compelling for AI podcast listeners, prioritizing concrete developments with strong details, notable quotes, social/user/developer reactions, clear stakes, or useful controversy/tradeoffs. The possible news items to choose from are below. Please select the top 4 and provide the exact text of the news items provided below. Please also validate that each news item recently occurred or had significant recent updates, and provide brief additional context from web search, including the most interesting quote or reaction if available:"],
+        [7, "Top 5 Topics and Validate", "Please select the top 5 news stories to include in an AI Technology news podcast episode. Choose the stories that are genuinely interesting and compelling for AI podcast listeners, prioritizing concrete developments with strong details, notable quotes, social/user/developer reactions, clear stakes, or useful controversy/tradeoffs. The possible news items to choose from are below. Please select the best 5 and provide the exact text of the news items provided below. Please also validate that each news item recently occurred or had significant recent updates, and provide brief additional context from web search, including the most interesting quote or reaction if available:"],
+        [8, "Do not select topics previously covered", "Use the following previously covered items as context, not a hard ban. Avoid repeating the exact same story angle, but include a follow-up when there is a significant new development, post-release user/developer feedback, fresh benchmarks or evals, new use cases, availability or pricing changes, credible controversy, or another materially new angle. Previously Covered News Items for context:"]
     ], columns=["Prompt ID", "Prompt Title", "Prompt Description"])
 
     # Updated Models tab with the provided data as default (122 models total)
@@ -1018,7 +1040,15 @@ Topic to generate Title and Description based:'''],
         [191, "claude-opus-4-7", "N", "N", "N"],
         [192, "claude-opus-4-7", "N", "Y", "N"],
         [193, "claude-sonnet-4-6", "N", "N", "N"],
-        [194, "claude-sonnet-4-6", "N", "Y", "N"]
+        [194, "claude-sonnet-4-6", "N", "Y", "N"],
+        [195, "gpt-5.5-pro-2026-04-23", "N", "N", "N"],
+        [196, "gpt-5.5-pro-2026-04-23", "N", "Y", "N"],
+        [197, "gpt-5.5", "N", "N", "N"],
+        [198, "gpt-5.5", "N", "Y", "N"],
+        [199, "gpt-5.5-2026-04-23", "N", "N", "N"],
+        [200, "gpt-5.5-2026-04-23", "N", "Y", "N"],
+        [201, "gpt-5.5-pro", "N", "N", "N"],
+        [202, "gpt-5.5-pro", "N", "Y", "N"]
     ], columns=["Model ID", "Model Name", "Model Default", "Web Search", "Deprecated"])
 
     workflow_steps = pd.DataFrame(columns=[
@@ -1066,7 +1096,7 @@ Topic to generate Title and Description based:'''],
 def fetch_openai_models():
     """Fetch the latest models from OpenAI API."""
     try:
-        client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'), timeout=600, max_retries=0)
+        client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'), timeout=OPENAI_DEFAULT_TIMEOUT_SECONDS, max_retries=0)
         models_response = client.models.list()
         
         # Filter for text-based chat models (excluding vision, audio, embedding models)
@@ -1128,13 +1158,21 @@ def model_requires_forced_web_search(model_id):
         return False
     lower = str(model_id).lower()
     return (
-        # Keep GPT-5.4 on auto tool choice; forcing can cause long tool-call loops
+        # Keep most GPT-5 models on auto tool choice; forcing can cause long tool-call loops
         # with no assistant text returned for this workflow.
         ('gpt-5.2' in lower) or
         ('gpt-5-2' in lower) or
         ('claude-opus-4-6' in lower) or
         ('claude-opus-4.6' in lower)
     )
+
+
+def openai_chat_uses_max_completion_tokens(model_id):
+    """Return True for Chat Completions models that reject max_tokens."""
+    if not model_id:
+        return False
+    lower = str(model_id).lower()
+    return lower.startswith(("gpt-5", "o1", "o3", "o4"))
 
 
 def fetch_anthropic_models():
@@ -1558,8 +1596,9 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
     
     # Timeout handling
     timeout_occurred = False
-    # Web search with high reasoning may need more time; 900s for web_search, 15min for deep-research
-    configured_timeout = 900 if web_search else (900 if "deep-research" in model else None)
+    # Keep a safety guard, but do not make the 5-8 minute target a hard cutoff.
+    configured_timeout = OPENAI_WEB_SEARCH_TIMEOUT_SECONDS if web_search else (900 if "deep-research" in model else None)
+    request_timeout_kwargs = {"timeout": configured_timeout} if configured_timeout else {}
     
     def timeout_handler():
         nonlocal timeout_occurred
@@ -1580,6 +1619,7 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
             "error code: 520", " 520 ", "status code: 520",
             "error code: 502", "error code: 503", "error code: 504",
             "service unavailable", "bad gateway", "gateway timeout",
+            "timed out", "timeout", "readtimeout", "connecttimeout",
             "temporarily unavailable", "upstream",
             "cloudflare", "web server is returning an unknown error",
             "<!doctype html>", "<html"
@@ -1605,16 +1645,21 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
         
     # Web search: quality-focused research prompt tuned for comprehensive but time-efficient coverage.
     force_web_tool_use = web_search and model_requires_forced_web_search(model)
+    web_search_instructions = None
     if web_search:
+        web_search_instructions = (
+            "You are an AI news research editor for a daily technology podcast. "
+            "Produce a current, source-grounded brief that is interesting enough to support a script, while staying efficient. Aim to finish the research pass in roughly 5-8 minutes, but do not stop early solely to meet that target if a little more search or reasoning is needed to find the best available stories. "
+            "Success means: select the strongest 3-4 recent AI stories; verify each selected story with credible evidence; include exact timing, concrete product/model/company details, and the best short quote or social/user/developer reaction when available. Use prior coverage as a freshness filter, not a hard ban: skip simple repeats, but include substantial follow-ups on major industry stories when there is new post-release evidence, user/developer feedback, benchmark or eval results, adoption/use-case evidence, limitations, availability/pricing changes, or credible controversy. "
+            "Retrieval budget: search enough to validate the selected stories, usually 8-12 credible sources total and at least two sources per selected story when available. Stop searching once every selected story has useful evidence, timing, and a concrete reason it matters. "
+            "Do not search again only to improve phrasing or add nonessential color. If a quote or social reaction is not readily supported, summarize the reaction pattern instead of forcing one. "
+            "Output a concise markdown research brief with links, absolute dates/times in America/New_York when available, and no process commentary."
+        )
         limited_prompt = (
-            "Conduct a fairly comprehensive but time-efficient AI news scan suitable for a high-quality podcast. "
-            "Prioritize the most important and engaging stories from the last 24-72 hours. "
-            "Use 6-12 credible sources when available, balancing speed and depth. "
-            "For each key story, include what happened, why it matters, date/timing context, and notable quotes if available. "
-            "Favor primary sources (company blogs, official releases, filings, research org posts) plus reputable reporting. "
-            "Avoid low-signal repetition across near-duplicate articles. "
-            "Return a clean plain-text summary in approximately 700-1100 words.\n\n"
-            "Request: " + str(prompt)
+            "Research request and workflow context:\n"
+            + str(prompt)
+            + "\n\nReturn roughly 900-1,300 words unless the source material truly requires less. "
+            "Prefer a compact summary table followed by numbered story sections with evidence, quotes/reactions, and links."
         )
         if force_web_tool_use:
             limited_prompt = (
@@ -1626,7 +1671,7 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
     try:
         # Case 1: Chat Completions with always-on search-preview model
         if web_search and (model.endswith("-search-preview")):
-            # Determine search context size (medium per configuration)
+            # Medium search context balances detail and speed.
             search_context_size = "medium"
             
             # Build web_search_options based on model type
@@ -1649,7 +1694,8 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                 model=model,
                 messages=[{"role": "user", "content": limited_prompt}],
                     web_search_options={**web_search_options, "search_context_size": cc_search_context_size},
-                    max_tokens=cc_max_tokens
+                    max_tokens=cc_max_tokens,
+                    **request_timeout_kwargs
                 )
             except Exception as e:
                 err_text = str(e)
@@ -1680,7 +1726,8 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                                 model=model,
                                 messages=[{"role": "user", "content": limited_prompt[:1000]}],
                                 web_search_options={**web_search_options, "search_context_size": cc_search_context_size},
-                                max_tokens=cc_max_tokens
+                                max_tokens=cc_max_tokens,
+                                **request_timeout_kwargs
                             )
                             break
                         except Exception as retry_error:
@@ -1709,8 +1756,15 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                 msg = "❌ Web search requested but your OpenAI Python package does not support responses.create. Please upgrade openai to the latest version."
                 log_error(msg)
                 sys.exit(1)
-            # Build tools configuration for Responses API web search
-            tools_config = {"type": "web_search"}
+            # Build tools configuration for Responses API web search.
+            tools_config = {
+                "type": "web_search",
+                "user_location": {
+                    "type": "approximate",
+                    "country": "US",
+                    "timezone": "America/New_York"
+                }
+            }
             
             # Check for timeout before making API call
             if timeout_occurred:
@@ -1718,16 +1772,14 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                     timer.cancel()
                 return "⏰ Research timeout reached. Please try with a more specific request or use a different model."
             
-            # Attempt with basic limits; handle rate limits with a quick backoff and reduced budget
-            # Keep enough room for detailed synthesis without encouraging excessive verbosity/latency.
+            # Attempt with basic limits; handle rate limits with a quick backoff and reduced budget.
+            # Keep enough room for a detailed brief without inviting sprawl.
             resp_max_tokens = 8000
             try:
                 _model_lower = str(model).lower()
                 _is_gpt5 = _model_lower.startswith("gpt-5")
-                _is_gpt51 = "gpt-5.1" in _model_lower or "gpt-5-1" in _model_lower
-                _is_gpt52 = "gpt-5.2" in _model_lower or "gpt-5-2" in _model_lower
-                _is_gpt54 = "gpt-5.4" in _model_lower or "gpt-5-4" in _model_lower
                 _is_gpt4o = _model_lower.startswith("gpt-4o")
+                _gpt5_reasoning_effort = OPENAI_GPT5_WEB_SEARCH_REASONING_EFFORT if web_search else "medium"
 
                 text_cfg = {"format": {"type": "text"}}
                 # Set verbosity per model family capabilities
@@ -1745,10 +1797,13 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                     "text": text_cfg,
                     "max_output_tokens": resp_max_tokens
                 }
-                # Add reasoning effort for GPT-5. Keep medium for balanced quality and runtime.
+                if web_search_instructions:
+                    responses_kwargs["instructions"] = web_search_instructions
+                responses_kwargs.update(request_timeout_kwargs)
+
+                # Let GPT-5-family web search think harder on the first pass so it can choose stronger stories.
                 if _is_gpt5:
-                    reasoning_effort = "medium" if (_is_gpt51 or _is_gpt52 or _is_gpt54) else "low"
-                    responses_kwargs["reasoning"] = {"effort": reasoning_effort}
+                    responses_kwargs["reasoning"] = {"effort": _gpt5_reasoning_effort}
                     # DO NOT add: reasoning={"summary": "auto"} or include=["reasoning.encrypted_content"]
 
                 response = client.responses.create(**responses_kwargs)
@@ -1774,15 +1829,18 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                         "model": model,
                         "tools": [tools_config],
                         # Use plain string input per recommended API usage (truncated on retry)
-                        "input": limited_prompt[:1000],
+                        "input": limited_prompt[:2000],
                         "tool_choice": "required" if force_web_tool_use else "auto",
                         "text": text_cfg_retry,
                         "max_output_tokens": resp_max_tokens
                     }
-                    # Add reasoning effort for GPT-5 on retry
+                    if web_search_instructions:
+                        responses_kwargs_retry["instructions"] = web_search_instructions
+                    responses_kwargs_retry.update(request_timeout_kwargs)
+
+                    # Keep retry quality reasonable without repeating the most expensive path.
                     if _is_gpt5:
-                        reasoning_effort = "medium" if (_is_gpt51 or _is_gpt52 or _is_gpt54) else "low"
-                        responses_kwargs_retry["reasoning"] = {"effort": reasoning_effort}
+                        responses_kwargs_retry["reasoning"] = {"effort": OPENAI_GPT5_WEB_SEARCH_RETRY_REASONING_EFFORT}
 
                     max_attempts = 3 if is_transient_openai_error(err_text) else 1
                     last_retry_error = None
@@ -1821,18 +1879,20 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                         "input": (
                             "Your prior answer appears truncated and started a markdown table. "
                             "Return a complete plain-text answer now (no markdown table), with clear sections and bullet points. "
-                            "Keep web-search tools enabled and run additional searches if needed."
+                            "Use the web results already gathered; search again only if a required fact is missing."
                         ),
                         "tools": [tools_config],
                         "tool_choice": "required" if force_web_tool_use else "auto",
                         "text": {"format": {"type": "text"}, "verbosity": "medium"},
                         "max_output_tokens": resp_max_tokens
                     }
+                    if web_search_instructions:
+                        continuation_kwargs["instructions"] = web_search_instructions
+                    continuation_kwargs.update(request_timeout_kwargs)
                     if hasattr(response, 'id') and response.id:
                         continuation_kwargs["previous_response_id"] = response.id
                     if _is_gpt5:
-                        reasoning_effort = "medium" if (_is_gpt51 or _is_gpt52 or _is_gpt54) else "low"
-                        continuation_kwargs["reasoning"] = {"effort": reasoning_effort}
+                        continuation_kwargs["reasoning"] = {"effort": OPENAI_GPT5_WEB_SEARCH_RETRY_REASONING_EFFORT}
                     response = client.responses.create(**continuation_kwargs)
                     if hasattr(response, 'output_text') and response.output_text:
                         raw_response = response.output_text.strip()
@@ -1904,18 +1964,17 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                     "model": model,
                     "input": followup_input,
                     "text": {"format": {"type": "text"}, "verbosity": "medium"},
-                    "max_output_tokens": 10000
+                    "max_output_tokens": 6000
                 }
+                if web_search_instructions:
+                    followup_kwargs["instructions"] = web_search_instructions
+                followup_kwargs.update(request_timeout_kwargs)
                 if hasattr(response, 'id') and response.id:
                     followup_kwargs["previous_response_id"] = response.id
                 _model_lower_followup = str(model).lower()
                 if _model_lower_followup.startswith("gpt-5"):
-                    # Keep GPT-5.1/5.2/5.4 at medium effort for balanced quality and runtime.
-                    _is_gpt51_followup = "gpt-5.1" in _model_lower_followup or "gpt-5-1" in _model_lower_followup
-                    _is_gpt52_followup = "gpt-5.2" in _model_lower_followup or "gpt-5-2" in _model_lower_followup
-                    _is_gpt54_followup = "gpt-5.4" in _model_lower_followup or "gpt-5-4" in _model_lower_followup
-                    reasoning_effort = "low" if _is_gpt54_followup else ("medium" if (_is_gpt51_followup or _is_gpt52_followup) else "low")
-                    followup_kwargs["reasoning"] = {"effort": reasoning_effort}
+                    # Keep follow-up synthesis bounded for faster workflow completion.
+                    followup_kwargs["reasoning"] = {"effort": OPENAI_GPT5_WEB_SEARCH_RETRY_REASONING_EFFORT}
                 followup_response = client.responses.create(**followup_kwargs)
                 if hasattr(followup_response, 'output_text') and followup_response.output_text:
                     final_text = followup_response.output_text.strip()
@@ -1941,15 +2000,18 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
         # Case 3: Standard Chat Completions
         else:
             # Always omit temperature for models that don't support custom temperature
+            model_lower = str(model).lower()
             models_without_temp = {"o4-mini", "o4-mini-2025-01-31"}
-            is_gpt5 = str(model).lower().startswith("gpt-5")
+            is_gpt5 = model_lower.startswith("gpt-5")
+            uses_max_completion_tokens = openai_chat_uses_max_completion_tokens(model)
+            token_limit_param = "max_completion_tokens" if uses_max_completion_tokens else "max_tokens"
             kwargs = {
                 "model": model,
                 "messages": [{"role": "user", "content": limited_prompt}],
-                "max_tokens": 8192  # Full script + title/description output
+                token_limit_param: 8192  # Full script + title/description output
             }
             # Only include temperature when supported (not GPT-5 and not in explicit no-temp list)
-            if (model not in models_without_temp) and (not is_gpt5) and (temperature is not None):
+            if (model_lower not in models_without_temp) and (not is_gpt5) and (temperature is not None):
                 kwargs["temperature"] = temperature
             
             # Check for timeout before making API call
@@ -1963,7 +2025,7 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
             except Exception as e:
                 error_msg = str(e)
                 # If this is o4-mini or similar, exit immediately
-                if model in models_without_temp:
+                if model_lower in models_without_temp:
                     log_error(f"OpenAI error for model {model}: {e}")
                     sys.exit(1)
                                     # For other models, try retrying without temperature if error is about temperature
@@ -2171,12 +2233,33 @@ def call_anthropic_model(prompt, model="claude-3-sonnet", temperature=0.8, web_s
         model_supports_web_search = anthropic_model_supports_web_search(model)
         force_web_tool_use = web_search and model_requires_forced_web_search(model)
         
-        # Build the API call parameters (8192 tokens for full script + title/description output)
+        model_lower = str(model).lower()
+        enable_opus47_thinking = (
+            CLAUDE_OPUS47_ENABLE_EXTENDED_THINKING
+            and "claude-opus-4-7" in model_lower
+            and not web_search
+        )
+
+        # Build the API call parameters.
         api_params = {
             "model": model,
-            "max_tokens": 8192,
+            "max_tokens": CLAUDE_OPUS47_MAX_TOKENS if enable_opus47_thinking else 8192,
             "messages": [{"role": "user", "content": prompt}]
         }
+
+        if enable_opus47_thinking:
+            api_params["thinking"] = {
+                "type": "enabled",
+                "budget_tokens": CLAUDE_OPUS47_THINKING_BUDGET_TOKENS,
+                "display": "omitted"
+            }
+            print(
+                f"🧠 Extended thinking enabled for {model}: "
+                f"{CLAUDE_OPUS47_THINKING_BUDGET_TOKENS} thinking tokens, "
+                f"{CLAUDE_OPUS47_MAX_TOKENS} max output tokens"
+            )
+        elif temperature is not None:
+            api_params["temperature"] = temperature
         
         # Add web search tool if supported and requested
         if web_search and model_supports_web_search:
@@ -3215,7 +3298,7 @@ if __name__ == '__main__':
     def sync_script_prompt_tuning_to_prompts_tab(prompts_ws_obj, prompts_dataframe):
         """
         Persist script tuning instructions in the Prompts tab so edits are visible and trackable there.
-        Targets Prompt ID 4 and Prompt ID 12 when present.
+        Targets script-writing prompts only.
         """
         if prompts_dataframe.empty:
             return prompts_dataframe
@@ -3226,7 +3309,7 @@ if __name__ == '__main__':
 
         prompt_desc_col_idx = list(prompts_dataframe.columns).index("Prompt Description") + 1
         prompt_desc_col_letter = _excel_col_letter(prompt_desc_col_idx)
-        target_prompt_ids = {"4", "12"}
+        target_prompt_ids = {"4"}
         updates_applied = 0
 
         for df_idx, row in prompts_dataframe.iterrows():
@@ -3238,7 +3321,13 @@ if __name__ == '__main__':
             if OPUS47_SCRIPT_TUNING_APPENDIX.strip() in existing_desc:
                 continue
 
-            updated_desc = f"{existing_desc}\n\n{OPUS47_SCRIPT_TUNING_APPENDIX}".strip()
+            cleaned_desc = re.sub(
+                r"\n*Additional script requirements for this run:\n(?:- .*(?:\n|$))*",
+                "",
+                existing_desc,
+                flags=re.MULTILINE,
+            ).strip()
+            updated_desc = f"{cleaned_desc}\n\n{OPUS47_SCRIPT_TUNING_APPENDIX}".strip()
             prompts_dataframe.at[df_idx, "Prompt Description"] = updated_desc
             sheet_row_number = int(df_idx) + 2  # +1 for header, +1 for 1-based indexing
             cell_ref = f"{prompt_desc_col_letter}{sheet_row_number}"
