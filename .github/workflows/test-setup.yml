@@ -33,37 +33,50 @@ jobs:
           pip install -r requirements.txt
 
       - name: Test environment variables
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          GOOGLE_CREDS_JSON: ${{ secrets.GOOGLE_CREDS_JSON }}
+          SHARE_SHEET_WITH_EMAIL: ${{ secrets.SHARE_SHEET_WITH_EMAIL }}
         run: |
           echo "Testing environment variable setup..."
-          if [ -n "${{ vars.OPENAI_API_KEY }}" ]; then
+          if [ -n "$OPENAI_API_KEY" ]; then
             echo "✅ OPENAI_API_KEY is set"
           else
             echo "❌ OPENAI_API_KEY is not set"
             exit 1
           fi
           
-          if [ -n "${{ vars.ELEVENLABS_API_KEY }}" ]; then
+          if [ -n "$ELEVENLABS_API_KEY" ]; then
             echo "✅ ELEVENLABS_API_KEY is set"
           else
             echo "❌ ELEVENLABS_API_KEY is not set"
             exit 1
           fi
           
-          if [ -n "${{ secrets.GOOGLE_CREDS_JSON }}" ]; then
+          if [ -n "$GOOGLE_CREDS_JSON" ]; then
             echo "✅ GOOGLE_CREDS_JSON is set"
           else
             echo "❌ GOOGLE_CREDS_JSON is not set"
             exit 1
           fi
           
-          if [ -n "${{ vars.SHARE_SHEET_WITH_EMAIL }}" ]; then
+          if [ -n "$SHARE_SHEET_WITH_EMAIL" ]; then
             echo "✅ SHARE_SHEET_WITH_EMAIL is set"
           else
             echo "❌ SHARE_SHEET_WITH_EMAIL is not set"
             exit 1
           fi
 
+      - name: Skip production secret checks on PRs
+        if: github.event_name != 'workflow_dispatch'
+        run: |
+          echo "Skipping production secret checks for pull_request validation."
+          echo "Run this workflow manually to validate configured production secrets."
+
       - name: Test Google credentials
+        if: github.event_name == 'workflow_dispatch'
         run: |
           echo '${{ secrets.GOOGLE_CREDS_JSON }}' > test-google-creds.json
           python -c "
@@ -103,6 +116,7 @@ jobs:
           "
 
       - name: Test Google Sheets connection
+        if: github.event_name == 'workflow_dispatch'
         run: |
           python -c "
           import time
@@ -199,5 +213,10 @@ jobs:
 
       - name: Setup Complete
         run: |
-          echo "🎉 All tests passed! Your GitHub Actions setup is ready."
-          echo "You can now run the main AI Podcast Pipeline workflow." 
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "🎉 All setup tests passed, including production secret checks."
+            echo "You can now run the main AI Podcast Pipeline workflow."
+          else
+            echo "🎉 Pull request setup checks passed."
+            echo "Production secret checks were skipped; run this workflow manually to validate secrets."
+          fi

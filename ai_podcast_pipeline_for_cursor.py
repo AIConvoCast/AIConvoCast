@@ -567,20 +567,19 @@ DEFAULT_MP3_EXPORT_BITRATE = "192k"
 OPUS47_SCRIPT_TUNING_APPENDIX = (
     "Additional script requirements for this run:\n"
     "- Target spoken length: roughly 5 to 8 minutes for the main episode body, before the separate intro and outro are added.\n"
-    "- Target script length: 5,000 to 7,500 characters. Keep it concise and avoid going above 7,500 characters unless the source material requires extra context for accuracy.\n"
-    "- Cover exactly 4 distinct stories when 4+ stories are available in source material.\n"
-    "- If fewer than 4 distinct stories are available, go deeper on the available stories rather than ending early.\n"
-    "- For each story, lead with the concrete news, then build a richer segment with context, stakes, benchmarks, product specifics, pricing or rollout details, quotes, credible social-media reactions, and user/developer responses found in the source material.\n"
-    "- Use relevant quotes as evidence and color, not filler. Prefer 1 to 2 strong quotes or reactions per story when available, and explain why each one matters.\n"
-    "- Spend roughly 3 to 5 natural spoken paragraphs on each major story when the source material supports it.\n"
+    "- Target script length: 4,500 to 6,500 characters. Treat 7,000 characters as a hard ceiling unless extra context is required for factual accuracy.\n"
+    "- Cover 3 to 4 distinct stories. Use 4 only when they can fit naturally within the character target; otherwise prioritize the strongest 3 stories.\n"
+    "- For each story, lead with the concrete news, then include the most interesting context, stakes, benchmarks, product specifics, quotes, credible social-media reactions, and user/developer responses found in the source material.\n"
+    "- Use relevant quotes as evidence and color, not filler. Prefer one strong quote or reaction per story when available.\n"
+    "- Spend roughly 2 to 4 natural spoken paragraphs on each major story when the source material supports it.\n"
     "- Avoid generic summaries like 'this shows AI is moving fast.' Explain the precise tension, surprise, tradeoff, or implication in each story.\n"
     "- Keep tone factual and reportorial: accurate, neutral, vivid, and engaging; avoid speculation.\n"
     "- Do not add an outro paragraph or closing wrap-up that summarizes all stories together.\n"
     "- Do not mention the date range coverage in closing language.\n"
-    "- End naturally after the fourth story with a clean final sentence (no sign-off).\n"
+    "- End naturally after the final story with a clean final sentence (no sign-off).\n"
 )
-CLAUDE_OPUS47_MAX_TOKENS = 10000
-CLAUDE_OPUS47_THINKING_BUDGET_TOKENS = 4096
+CLAUDE_OPUS47_MAX_TOKENS = 6000
+CLAUDE_OPUS47_THINKING_EFFORT = "high"
 CLAUDE_OPUS47_ENABLE_EXTENDED_THINKING = True
 
 # OpenAI research tuning. GPT-5-family web search should aim to complete quickly,
@@ -616,6 +615,43 @@ MODEL_ID_OVERRIDES = {
     "201": {"name": "gpt-5.5-pro", "web_search": False},
     "202": {"name": "gpt-5.5-pro", "web_search": True}
 }
+
+# Provider fallback lists mirror the unique model names in the live Models tab.
+# They are used only when a provider's models.list API is unavailable.
+ANTHROPIC_FALLBACK_MODELS = [
+    "claude-3-5-sonnet-20241022",
+    "claude-3-5-sonnet-20240620",
+    "claude-3-5-haiku",
+    "claude-3-sonnet",
+    "claude-3-haiku",
+    "claude-3-opus",
+    "claude-3-5-sonnet",
+    "claude-opus-4-20250514",
+    "claude-sonnet-4-20250514",
+    "claude-3-7-sonnet-20250219",
+    "claude-3-opus-20240229",
+    "claude-3-sonnet-20240229",
+    "claude-3-haiku-20240307",
+    "claude-instant-1.2",
+    "claude-2.1",
+    "claude-2.0",
+    "claude-opus-4-5-20251101",
+    "claude-sonnet-4-5-20250929",
+    "claude-opus-4-6",
+    "claude-haiku-4-5-20251001",
+    "claude-opus-4-1-20250805",
+    "claude-3-5-haiku-20241022",
+    "claude-opus-4-7",
+    "claude-sonnet-4-6",
+]
+
+GOOGLE_FALLBACK_MODELS = [
+    "gemini-2.5-pro",
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+    "gemini-2.0-flash",
+    "gemini-2.0-flash-lite",
+]
 
 ELEVENLABS_DEFAULT_MODEL_ID = "eleven_v3"
 ELEVENLABS_V3_MAX_CHARS = 3000
@@ -849,7 +885,7 @@ def get_template_dataframes():
         [3, "Generate All On Appendend Topic", "Generate the most important details related to the news stories below from the last 24-48 hours. For each story, retrieve concrete facts, dates, companies, products, technical specifications, benchmarks, user impact, and one or two of the best available quotes or social reactions when they add color. Confirm and validate that the stories occurred or had significant recent updates. Prioritize details that make a podcast segment vivid and less generic, but keep the brief concise enough for the workflow to complete quickly. Stories to retrieve all relevant details on:"],
         [4, "Create Script Based on Material", '''Create a podcast script for the "AI Convo Cast" podcast, which is a daily AI news and technology podcast. We will be adding a standard intro and outro to the podcast script you provide on our end, so only generate the main body of the episode script and always start with:
 "Today we will be..."
-Since we will add intro and outro on our end, please do not make references to the podcast, simply generate the script going over the topics provided along with a very brief and positive 1 sentence summary of topics covered. The script should be written in plain, conversational language that is casual, informed, and assumes the listener is familiar with AI models generally and just wants to hear the facts. Make the episode more interesting by using the strongest available quotes, credible social media reactions, user/developer responses, benchmark details, product specifics, contradictions, and stakes from the source material. Do not rely on generic AI commentary; for every story, explain what is surprising, consequential, controversial, useful, or revealing. When the provided material is lengthy or technical, distill the most newsworthy and engaging storylines while preserving key facts, benchmarks, and quotes. Prioritize clarity for listening, but keep the pacing lively without compressing key details. Design the content for a natural 7-9 minute main-body runtime with smooth transitions and integrated summary breakpoints without explicit headings or titles. Podcast script should contain between 8,000 and 10,000 characters, and should strongly prefer not to fall below 8,000 characters unless the source material is genuinely thin.
+Since we will add intro and outro on our end, please do not make references to the podcast, simply generate the script going over the topics provided along with a very brief and positive 1 sentence summary of topics covered. The script should be written in plain, conversational language that is casual, informed, and assumes the listener is familiar with AI models generally and just wants to hear the facts. Make the episode more interesting by using the strongest available quotes, credible social media reactions, user/developer responses, benchmark details, product specifics, contradictions, and stakes from the source material. Do not rely on generic AI commentary; for every story, explain what is surprising, consequential, controversial, useful, or revealing. When the provided material is lengthy or technical, distill the most newsworthy and engaging storylines while preserving key facts, benchmarks, and quotes. Prioritize clarity for listening, but keep the pacing lively and concise. Design the content for a natural 5-8 minute main-body runtime with smooth transitions and integrated summary breakpoints without explicit headings or titles. Podcast script should contain between 4,500 and 6,500 characters, with 7,000 characters as a hard ceiling unless extra context is required for factual accuracy.
 Output must be pure plain text (UTF‑8 encoded) with no hyperlinks, citations, markdown formatting, extraneous symbols, or any headings like "Summary." Do not include any non-text elements or words/phrases ending in ".com." Adjust tone, style, or content as clarified by the user while always prioritizing a clean, accessible, and entertaining spoken presentation. Avoid numbering or bullet points and refrain from using corny sayings. Please also always remove dashes from names (e.g. GPT-4.5 should be GPT 4.5). When converting this text to speech, automatically replace 'GPT 4o' with 'GPT Four-Oh', 'DALL-E' with 'Dolly'. Avoid corny transitions like "speaking of". Transitions should be smooth or simply go into next topic.
 
 Podcast Material for to Base Script On:'''],
@@ -903,7 +939,7 @@ Topic to generate Title and Description based:'''],
         [8, "Do not select topics previously covered", "Below are previously covered items that should be avoided since they have already been covered in previous episodes. Avoid repeating the exact same story angle, but include a follow-up when there is a significant new development, post-release user/developer feedback, fresh benchmarks or evals, new use cases, availability or pricing changes, credible controversy, or another materially new angle. If you include a follow-up on a previously covered item, explicitly note in the output that it was previously covered and explain what is new. Previously Covered News Items for context:"]
     ], columns=["Prompt ID", "Prompt Title", "Prompt Description"])
 
-    # Updated Models tab with the provided data as default (122 models total)
+    # Models tab seed mirrored from the live Google Drive Models tab.
     models = pd.DataFrame([
         [1, "gpt-4o", "N", "Y", "N"],
         [2, "gpt-4o-mini", "N", "Y", "N"],
@@ -911,7 +947,7 @@ Topic to generate Title and Description based:'''],
         [4, "gpt-4o-mini", "Y", "N", "N"],
         [5, "gpt-4o-mini-search-preview", "N", "Y", "N"],
         [6, "gpt-4o-search-preview", "N", "Y", "N"],
-        [7, "chatgpt-4o-latest", "N", "N", "N"],
+        [7, "chatgpt-4o-latest", "N", "N", "Y"],
         [8, "codex-mini-latest", "N", "N", "Y"],
         [9, "dall-e-2", "N", "N", "Y"],
         [10, "dall-e-3", "N", "N", "Y"],
@@ -936,8 +972,8 @@ Topic to generate Title and Description based:'''],
         [29, "gpt-4o-transcribe", "N", "N", "Y"],
         [30, "gpt-image-1", "N", "N", "Y"],
         [31, "o1", "N", "N", "N"],
-        [32, "o1-mini", "N", "N", "N"],
-        [33, "o1-preview", "N", "N", "N"],
+        [32, "o1-mini", "N", "N", "Y"],
+        [33, "o1-preview", "N", "N", "Y"],
         [34, "o1-pro", "N", "N", "N"],
         [35, "o3-mini", "N", "N", "N"],
         [36, "o3-mini-2025-01-31", "N", "N", "N"],
@@ -956,31 +992,31 @@ Topic to generate Title and Description based:'''],
         [49, "davinci-002", "N", "N", "N"],
         [50, "babbage-002", "N", "N", "N"],
         [51, "gpt-3.5-turbo-instruct-0914", "N", "N", "N"],
-        [52, "gpt-4-1106-preview", "N", "Y", "N"],
+        [52, "gpt-4-1106-preview", "N", "Y", "Y"],
         [53, "gpt-3.5-turbo-1106", "N", "N", "N"],
-        [54, "gpt-4-0125-preview", "N", "Y", "N"],
-        [55, "gpt-4-turbo-preview", "N", "Y", "N"],
+        [54, "gpt-4-0125-preview", "N", "Y", "Y"],
+        [55, "gpt-4-turbo-preview", "N", "Y", "Y"],
         [56, "gpt-3.5-turbo-0125", "N", "N", "N"],
         [57, "gpt-4-turbo", "N", "N", "N"],
         [58, "gpt-4-turbo-2024-04-09", "N", "N", "N"],
         [59, "gpt-4o-2024-05-13", "N", "N", "N"],
         [60, "gpt-4o-mini-2024-07-18", "N", "N", "N"],
         [61, "gpt-4o-2024-08-06", "N", "N", "N"],
-        [62, "o1-preview-2024-09-12", "N", "Y", "N"],
-        [63, "o1-mini-2024-09-12", "N", "N", "N"],
+        [62, "o1-preview-2024-09-12", "N", "Y", "Y"],
+        [63, "o1-mini-2024-09-12", "N", "N", "Y"],
         [64, "o1-2024-12-17", "N", "N", "N"],
         [65, "gpt-4o-2024-11-20", "N", "N", "N"],
         [66, "o1-pro-2025-03-19", "N", "N", "N"],
         [67, "o4-mini-2025-04-16", "N", "N", "N"],
         [68, "gpt-4.1-2025-04-14", "N", "N", "N"],
         [69, "gpt-3.5-turbo-16k", "N", "N", "N"],
-        [70, "claude-3-5-sonnet-20241022", "N", "N", "N"],
-        [71, "claude-3-5-sonnet-20240620", "N", "N", "N"],
-        [72, "claude-3-5-haiku", "N", "N", "N"],
+        [70, "claude-3-5-sonnet-20241022", "N", "N", "Y"],
+        [71, "claude-3-5-sonnet-20240620", "N", "N", "Y"],
+        [72, "claude-3-5-haiku", "N", "N", "Y"],
         [73, "claude-3-sonnet", "N", "N", "Y"],
         [74, "claude-3-haiku", "N", "N", "Y"],
         [75, "claude-3-opus", "N", "N", "Y"],
-        [76, "claude-3-5-sonnet", "N", "N", "N"],
+        [76, "claude-3-5-sonnet", "N", "N", "Y"],
         [77, "gemini-2.5-pro", "N", "N", "N"],
         [78, "gemini-2.5-flash", "N", "N", "N"],
         [79, "gemini-2.5-flash-lite", "N", "N", "N"],
@@ -988,16 +1024,16 @@ Topic to generate Title and Description based:'''],
         [81, "gemini-2.0-flash-lite", "N", "N", "N"],
         [82, "claude-opus-4-20250514", "N", "Y", "N"],
         [83, "claude-sonnet-4-20250514", "N", "Y", "N"],
-        [84, "claude-3-7-sonnet-20250219", "N", "Y", "N"],
-        [85, "claude-3-opus-20240229", "N", "N", "N"],
-        [86, "claude-3-sonnet-20240229", "N", "N", "N"],
-        [87, "claude-3-haiku-20240307", "N", "N", "N"],
-        [88, "claude-instant-1.2", "N", "N", "N"],
-        [89, "claude-2.1", "N", "N", "N"],
-        [90, "claude-2.0", "N", "N", "N"],
+        [84, "claude-3-7-sonnet-20250219", "N", "Y", "Y"],
+        [85, "claude-3-opus-20240229", "N", "N", "Y"],
+        [86, "claude-3-sonnet-20240229", "N", "N", "Y"],
+        [87, "claude-3-haiku-20240307", "N", "N", "Y"],
+        [88, "claude-instant-1.2", "N", "N", "Y"],
+        [89, "claude-2.1", "N", "N", "Y"],
+        [90, "claude-2.0", "N", "N", "Y"],
         [91, "claude-opus-4-20250514", "N", "N", "N"],
         [92, "claude-sonnet-4-20250514", "N", "N", "N"],
-        [93, "claude-3-7-sonnet-20250219", "N", "N", "N"],
+        [93, "claude-3-7-sonnet-20250219", "N", "N", "Y"],
         [94, "gpt-5-nano", "N", "N", "N"],
         [95, "gpt-5", "N", "N", "N"],
         [96, "gpt-5-mini-2025-08-07", "N", "N", "N"],
@@ -1007,15 +1043,15 @@ Topic to generate Title and Description based:'''],
         [100, "o3", "N", "N", "N"],
         [101, "gpt-5-chat-latest", "N", "N", "N"],
         [102, "gpt-5-2025-08-07", "N", "N", "N"],
-        [103, "gpt-4-1106-preview", "N", "N", "N"],
-        [104, "gpt-4-0125-preview", "N", "N", "N"],
-        [105, "gpt-4-turbo-preview", "N", "N", "N"],
+        [103, "gpt-4-1106-preview", "N", "N", "Y"],
+        [104, "gpt-4-0125-preview", "N", "N", "Y"],
+        [105, "gpt-4-turbo-preview", "N", "N", "Y"],
         [106, "gpt-4o-search-preview-2025-03-11", "N", "Y", "N"],
         [107, "gpt-4o-mini-search-preview-2025-03-11", "N", "Y", "N"],
         [108, "o4-mini-deep-research", "N", "N", "N"],
         [109, "o4-mini-deep-research-2025-06-26", "N", "N", "N"],
-        [110, "claude-3-5-sonnet-20241022", "N", "Y", "N"],
-        [111, "claude-3-5-haiku", "N", "Y", "N"],
+        [110, "claude-3-5-sonnet-20241022", "N", "Y", "Y"],
+        [111, "claude-3-5-haiku", "N", "Y", "Y"],
         [112, "gpt-5-nano", "N", "Y", "N"],
         [113, "gpt-5", "N", "Y", "N"],
         [114, "gpt-5-mini-2025-08-07", "N", "Y", "N"],
@@ -1027,6 +1063,57 @@ Topic to generate Title and Description based:'''],
         [120, "gpt-4o-2024-11-20", "N", "Y", "N"],
         [121, "gpt-5-chat-latest", "N", "Y", "N"],
         [122, "gpt-5-2025-08-07", "N", "Y", "N"],
+        [123, "gpt-5.1-chat-latest", "N", "N", "N"],
+        [124, "gpt-5.1-chat-latest", "N", "Y", "N"],
+        [125, "gpt-5.1-2025-11-13", "N", "N", "N"],
+        [133, "gpt-5-pro", "N", "N", "N"],
+        [134, "gpt-5-pro", "N", "Y", "N"],
+        [135, "gpt-5-search-api", "N", "N", "N"],
+        [136, "gpt-5-search-api", "N", "Y", "N"],
+        [137, "gpt-realtime-mini", "N", "N", "N"],
+        [138, "gpt-realtime-mini-2025-10-06", "N", "N", "N"],
+        [139, "sora-2", "N", "N", "N"],
+        [140, "sora-2-pro", "N", "N", "N"],
+        [141, "gpt-5-search-api-2025-10-14", "N", "N", "N"],
+        [142, "gpt-5-search-api-2025-10-14", "N", "Y", "N"],
+        [143, "claude-opus-4-5-20251101", "N", "N", "N"],
+        [144, "claude-opus-4-5-20251101", "N", "Y", "N"],
+        [145, "claude-sonnet-4-5-20250929", "N", "N", "N"],
+        [146, "claude-sonnet-4-5-20250929", "N", "Y", "N"],
+        [147, "gpt-realtime-mini-2025-12-15", "N", "N", "N"],
+        [148, "gpt-realtime", "N", "N", "N"],
+        [149, "gpt-realtime-2025-08-28", "N", "N", "N"],
+        [150, "gpt-5-pro-2025-10-06", "N", "N", "N"],
+        [151, "gpt-5-pro-2025-10-06", "N", "Y", "N"],
+        [152, "gpt-5.1-2025-11-13", "N", "Y", "N"],
+        [153, "gpt-5.1", "N", "N", "N"],
+        [154, "gpt-5.1", "N", "Y", "N"],
+        [155, "gpt-5.2-2025-12-11", "N", "N", "N"],
+        [156, "gpt-5.2-2025-12-11", "N", "Y", "N"],
+        [157, "gpt-5.2", "N", "N", "N"],
+        [158, "gpt-5.2", "N", "Y", "N"],
+        [159, "gpt-5.2-pro-2025-12-11", "N", "N", "N"],
+        [160, "gpt-5.2-pro-2025-12-11", "N", "Y", "N"],
+        [161, "gpt-5.2-pro", "N", "N", "N"],
+        [162, "gpt-5.2-pro", "N", "Y", "N"],
+        [163, "gpt-5.2-chat-latest", "N", "N", "N"],
+        [164, "gpt-5.2-chat-latest", "N", "Y", "N"],
+        [165, "claude-opus-4-6", "N", "N", "N"],
+        [166, "claude-opus-4-6", "N", "Y", "N"],
+        [167, "claude-haiku-4-5-20251001", "N", "N", "N"],
+        [168, "claude-opus-4-1-20250805", "N", "N", "N"],
+        [169, "claude-opus-4-1-20250805", "N", "Y", "N"],
+        [170, "claude-3-5-haiku-20241022", "N", "N", "Y"],
+        [171, "claude-3-5-haiku-20241022", "N", "Y", "Y"],
+        [172, "gpt-5.4-nano", "N", "N", "N"],
+        [173, "gpt-5.4-nano", "N", "Y", "N"],
+        [174, "gpt-5.4-mini-2026-03-17", "N", "N", "N"],
+        [175, "gpt-5.4-mini-2026-03-17", "N", "Y", "N"],
+        [176, "gpt-5.4-mini", "N", "N", "N"],
+        [177, "gpt-5.4-mini", "N", "Y", "N"],
+        [178, "gpt-realtime-1.5", "N", "N", "N"],
+        [179, "gpt-5.3-chat-latest", "N", "N", "N"],
+        [180, "gpt-5.3-chat-latest", "N", "Y", "N"],
         [181, "gpt-5.4-2026-03-05", "N", "N", "N"],
         [182, "gpt-5.4-2026-03-05", "N", "Y", "N"],
         [183, "gpt-5.4-pro", "N", "N", "N"],
@@ -1176,9 +1263,7 @@ def openai_chat_uses_max_completion_tokens(model_id):
 
 
 def fetch_anthropic_models():
-    """Fetch the latest models from Anthropic API. Uses API models.list() when available,
-    falls back to hardcoded list if API is unavailable. New models (e.g. Claude Opus 4.6)
-    populate automatically when fetched from API."""
+    """Fetch the latest models from Anthropic API, with a Models-tab-aligned fallback."""
     try:
         import anthropic
         
@@ -1213,28 +1298,8 @@ def fetch_anthropic_models():
         except Exception as api_err:
             print(f"[DEBUG] Anthropic API models.list not available: {api_err}, using fallback list")
         
-        # Fallback: hardcoded list when API list is unavailable
-        anthropic_models = [
-            'claude-opus-4-6',
-            'claude-opus-4-5-20251101',
-            'claude-sonnet-4-5-20250929',
-            'claude-opus-4-20250514',
-            'claude-sonnet-4-20250514',
-            'claude-3-7-sonnet-20250219',
-            'claude-3-5-sonnet-20241022',
-            'claude-3-5-sonnet-20240620',
-            'claude-3-5-sonnet',
-            'claude-3-5-haiku',
-            'claude-3-opus-20240229',
-            'claude-3-sonnet-20240229',
-            'claude-3-haiku-20240307',
-            'claude-instant-1.2',
-            'claude-2.1',
-            'claude-2.0'
-        ]
-        
         text_models = []
-        for model_id in anthropic_models:
+        for model_id in ANTHROPIC_FALLBACK_MODELS:
             text_models.append({
                 'id': model_id,
                 'provider': 'anthropic',
@@ -1254,18 +1319,8 @@ def fetch_google_models():
         
         genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
         
-        # Google Gemini models are typically hardcoded since they don't have a models.list() endpoint
-        # We'll use the known text-based models
-        google_models = [
-            'gemini-2.5-pro',
-            'gemini-2.5-flash',
-            'gemini-2.5-flash-lite',
-            'gemini-2.0-flash',
-            'gemini-2.0-flash-lite'
-        ]
-        
         text_models = []
-        for model_id in google_models:
+        for model_id in GOOGLE_FALLBACK_MODELS:
             # Google models don't support web search in the same way as OpenAI
             text_models.append({
                 'id': model_id,
@@ -2248,14 +2303,11 @@ def call_anthropic_model(prompt, model="claude-3-sonnet", temperature=0.8, web_s
         }
 
         if enable_opus47_thinking:
-            api_params["thinking"] = {
-                "type": "enabled",
-                "budget_tokens": CLAUDE_OPUS47_THINKING_BUDGET_TOKENS,
-                "display": "omitted"
-            }
+            api_params["thinking"] = {"type": "adaptive"}
+            api_params["extra_body"] = {"output_config": {"effort": CLAUDE_OPUS47_THINKING_EFFORT}}
             print(
-                f"🧠 Extended thinking enabled for {model}: "
-                f"{CLAUDE_OPUS47_THINKING_BUDGET_TOKENS} thinking tokens, "
+                f"🧠 Adaptive thinking enabled for {model}: "
+                f"{CLAUDE_OPUS47_THINKING_EFFORT} effort, "
                 f"{CLAUDE_OPUS47_MAX_TOKENS} max output tokens"
             )
         elif temperature is not None:

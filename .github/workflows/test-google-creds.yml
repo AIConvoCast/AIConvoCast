@@ -2,9 +2,6 @@ name: Test Google Credentials
 
 on:
   workflow_dispatch:
-  pull_request:
-    branches:
-      - main
 
 jobs:
   test-google-creds:
@@ -187,4 +184,4 @@ jobs:
         run: |
           echo "🎉 Google credentials test completed successfully!"
           echo "Your Google service account is properly configured."
-          echo "You can now run the main AI Podcast Pipeline workflow." 
+          echo "You can now run the main AI Podcast Pipeline workflow."
