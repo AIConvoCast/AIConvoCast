@@ -587,8 +587,10 @@ CLAUDE_OPUS47_ENABLE_EXTENDED_THINKING = True
 # but the timeout should not be the reason it misses a clearly stronger story.
 OPENAI_DEFAULT_TIMEOUT_SECONDS = 1200
 OPENAI_WEB_SEARCH_TIMEOUT_SECONDS = 900
-OPENAI_GPT5_WEB_SEARCH_REASONING_EFFORT = "high"
-OPENAI_GPT5_WEB_SEARCH_RETRY_REASONING_EFFORT = "medium"
+OPENAI_GPT5_WEB_SEARCH_REASONING_EFFORT = "medium"
+OPENAI_GPT5_WEB_SEARCH_RETRY_REASONING_EFFORT = "low"
+OPENAI_WEB_SEARCH_MAX_OUTPUT_TOKENS = 5000
+OPENAI_WEB_SEARCH_FOLLOWUP_MAX_OUTPUT_TOKENS = 4000
 
 # Manual model-ID overrides to support deterministic workflow codes like M198.
 # This keeps workflows resilient even before the Models sheet is updated.
@@ -1828,9 +1830,8 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                     timer.cancel()
                 return "⏰ Research timeout reached. Please try with a more specific request or use a different model."
             
-            # Attempt with basic limits; handle rate limits with a quick backoff and reduced budget.
-            # Keep enough room for a detailed brief without inviting sprawl.
-            resp_max_tokens = 8000
+            # Attempt with enough room for the requested brief without inviting costly sprawl.
+            resp_max_tokens = OPENAI_WEB_SEARCH_MAX_OUTPUT_TOKENS
             try:
                 _model_lower = str(model).lower()
                 _is_gpt5 = _model_lower.startswith("gpt-5")
@@ -1857,7 +1858,7 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                     responses_kwargs["instructions"] = web_search_instructions
                 responses_kwargs.update(request_timeout_kwargs)
 
-                # Let GPT-5-family web search think harder on the first pass so it can choose stronger stories.
+                # Give GPT-5-family web search enough reasoning for story selection without overspending.
                 if _is_gpt5:
                     responses_kwargs["reasoning"] = {"effort": _gpt5_reasoning_effort}
                     # DO NOT add: reasoning={"summary": "auto"} or include=["reasoning.encrypted_content"]
@@ -1935,12 +1936,10 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                         "input": (
                             "Your prior answer appears truncated and started a markdown table. "
                             "Return a complete plain-text answer now (no markdown table), with clear sections and bullet points. "
-                            "Use the web results already gathered; search again only if a required fact is missing."
+                            "Use the web results already gathered; do not perform another web search."
                         ),
-                        "tools": [tools_config],
-                        "tool_choice": "required" if force_web_tool_use else "auto",
                         "text": {"format": {"type": "text"}, "verbosity": "medium"},
-                        "max_output_tokens": resp_max_tokens
+                        "max_output_tokens": min(resp_max_tokens, OPENAI_WEB_SEARCH_FOLLOWUP_MAX_OUTPUT_TOKENS)
                     }
                     if web_search_instructions:
                         continuation_kwargs["instructions"] = web_search_instructions
@@ -2020,7 +2019,7 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                     "model": model,
                     "input": followup_input,
                     "text": {"format": {"type": "text"}, "verbosity": "medium"},
-                    "max_output_tokens": 6000
+                    "max_output_tokens": OPENAI_WEB_SEARCH_FOLLOWUP_MAX_OUTPUT_TOKENS
                 }
                 if web_search_instructions:
                     followup_kwargs["instructions"] = web_search_instructions
