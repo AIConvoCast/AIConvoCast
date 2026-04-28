@@ -2331,6 +2331,9 @@ def call_anthropic_model(prompt, model="claude-3-sonnet", temperature=0.8, web_s
                 f"{CLAUDE_OPUS47_THINKING_EFFORT} effort, "
                 f"{CLAUDE_OPUS47_MAX_TOKENS} max output tokens"
             )
+        elif "claude-opus-4-7" in model_lower:
+            # Anthropic deprecated explicit temperature for Opus 4.7.
+            print(f"ℹ️ Skipping temperature for {model} because this model ignores/deprecates it.")
         elif temperature is not None:
             api_params["temperature"] = temperature
         
