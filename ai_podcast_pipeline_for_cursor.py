@@ -2565,6 +2565,35 @@ def get_elevenlabs_model_id(eleven_config=None):
     return ELEVENLABS_DEFAULT_MODEL_ID
 
 
+def elevenlabs_model_supports_chunk_context(model_id):
+    """Return whether the ElevenLabs model supports previous_text/next_text context."""
+    return str(model_id or "").strip().lower() != "eleven_v3"
+
+
+def build_elevenlabs_convert_kwargs(
+    chunk_text,
+    voice_id,
+    voice_settings,
+    model_id,
+    previous_text=None,
+    next_text=None,
+):
+    kwargs = {
+        "text": chunk_text,
+        "voice_id": voice_id,
+        "voice_settings": voice_settings,
+        "model_id": model_id,
+    }
+    if elevenlabs_model_supports_chunk_context(model_id):
+        if previous_text:
+            kwargs["previous_text"] = previous_text
+        if next_text:
+            kwargs["next_text"] = next_text
+    elif previous_text or next_text:
+        print(f"[DEBUG] Skipping previous_text/next_text for ElevenLabs model {model_id}")
+    return kwargs
+
+
 def _coerce_elevenlabs_float(value, default, min_value, max_value):
     if value is None:
         return default
@@ -2611,14 +2640,15 @@ def build_elevenlabs_voice_settings(eleven_config=None):
 
 
 def build_elevenlabs_tts_payload(chunk_text, eleven_config=None, previous_text=None, next_text=None):
+    model_id = get_elevenlabs_model_id(eleven_config)
     payload = {
         "text": chunk_text,
-        "model_id": get_elevenlabs_model_id(eleven_config),
+        "model_id": model_id,
         "voice_settings": build_elevenlabs_voice_settings(eleven_config),
     }
-    if previous_text:
+    if previous_text and elevenlabs_model_supports_chunk_context(model_id):
         payload["previous_text"] = previous_text[-ELEVENLABS_CHUNK_MAX_CHARS:]
-    if next_text:
+    if next_text and elevenlabs_model_supports_chunk_context(model_id):
         payload["next_text"] = next_text[:ELEVENLABS_CHUNK_MAX_CHARS]
     return payload
 
@@ -2698,18 +2728,21 @@ def generate_voice_audio(text, voice_id, output_path, eleven_config=None):
                 print(f"[DEBUG] Chunk {idx+1} preview: {chunk_text[:100]}")
                 if eleven_config:
                     voice_settings = build_elevenlabs_voice_settings(eleven_config)
+                    model_id = get_elevenlabs_model_id(eleven_config)
                     try:
-                        print(f"[DEBUG] Using model: {get_elevenlabs_model_id(eleven_config)}, voice_id: {voice_id}")
+                        print(f"[DEBUG] Using model: {model_id}, voice_id: {voice_id}")
                         if len(chunk_text) > ELEVENLABS_CHUNK_MAX_CHARS:
                             print(f"[WARNING] Chunk {idx+1} is very long ({len(chunk_text)} chars). Consider splitting further if you see timeouts.")
                         start_time = time.time()
                         audio_stream = client.text_to_speech.convert(
-                            text=chunk_text,
-                            voice_id=voice_id,
-                            voice_settings=voice_settings,
-                            model_id=get_elevenlabs_model_id(eleven_config),
-                            previous_text=previous_text,
-                            next_text=next_text
+                            **build_elevenlabs_convert_kwargs(
+                                chunk_text,
+                                voice_id,
+                                voice_settings,
+                                model_id,
+                                previous_text=previous_text,
+                                next_text=next_text,
+                            )
                         )
                         elapsed = time.time() - start_time
                         print(f"[DEBUG] ElevenLabs SDK call for chunk {idx+1} returned in {elapsed:.3f}s (streaming)")
@@ -2736,18 +2769,21 @@ def generate_voice_audio(text, voice_id, output_path, eleven_config=None):
                             except: pass
                         return generate_voice_audio_rest(text, voice_id, output_path, eleven_config)
                 else:
+                    model_id = ELEVENLABS_DEFAULT_MODEL_ID
                     try:
-                        print(f"[DEBUG] Using model: {ELEVENLABS_DEFAULT_MODEL_ID}, voice_id: {voice_id}")
+                        print(f"[DEBUG] Using model: {model_id}, voice_id: {voice_id}")
                         if len(chunk_text) > ELEVENLABS_CHUNK_MAX_CHARS:
                             print(f"[WARNING] Chunk {idx+1} is very long ({len(chunk_text)} chars). Consider splitting further if you see timeouts.")
                         start_time = time.time()
                         audio_stream = client.text_to_speech.convert(
-                            text=chunk_text,
-                            voice_id=voice_id,
-                            voice_settings=build_elevenlabs_voice_settings(),
-                            model_id=ELEVENLABS_DEFAULT_MODEL_ID,
-                            previous_text=previous_text,
-                            next_text=next_text
+                            **build_elevenlabs_convert_kwargs(
+                                chunk_text,
+                                voice_id,
+                                build_elevenlabs_voice_settings(),
+                                model_id,
+                                previous_text=previous_text,
+                                next_text=next_text,
+                            )
                         )
                         elapsed = time.time() - start_time
                         print(f"[DEBUG] ElevenLabs SDK call for chunk {idx+1} returned in {elapsed:.3f}s (streaming)")
