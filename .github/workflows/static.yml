@@ -38,7 +38,7 @@ jobs:
           mkdir -p public
           cp index.html episodes.html contact.html privacy.html styles.css main.js ai-convo-cast-logo.jpg manifest.json CNAME public/
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
           path: 'public'
       - name: Deploy to GitHub Pages
