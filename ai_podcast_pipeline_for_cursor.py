@@ -562,7 +562,7 @@ GOOGLE_CHIRP3_AUDIO_SETTINGS = {
 }
 DEFAULT_MP3_EXPORT_BITRATE = "192k"
 
-# Fine-tuning instructions for podcast script generation with Claude Opus 4.7.
+# Fine-tuning instructions for podcast script generation with Claude Opus 4.7+.
 # Applied at runtime for P4 script steps so existing sheet prompts can remain mostly unchanged.
 OPUS47_SCRIPT_TUNING_APPENDIX = (
     "Additional script requirements for this run:\n"
@@ -587,14 +587,29 @@ CLAUDE_OPUS47_MAX_TOKENS = 6000
 CLAUDE_OPUS47_THINKING_EFFORT = "high"
 CLAUDE_OPUS47_ENABLE_EXTENDED_THINKING = True
 
-# OpenAI research tuning. GPT-5-family web search should aim to complete quickly,
-# but the timeout should not be the reason it misses a clearly stronger story.
+def get_env_int(name, default):
+    raw_value = os.getenv(name)
+    if not raw_value:
+        return default
+    try:
+        return int(raw_value)
+    except ValueError:
+        print(f"[WARN] Invalid integer for {name}: {raw_value!r}. Using default {default}.")
+        return default
+
+
+# OpenAI research tuning. Web search should aim to complete quickly,
+# with enough room left for script writing, title/description, and voice generation.
 OPENAI_DEFAULT_TIMEOUT_SECONDS = 1200
-OPENAI_WEB_SEARCH_TIMEOUT_SECONDS = 900
-OPENAI_GPT5_WEB_SEARCH_REASONING_EFFORT = "medium"
-OPENAI_GPT5_WEB_SEARCH_RETRY_REASONING_EFFORT = "low"
-OPENAI_WEB_SEARCH_MAX_OUTPUT_TOKENS = 5000
-OPENAI_WEB_SEARCH_FOLLOWUP_MAX_OUTPUT_TOKENS = 4000
+OPENAI_WEB_SEARCH_TIMEOUT_SECONDS = get_env_int("OPENAI_WEB_SEARCH_TIMEOUT_SECONDS", 150)
+OPENAI_GPT56_WEB_SEARCH_REASONING_EFFORT = os.getenv("OPENAI_GPT56_WEB_SEARCH_REASONING_EFFORT", "low").strip() or "low"
+OPENAI_GPT5_WEB_SEARCH_REASONING_EFFORT = os.getenv("OPENAI_GPT5_WEB_SEARCH_REASONING_EFFORT", "low").strip() or "low"
+OPENAI_GPT5_WEB_SEARCH_RETRY_REASONING_EFFORT = os.getenv("OPENAI_GPT5_WEB_SEARCH_RETRY_REASONING_EFFORT", "low").strip() or "low"
+OPENAI_WEB_SEARCH_MAX_OUTPUT_TOKENS = get_env_int("OPENAI_WEB_SEARCH_MAX_OUTPUT_TOKENS", 3200)
+OPENAI_WEB_SEARCH_FOLLOWUP_MAX_OUTPUT_TOKENS = 2500
+ANTHROPIC_DEFAULT_TIMEOUT_SECONDS = 180
+ANTHROPIC_WEB_SEARCH_TIMEOUT_SECONDS = 300
+ANTHROPIC_MAX_RETRIES = 0
 
 # Manual model-ID overrides to support deterministic workflow codes like M198.
 # This keeps workflows resilient even before the Models sheet is updated.
@@ -620,7 +635,22 @@ MODEL_ID_OVERRIDES = {
     "199": {"name": "gpt-5.5-2026-04-23", "web_search": False},
     "200": {"name": "gpt-5.5-2026-04-23", "web_search": True},
     "201": {"name": "gpt-5.5-pro", "web_search": False},
-    "202": {"name": "gpt-5.5-pro", "web_search": True}
+    "202": {"name": "gpt-5.5-pro", "web_search": True},
+    "203": {"name": "chat-latest", "web_search": False},
+    "204": {"name": "gpt-realtime-translate", "web_search": False},
+    "205": {"name": "gpt-realtime-2", "web_search": False},
+    "206": {"name": "gpt-5.6-sol", "web_search": False},
+    "207": {"name": "gpt-5.6-sol", "web_search": True},
+    "208": {"name": "gpt-5.6-terra", "web_search": False},
+    "209": {"name": "gpt-5.6-terra", "web_search": True},
+    "210": {"name": "gpt-5.6-luna", "web_search": False},
+    "211": {"name": "gpt-5.6-luna", "web_search": True},
+    "212": {"name": "gpt-realtime-2.1", "web_search": False},
+    "213": {"name": "gpt-realtime-2.1-mini", "web_search": False},
+    "214": {"name": "claude-sonnet-5", "web_search": False},
+    "215": {"name": "claude-fable-5", "web_search": False},
+    "216": {"name": "claude-opus-4-8", "web_search": False},
+    "217": {"name": "claude-opus-4-8", "web_search": True}
 }
 
 # Provider fallback lists mirror the unique model names in the live Models tab.
@@ -649,6 +679,9 @@ ANTHROPIC_FALLBACK_MODELS = [
     "claude-opus-4-1-20250805",
     "claude-3-5-haiku-20241022",
     "claude-opus-4-7",
+    "claude-opus-4-8",
+    "claude-sonnet-5",
+    "claude-fable-5",
     "claude-sonnet-4-6",
 ]
 
@@ -956,20 +989,20 @@ Success criteria:
 - Avoid stories exclusively about funding, valuations, stock prices, or routine business deals unless there is a broader technology or product story.
 - Use the appended prior-coverage list as context, not a hard exclusion. Generic prior titles may overlap with genuinely new reporting, so judge whether the current story adds important new material after the earlier episode. Follow-up reporting can still be selected when it is one of the most important current stories and adds new sourced details, quotes, hands-on testing, user/developer feedback, social media responses, benchmark or eval discussion, adoption or use-case evidence, limitations, availability or pricing changes, credible controversy, safety issues, or meaningful analysis. If covering a follow-up, provide only the new details since the original report and at most one brief context sentence; do not retell the original announcement or release. For major releases that were previously covered at announcement, recent reporting on user testing, feedback, limitations, strengths, adoption, or meaningful reaction can still be selected if it is important and well-supported.
 - Verify recency with absolute dates/times in America/New_York when available. Include both the publication/update time and underlying event time when you can support both.
-- Use enough web evidence to make a strong selection, usually 8-12 credible sources total and at least two sources per selected story when available. Prefer primary sources and reputable reporting.
-- Aim to complete the research pass in roughly 3-8 minutes, but do not stop early solely to meet that target if a little more search or reasoning is needed to find the best available stories.
+- Use enough web evidence to make a strong selection, usually 4-6 credible sources total. Aim for one strong source per selected story, and add a second source only for ambiguous, surprising, controversial, or high-impact claims. Prefer primary sources and reputable reporting.
+- Aim to complete the research pass in about 60-90 seconds and do not spend more than roughly 2 minutes trying to produce the brief. Make one efficient search pass, then stop once you have 5 credible candidates with timing and a concrete reason each story matters.
 - For each story, focus on impact: why it matters, who it affects, what changed, and what listeners can understand or do differently.
 - Include metrics, benchmarks, percentages, pricing, or technical details only when they support a clear point about impact, comparison, stakes, or practical usefulness. Avoid long metric lists or dense technical explanations.
-- Include one short quote or meaningful social/user/developer reaction per story when available. Attribute the speaker, handle, role, source, and timestamp when available. Keep direct quotes under 25 words.
-- If a quote or reaction is not well supported, summarize the reaction pattern instead of forcing it. If evidence is thin, choose a better-supported story.
+- Include one short quote or meaningful social/user/developer reaction per story when readily available. Attribute the speaker, handle, role, source, and timestamp when available. Keep direct quotes under 25 words.
+- If a quote or reaction is not found quickly, summarize the reaction pattern or omit it instead of spending extra search time. If evidence is thin, choose a better-supported story.
 
 Output:
 - Coverage window and generated timestamp in ET.
 - A compact summary table with: #, headline, event date/time, story type, and why it matters.
 - 5 numbered story sections with: what happened, timing, impact, key details, quotes or reactions, and source links.
-- Keep the brief concise but useful for script writing, roughly 1,100-1,600 words unless the evidence requires less.
+- Keep the brief concise but useful for script writing, roughly 700-950 words unless the evidence requires less.
 
-Stop rule: stop searching once each selected story has credible evidence, timing, and a concrete reason it matters. Do not describe your process or add a preamble."""],
+Stop rule: stop searching once each selected story has credible evidence, timing, and a concrete reason it matters. Do not keep searching to find every possible quote or reaction after the top five are well supported, and do not make extra searches for nonessential color. Do not describe your process or add a preamble."""],
         [11, "Create Script Based on Material gpt 5", '''ROLE
 You are writing the MAIN BODY of an AI Convo Cast episode. Do NOT include intro or outro.
 
@@ -1213,7 +1246,22 @@ MATERIAL TO USE (facts come from below or verified optional script-stage search)
         [199, "gpt-5.5-2026-04-23", "N", "N", "N"],
         [200, "gpt-5.5-2026-04-23", "N", "Y", "N"],
         [201, "gpt-5.5-pro", "N", "N", "N"],
-        [202, "gpt-5.5-pro", "N", "Y", "N"]
+        [202, "gpt-5.5-pro", "N", "Y", "N"],
+        [203, "chat-latest", "N", "N", "N"],
+        [204, "gpt-realtime-translate", "N", "N", "N"],
+        [205, "gpt-realtime-2", "N", "N", "N"],
+        [206, "gpt-5.6-sol", "N", "N", "N"],
+        [207, "gpt-5.6-sol", "N", "Y", "N"],
+        [208, "gpt-5.6-terra", "N", "N", "N"],
+        [209, "gpt-5.6-terra", "N", "Y", "N"],
+        [210, "gpt-5.6-luna", "N", "N", "N"],
+        [211, "gpt-5.6-luna", "N", "Y", "N"],
+        [212, "gpt-realtime-2.1", "N", "N", "N"],
+        [213, "gpt-realtime-2.1-mini", "N", "N", "N"],
+        [214, "claude-sonnet-5", "N", "N", "N"],
+        [215, "claude-fable-5", "N", "N", "N"],
+        [216, "claude-opus-4-8", "N", "N", "N"],
+        [217, "claude-opus-4-8", "N", "Y", "N"]
     ], columns=["Model ID", "Model Name", "Model Default", "Web Search", "Deprecated"])
 
     workflow_steps = pd.DataFrame(columns=[
@@ -1315,6 +1363,25 @@ def anthropic_model_supports_web_search(model_id):
         '-3-5-' in lower or
         'claude-3-5-haiku' in lower
     )
+
+
+def anthropic_model_uses_opus_adaptive_effort(model_id):
+    """Claude Opus 4.7+ rejects manual thinking budgets and sampling params."""
+    if not model_id:
+        return False
+    lower = str(model_id).lower()
+    match = re.search(r"claude-opus-4[-.](\d{1,2})(?:\b|-)", lower)
+    return bool(match and int(match.group(1)) >= 7)
+
+
+def openai_web_search_reasoning_effort_for_model(model_id):
+    """Choose a model-family-specific reasoning budget for OpenAI web research."""
+    if not model_id:
+        return OPENAI_GPT5_WEB_SEARCH_REASONING_EFFORT
+    lower = str(model_id).lower()
+    if re.match(r"gpt-5\.6(?:\b|-)", lower):
+        return OPENAI_GPT56_WEB_SEARCH_REASONING_EFFORT
+    return OPENAI_GPT5_WEB_SEARCH_REASONING_EFFORT
 
 
 def model_requires_forced_web_search(model_id):
@@ -1782,16 +1849,16 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
     if web_search:
         web_search_instructions = (
             "You are an AI news research editor for a daily technology podcast. "
-            "Produce a current, source-grounded brief that is interesting enough to support a script, while staying efficient. Aim to finish the research pass in roughly 5-8 minutes, but do not stop early solely to meet that target if a little more search or reasoning is needed to find the best available stories. "
+            "Produce a current, source-grounded brief that is interesting enough to support a script, while staying efficient. Aim to finish the research pass in about 60-90 seconds and do not spend more than roughly 2 minutes trying to produce the brief. Make one efficient search pass, then stop once you have 5 credible candidates with timing and a concrete reason each story matters. "
             "Success means: select the strongest 5 recent AI story candidates for the script writer to choose from. Prioritize the biggest and most broadly relevant AI news: frontier model releases, major tool/product launches, agent or workflow updates, platform changes, notable research, developer-facing changes, and major announcements from OpenAI, Anthropic, Google/DeepMind/Gemini, xAI, Amazon/AWS, Meta, Microsoft, NVIDIA, and similarly important AI companies. Deprioritize obscure startup announcements, small funding items, routine integrations, narrow enterprise announcements, and minor feature releases unless they clearly signal a broader industry shift, major adoption, a technical breakthrough, or an important user-facing capability. Verify each selected story with credible evidence; include exact timing, concrete product/model/company details, a concise impact explanation, and the best short quote or social/user/developer reaction when available. Use metrics, benchmarks, percentages, pricing, or technical details only when they support a clear point about impact, comparison, stakes, or practical usefulness. Use prior coverage as context, not a hard ban: generic prior titles may overlap with genuinely new reporting, so allow substantial follow-ups on major industry stories when there is new post-release evidence, hands-on testing, user/developer feedback, social media response, benchmark or eval discussion, adoption/use-case evidence, limitations, availability/pricing changes, credible controversy, or meaningful analysis. If covering a follow-up, include only the new material since the original report and at most one brief context sentence; do not retell the original announcement or release. "
-            "Retrieval budget: search enough to validate the selected stories, usually 8-12 credible sources total and at least two sources per selected story when available. Stop searching once every selected story has useful evidence, timing, and a concrete reason it matters. "
-            "Do not search again only to improve phrasing or add nonessential color. If a quote or social reaction is not readily supported, summarize the reaction pattern instead of forcing one. "
+            "Retrieval budget: search enough to validate the selected stories, usually 4-6 credible sources total. Aim for one strong source per selected story, and add a second source only for ambiguous, surprising, controversial, or high-impact claims. Stop searching once every selected story has useful evidence, timing, and a concrete reason it matters. "
+            "Do not search again only to improve phrasing, fill in nonessential color, or hunt for a better quote. If a quote or social reaction is not readily supported, summarize the reaction pattern or omit it instead of spending extra search time. "
             "Output a concise markdown research brief with links, absolute dates/times in America/New_York when available, and no process commentary."
         )
         limited_prompt = (
             "Research request and workflow context:\n"
             + str(prompt)
-            + "\n\nReturn roughly 1,100-1,600 words unless the source material truly requires less. "
+            + "\n\nReturn roughly 700-950 words unless the source material truly requires less. "
             "Prefer a compact summary table followed by numbered story sections with evidence, impact, quotes/reactions, and links."
         )
         if force_web_tool_use:
@@ -1911,14 +1978,14 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                 _model_lower = str(model).lower()
                 _is_gpt5 = _model_lower.startswith("gpt-5")
                 _is_gpt4o = _model_lower.startswith("gpt-4o")
-                _gpt5_reasoning_effort = OPENAI_GPT5_WEB_SEARCH_REASONING_EFFORT if web_search else "medium"
+                _gpt5_reasoning_effort = openai_web_search_reasoning_effort_for_model(model) if web_search else "medium"
 
                 text_cfg = {"format": {"type": "text"}}
                 # Set verbosity per model family capabilities
                 if _is_gpt5:
-                    text_cfg["verbosity"] = "medium"
+                    text_cfg["verbosity"] = "low"
                 elif _is_gpt4o:
-                    text_cfg["verbosity"] = "medium"
+                    text_cfg["verbosity"] = "low"
 
                 responses_kwargs = {
                     "model": model,
@@ -1953,9 +2020,9 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                     # Retry once with reduced budgets and truncated prompt
                     text_cfg_retry = {"format": {"type": "text"}}
                     if _is_gpt5:
-                        text_cfg_retry["verbosity"] = "medium"
+                        text_cfg_retry["verbosity"] = "low"
                     elif _is_gpt4o:
-                        text_cfg_retry["verbosity"] = "medium"
+                        text_cfg_retry["verbosity"] = "low"
 
                     responses_kwargs_retry = {
                         "model": model,
@@ -2013,7 +2080,7 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                             "Return a complete plain-text answer now (no markdown table), with clear sections and bullet points. "
                             "Use the web results already gathered; do not perform another web search."
                         ),
-                        "text": {"format": {"type": "text"}, "verbosity": "medium"},
+                        "text": {"format": {"type": "text"}, "verbosity": "low"},
                         "max_output_tokens": min(resp_max_tokens, OPENAI_WEB_SEARCH_FOLLOWUP_MAX_OUTPUT_TOKENS)
                     }
                     if web_search_instructions:
@@ -2093,7 +2160,7 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                 followup_kwargs = {
                     "model": model,
                     "input": followup_input,
-                    "text": {"format": {"type": "text"}, "verbosity": "medium"},
+                    "text": {"format": {"type": "text"}, "verbosity": "low"},
                     "max_output_tokens": OPENAI_WEB_SEARCH_FOLLOWUP_MAX_OUTPUT_TOKENS
                 }
                 if web_search_instructions:
@@ -2353,31 +2420,36 @@ def call_anthropic_model(prompt, model="claude-3-sonnet", temperature=0.8, web_s
     try:
         import anthropic
         
-        client = anthropic.Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
         if not os.getenv('ANTHROPIC_API_KEY'):
             msg = "❌ Anthropic API key is not configured. Please check your .env file."
             print(msg)
             sys.exit(1)
+        anthropic_timeout = ANTHROPIC_WEB_SEARCH_TIMEOUT_SECONDS if web_search else ANTHROPIC_DEFAULT_TIMEOUT_SECONDS
+        client = anthropic.Anthropic(
+            api_key=os.getenv('ANTHROPIC_API_KEY'),
+            timeout=anthropic_timeout,
+            max_retries=ANTHROPIC_MAX_RETRIES,
+        )
         
         # Check if web search is requested and model supports it (uses pattern for new models)
         model_supports_web_search = anthropic_model_supports_web_search(model)
         force_web_tool_use = web_search and model_requires_forced_web_search(model)
         
-        model_lower = str(model).lower()
-        enable_opus47_thinking = (
+        uses_opus_adaptive_effort = anthropic_model_uses_opus_adaptive_effort(model)
+        enable_opus_adaptive_thinking = (
             CLAUDE_OPUS47_ENABLE_EXTENDED_THINKING
-            and "claude-opus-4-7" in model_lower
+            and uses_opus_adaptive_effort
             and not web_search
         )
 
         # Build the API call parameters.
         api_params = {
             "model": model,
-            "max_tokens": CLAUDE_OPUS47_MAX_TOKENS if enable_opus47_thinking else 8192,
+            "max_tokens": CLAUDE_OPUS47_MAX_TOKENS if enable_opus_adaptive_thinking else 8192,
             "messages": [{"role": "user", "content": prompt}]
         }
 
-        if enable_opus47_thinking:
+        if enable_opus_adaptive_thinking:
             api_params["thinking"] = {"type": "adaptive"}
             api_params["extra_body"] = {"output_config": {"effort": CLAUDE_OPUS47_THINKING_EFFORT}}
             print(
@@ -2385,9 +2457,9 @@ def call_anthropic_model(prompt, model="claude-3-sonnet", temperature=0.8, web_s
                 f"{CLAUDE_OPUS47_THINKING_EFFORT} effort, "
                 f"{CLAUDE_OPUS47_MAX_TOKENS} max output tokens"
             )
-        elif "claude-opus-4-7" in model_lower:
-            # Anthropic deprecated explicit temperature for Opus 4.7.
-            print(f"ℹ️ Skipping temperature for {model} because this model ignores/deprecates it.")
+        elif uses_opus_adaptive_effort:
+            # Claude Opus 4.7+ rejects non-default sampling parameters.
+            print(f"ℹ️ Skipping temperature for {model} because this model rejects non-default sampling params.")
         elif temperature is not None:
             api_params["temperature"] = temperature
         
@@ -2410,7 +2482,39 @@ def call_anthropic_model(prompt, model="claude-3-sonnet", temperature=0.8, web_s
                 }]
             print(f"🔍 Web search enabled for model: {model}")
         
-        response = client.messages.create(**api_params)
+        try:
+            response = client.messages.create(**api_params)
+        except Exception as first_error:
+            error_text = str(first_error).lower()
+            rejected_sampling = any(
+                token in error_text
+                for token in [
+                    "`temperature` is deprecated",
+                    "temperature is deprecated",
+                    "temperature",
+                    "top_p",
+                    "top_k",
+                    "sampling",
+                ]
+            )
+            if not rejected_sampling:
+                raise
+
+            removed_sampling_params = [
+                param for param in ("temperature", "top_p", "top_k")
+                if param in api_params
+            ]
+            if not removed_sampling_params:
+                raise
+
+            for param in removed_sampling_params:
+                api_params.pop(param, None)
+
+            print(
+                f"ℹ️ Retrying Anthropic call for {model} without sampling params "
+                f"after API rejection: {', '.join(removed_sampling_params)}"
+            )
+            response = client.messages.create(**api_params)
         
         if hasattr(response, 'content') and response.content:
             # Extract all text content blocks and concatenate them
@@ -3504,7 +3608,7 @@ if __name__ == '__main__':
                 print(f"⚠️ Could not update Prompts tab cell {cell_ref} for Prompt ID {prompt_id}: {e}")
 
         if updates_applied > 0:
-            print(f"✅ Synced Opus 4.7 script tuning to Prompts tab for {updates_applied} prompt(s).")
+            print(f"✅ Synced Opus 4.7+ script tuning to Prompts tab for {updates_applied} prompt(s).")
         return prompts_dataframe
 
     prompts_df = sync_script_prompt_tuning_to_prompts_tab(prompts_ws, prompts_df)
@@ -3534,12 +3638,14 @@ if __name__ == '__main__':
 
     # Helper to get model name by Model ID
     def get_model_name(model_id):
+        row = models_df[models_df['Model ID'].astype(str) == str(model_id)]
+        if not row.empty:
+            model_name = str(row.iloc[0].get('Model Name', '')).strip()
+            if model_name:
+                return model_name
         override = MODEL_ID_OVERRIDES.get(str(model_id))
         if override:
             return override["name"]
-        row = models_df[models_df['Model ID'].astype(str) == str(model_id)]
-        if not row.empty:
-            return row.iloc[0]['Model Name']
         return None
 
     # Helper to get Model ID by model name (returns the first match)
@@ -3551,12 +3657,12 @@ if __name__ == '__main__':
 
     # Helper to get web search flag for a model by Model ID
     def get_model_web_search_by_id(model_id):
-        override = MODEL_ID_OVERRIDES.get(str(model_id))
-        if override:
-            return bool(override["web_search"])
         row = models_df[models_df['Model ID'].astype(str) == str(model_id)]
         if not row.empty:
             return str(row.iloc[0].get('Web Search', 'N')).strip().upper() == 'Y'
+        override = MODEL_ID_OVERRIDES.get(str(model_id))
+        if override:
+            return bool(override["web_search"])
         return False
 
     # Helper to get web search flag for a model by name (first match)
@@ -3728,8 +3834,7 @@ if __name__ == '__main__':
 
     def apply_podcast_script_tuning(input_text, step, model_name):
         """Apply targeted runtime tuning for podcast script-writing steps."""
-        model_lower = str(model_name or "").lower()
-        if "claude-opus-4-7" not in model_lower:
+        if not anthropic_model_uses_opus_adaptive_effort(model_name):
             return input_text
 
         # Tune only script-writing steps in this workflow family.
@@ -4684,8 +4789,8 @@ if __name__ == '__main__':
                     else:
                         # Use higher temperature (0.85) for script/title generation when web_search off
                         temp = 0.85 if not web_search_enabled else 0.8
-                        # Slightly lower temperature for Opus 4.7 to improve factual consistency and structure.
-                        if "claude-opus-4-7" in str(model_to_use).lower():
+                        # Opus 4.7+ rejects non-default sampling params; call_anthropic_model omits it.
+                        if anthropic_model_uses_opus_adaptive_effort(model_to_use):
                             temp = 0.7
                         response = call_model(input_text, model_to_use, temperature=temp, web_search=web_search_enabled)
                 
