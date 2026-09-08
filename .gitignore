@@ -46,6 +46,7 @@ jmio-google-api.json
 client_secret.json
 token.pickle
 *.pickle
+gmail_oauth_token.b64
 
 # Generated files
 *.xlsx

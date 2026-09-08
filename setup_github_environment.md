@@ -36,6 +36,12 @@ In your `production` environment, add these **variables**:
 | Secret Name | Value | Description |
 |-------------|-------|-------------|
 | `GOOGLE_CREDS_JSON` | `{entire JSON content}` | Complete Google service account JSON |
+| `GMAIL_OAUTH_TOKEN_B64` | `{entire gmail_oauth_token.b64 content}` | Revocable, send-only OAuth grant for AIConvoCast Gmail |
+
+The pipeline sends the final MP3 and its title/description text file together to
+`ianeoconnell@gmail.com` from `AIConvoCast@gmail.com`. It uses Gmail API OAuth;
+neither an app password nor any credential for the recipient is required. Follow
+the one-time instructions in `GMAIL_OAUTH_SETUP.md` before running the pipeline.
 
 ## Step 3: Add Protection Rules (Optional)
 
@@ -108,4 +114,4 @@ After setting up the environment:
 3. **Try the main pipeline** workflow
 4. **Monitor the logs** to ensure everything works
 
-Your AI podcast pipeline is now properly configured with GitHub Environments! 
+Your AI podcast pipeline is now properly configured with GitHub Environments!

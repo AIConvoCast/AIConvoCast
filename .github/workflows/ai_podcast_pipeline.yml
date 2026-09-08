@@ -1,5 +1,8 @@
 name: Run AI Podcast Pipeline
 
+permissions:
+  contents: read
+
 on:
   workflow_dispatch:
     inputs:
@@ -55,6 +58,9 @@ jobs:
           echo "SHARE_SHEET_WITH_EMAIL=${{ secrets.SHARE_SHEET_WITH_EMAIL }}" >> $GITHUB_ENV
           echo "ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}" >> $GITHUB_ENV
           echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> $GITHUB_ENV
+          echo "PODCAST_EMAIL_BACKEND=gmail_api" >> $GITHUB_ENV
+          echo "PODCAST_EMAIL_FROM=AIConvoCast@gmail.com" >> $GITHUB_ENV
+          echo "PODCAST_EMAIL_TO=ianeoconnell@gmail.com" >> $GITHUB_ENV
           echo "CUSTOM_TOPIC=${{ github.event.inputs.custom_topic || '' }}" >> $GITHUB_ENV
           echo "WORKFLOW_ID=${{ github.event.inputs.workflow_id || '' }}" >> $GITHUB_ENV
 
@@ -71,6 +77,8 @@ jobs:
       - name: Test Environment Variables
         run: |
           python test_env_vars.py
+        env:
+          GMAIL_OAUTH_TOKEN_B64: ${{ secrets.GMAIL_OAUTH_TOKEN_B64 }}
 
       - name: Run AI Podcast Pipeline
         id: run-pipeline
@@ -119,6 +127,10 @@ jobs:
           SHARE_SHEET_WITH_EMAIL: ${{ secrets.SHARE_SHEET_WITH_EMAIL }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          PODCAST_EMAIL_BACKEND: gmail_api
+          PODCAST_EMAIL_FROM: AIConvoCast@gmail.com
+          PODCAST_EMAIL_TO: ianeoconnell@gmail.com
+          GMAIL_OAUTH_TOKEN_B64: ${{ secrets.GMAIL_OAUTH_TOKEN_B64 }}
 
       - name: Upload generated audio files
         if: always()
@@ -162,4 +174,4 @@ jobs:
           echo "❌ AI Podcast Pipeline failed!"
           echo "Run ID: ${{ github.run_id }}"
           echo "Trigger: ${{ github.event_name }}"
-          echo "Check the pipeline-logs-${{ github.run_id }} artifact for details." 
+          echo "Check the pipeline-logs-${{ github.run_id }} artifact for details."

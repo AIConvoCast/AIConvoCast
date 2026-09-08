@@ -26,6 +26,7 @@ from google.auth.transport.requests import Request
 import pickle
 from google.cloud import storage
 from google.cloud import texttospeech
+from podcast_email import send_podcast_email
 print(storage.__version__)
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -3929,6 +3930,8 @@ if __name__ == '__main__':
         steps = [s.strip() for s in workflow_code.split(',') if s.strip()]
         print(f"[DEBUG] Steps to execute: {steps}")
         all_outputs = []  # Track output for every step, even if None
+        final_audio_path = None
+        final_description_text = None
         workflow_steps_records = []
         current_output_id = outputs_df['Output ID'].astype(int).max() if not outputs_df.empty else 0
         output_record = {
@@ -4751,8 +4754,12 @@ if __name__ == '__main__':
                         merged_path,
                         log_msg
                     ])
-                    # Add merged audio path to outputs
+                    # Add merged audio path to outputs and retain the matching
+                    # title/description response for one-message email delivery.
                     all_outputs.append(merged_path)
+                    final_audio_path = merged_path
+                    if title_resp_idx is not None and 0 <= title_resp_idx < len(all_outputs):
+                        final_description_text = all_outputs[title_resp_idx]
                     continue  # Skip regular model call for this step
                 
                 # Parse the step for prompt, model override, and model ID override
@@ -4873,6 +4880,33 @@ if __name__ == '__main__':
         # Mark request as processed (disabled per user request)
         # requests_ws.update_cell(req_idx + 2, requests_df.columns.get_loc('Active') + 1, 'N')
         print(f"✅ Workflow {workflow_id} processed and logged.")
+
+        if final_audio_path:
+            if not final_description_text:
+                # Older workflow definitions may omit T# on the merge step. Use the
+                # latest output that clearly contains a title and description.
+                final_description_text = next(
+                    (
+                        output for output in reversed(all_outputs)
+                        if isinstance(output, str)
+                        and re.search(r"(?im)^#*\s*Title\s*:", output)
+                        and re.search(r"(?im)^#*\s*Description\s*:", output)
+                    ),
+                    None,
+                )
+            if not final_description_text:
+                raise RuntimeError(
+                    f"Workflow {workflow_id} generated final audio but no title/description "
+                    "script was available for email delivery."
+                )
+
+            print("Emailing final podcast output to ianeoconnell@gmail.com...")
+            send_podcast_email(
+                final_audio_path,
+                final_description_text,
+                workflow_id=workflow_id,
+            )
+            print("Final audio and description script sent in one email.")
 
     # After the loop, check if all steps were executed
     if len(executed_steps) != len(steps):
