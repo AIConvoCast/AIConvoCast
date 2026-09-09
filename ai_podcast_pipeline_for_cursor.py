@@ -3931,7 +3931,9 @@ if __name__ == '__main__':
         print(f"[DEBUG] Steps to execute: {steps}")
         all_outputs = []  # Track output for every step, even if None
         final_audio_path = None
+        final_audio_filename = None
         final_description_text = None
+        final_description_filename = None
         workflow_steps_records = []
         current_output_id = outputs_df['Output ID'].astype(int).max() if not outputs_df.empty else 0
         output_record = {
@@ -4174,6 +4176,15 @@ if __name__ == '__main__':
                             try:
                                 file_link = upload_text_to_gcs(response_to_save, f"{folder_prefix}/{filename}")
                                 log_msg = f"Saved response to Google Cloud Storage: {file_link}"
+                                if (
+                                    resp_idx == title_resp_idx
+                                    or (
+                                        re.search(r"(?im)^#*\s*Title\s*:", response_to_save)
+                                        and re.search(r"(?im)^#*\s*Description\s*:", response_to_save)
+                                    )
+                                ):
+                                    final_description_text = response_to_save
+                                    final_description_filename = filename
                             except Exception as e:
                                 log_msg = f"Failed to save response to Google Cloud Storage: {e}"
                         else:
@@ -4758,6 +4769,7 @@ if __name__ == '__main__':
                     # title/description response for one-message email delivery.
                     all_outputs.append(merged_path)
                     final_audio_path = merged_path
+                    final_audio_filename = audio_filename
                     if title_resp_idx is not None and 0 <= title_resp_idx < len(all_outputs):
                         final_description_text = all_outputs[title_resp_idx]
                     continue  # Skip regular model call for this step
@@ -4841,6 +4853,11 @@ if __name__ == '__main__':
                             normalized_response = force_clean_mojibake(normalized_response)
                             file_link = upload_text_to_gcs(normalized_response, f"{folder_prefix}/{filename}")
                             log_msg = f"Saved response to Google Cloud Storage: {file_link}"
+                            if (
+                                re.search(r"(?im)^#*\s*Title\s*:", normalized_response)
+                                and re.search(r"(?im)^#*\s*Description\s*:", normalized_response)
+                            ):
+                                final_description_filename = filename
                         except Exception as e:
                             log_msg = f"Failed to save response to Google Cloud Storage: {e}"
                         # Add file link or error to Workflow Steps log message
@@ -4905,6 +4922,8 @@ if __name__ == '__main__':
                 final_audio_path,
                 final_description_text,
                 workflow_id=workflow_id,
+                audio_filename=final_audio_filename,
+                description_filename=final_description_filename,
             )
             print("Final audio and description script sent in one email.")
 

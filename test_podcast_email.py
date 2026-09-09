@@ -41,6 +41,32 @@ class PodcastEmailTests(unittest.TestCase):
             attachments[1].get_payload(decode=True),
         )
 
+    def test_build_email_uses_exact_gcs_attachment_filenames(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            audio_path = Path(temp_dir) / "merged_audio_47_step_9.mp3"
+            audio_path.write_bytes(b"fake mp3")
+
+            message = build_podcast_email(
+                audio_path,
+                "Title: The Test Episode\nDescription: Test description.",
+                workflow_id=47,
+                sender="sender@example.com",
+                audio_filename="podcasts/20260909_120000_The_Test_Episode.mp3",
+                description_filename=(
+                    "descriptions/20260909_115900_The_Test_Episode.txt"
+                ),
+            )
+
+        attachments = list(message.iter_attachments())
+        self.assertEqual(
+            attachments[0].get_filename(),
+            "20260909_120000_The_Test_Episode.mp3",
+        )
+        self.assertEqual(
+            attachments[1].get_filename(),
+            "20260909_115900_The_Test_Episode.txt",
+        )
+
     @patch("podcast_email.smtplib.SMTP_SSL")
     def test_send_uses_one_smtp_message(self, smtp_ssl):
         smtp = MagicMock()

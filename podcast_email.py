@@ -42,6 +42,17 @@ def _attachment_type(path: Path) -> tuple[str, str]:
     return "application", "octet-stream"
 
 
+def _attachment_filename(requested_name: str | None, fallback: str) -> str:
+    """Return a safe attachment basename, preserving the supplied GCS name."""
+    if requested_name is None:
+        return fallback
+
+    filename = Path(str(requested_name).strip()).name
+    if not filename:
+        raise ValueError("Email attachment filename cannot be empty.")
+    return filename
+
+
 def build_podcast_email(
     audio_path: str | Path,
     description_text: str,
@@ -49,6 +60,8 @@ def build_podcast_email(
     workflow_id: str | int,
     sender: str,
     recipient: str = DEFAULT_RECIPIENT,
+    audio_filename: str | None = None,
+    description_filename: str | None = None,
 ) -> EmailMessage:
     """Build one message containing both the final MP3 and description text file."""
     audio_file = Path(audio_path)
@@ -77,19 +90,26 @@ def build_podcast_email(
     )
 
     audio_main_type, audio_sub_type = _attachment_type(audio_file)
+    attachment_audio_filename = _attachment_filename(
+        audio_filename,
+        audio_file.name,
+    )
     message.add_attachment(
         audio_file.read_bytes(),
         maintype=audio_main_type,
         subtype=audio_sub_type,
-        filename=audio_file.name,
+        filename=attachment_audio_filename,
     )
 
-    description_filename = f"{audio_file.stem}_description.txt"
+    attachment_description_filename = _attachment_filename(
+        description_filename,
+        f"{audio_file.stem}_description.txt",
+    )
     message.add_attachment(
         description_text.encode("utf-8"),
         maintype="text",
         subtype="plain",
-        filename=description_filename,
+        filename=attachment_description_filename,
     )
     return message
 
@@ -185,6 +205,8 @@ def send_podcast_email(
     description_text: str,
     *,
     workflow_id: str | int,
+    audio_filename: str | None = None,
+    description_filename: str | None = None,
 ) -> None:
     """Send the completed podcast using Gmail API OAuth or legacy SMTP."""
     backend = os.getenv("PODCAST_EMAIL_BACKEND", "gmail_api").strip().lower()
@@ -210,6 +232,8 @@ def send_podcast_email(
         workflow_id=workflow_id,
         sender=sender,
         recipient=recipient,
+        audio_filename=audio_filename,
+        description_filename=description_filename,
     )
 
     if backend == "gmail_api":
