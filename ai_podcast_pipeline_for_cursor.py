@@ -607,10 +607,14 @@ OPENAI_GPT56_WEB_SEARCH_REASONING_EFFORT = os.getenv("OPENAI_GPT56_WEB_SEARCH_RE
 OPENAI_GPT5_WEB_SEARCH_REASONING_EFFORT = os.getenv("OPENAI_GPT5_WEB_SEARCH_REASONING_EFFORT", "low").strip() or "low"
 OPENAI_GPT5_WEB_SEARCH_RETRY_REASONING_EFFORT = os.getenv("OPENAI_GPT5_WEB_SEARCH_RETRY_REASONING_EFFORT", "low").strip() or "low"
 OPENAI_WEB_SEARCH_MAX_OUTPUT_TOKENS = get_env_int("OPENAI_WEB_SEARCH_MAX_OUTPUT_TOKENS", 3200)
+OPENAI_ASTRA_WEB_SEARCH_MAX_OUTPUT_TOKENS = get_env_int("OPENAI_ASTRA_WEB_SEARCH_MAX_OUTPUT_TOKENS", 6000)
 OPENAI_WEB_SEARCH_FOLLOWUP_MAX_OUTPUT_TOKENS = 2500
 ANTHROPIC_DEFAULT_TIMEOUT_SECONDS = 180
 ANTHROPIC_WEB_SEARCH_TIMEOUT_SECONDS = 300
 ANTHROPIC_MAX_RETRIES = 0
+CLAUDE_5_MAX_TOKENS = get_env_int("CLAUDE_5_MAX_TOKENS", 16000)
+CLAUDE_5_THINKING_EFFORT = os.getenv("CLAUDE_5_THINKING_EFFORT", "high").strip() or "high"
+CLAUDE_5_TIMEOUT_SECONDS = get_env_int("CLAUDE_5_TIMEOUT_SECONDS", 600)
 
 # Manual model-ID overrides to support deterministic workflow codes like M198.
 # This keeps workflows resilient even before the Models sheet is updated.
@@ -651,7 +655,13 @@ MODEL_ID_OVERRIDES = {
     "214": {"name": "claude-sonnet-5", "web_search": False},
     "215": {"name": "claude-fable-5", "web_search": False},
     "216": {"name": "claude-opus-4-8", "web_search": False},
-    "217": {"name": "claude-opus-4-8", "web_search": True}
+    "217": {"name": "claude-opus-4-8", "web_search": True},
+    "218": {"name": "gpt-6-astra", "web_search": False},
+    "219": {"name": "claude-fable-5-1", "web_search": False},
+    "220": {"name": "claude-opus-5", "web_search": False},
+    "221": {"name": "gpt-6-astra", "web_search": True},
+    "222": {"name": "claude-fable-5-1", "web_search": True},
+    "223": {"name": "claude-opus-5", "web_search": True}
 }
 
 # Provider fallback lists mirror the unique model names in the live Models tab.
@@ -683,6 +693,8 @@ ANTHROPIC_FALLBACK_MODELS = [
     "claude-opus-4-8",
     "claude-sonnet-5",
     "claude-fable-5",
+    "claude-fable-5-1",
+    "claude-opus-5",
     "claude-sonnet-4-6",
 ]
 
@@ -1262,7 +1274,13 @@ MATERIAL TO USE (facts come from below or verified optional script-stage search)
         [214, "claude-sonnet-5", "N", "N", "N"],
         [215, "claude-fable-5", "N", "N", "N"],
         [216, "claude-opus-4-8", "N", "N", "N"],
-        [217, "claude-opus-4-8", "N", "Y", "N"]
+        [217, "claude-opus-4-8", "N", "Y", "N"],
+        [218, "gpt-6-astra", "N", "N", "N"],
+        [219, "claude-fable-5-1", "N", "N", "N"],
+        [220, "claude-opus-5", "N", "N", "N"],
+        [221, "gpt-6-astra", "N", "Y", "N"],
+        [222, "claude-fable-5-1", "N", "Y", "N"],
+        [223, "claude-opus-5", "N", "Y", "N"]
     ], columns=["Model ID", "Model Name", "Model Default", "Web Search", "Deprecated"])
 
     workflow_steps = pd.DataFrame(columns=[
@@ -1331,11 +1349,13 @@ def fetch_openai_models():
             ]):
                 continue
             
-            # Treat actual search-preview models and GPT-5/GPT-4o families as web-search capable (via Responses API)
+            # Treat actual search-preview models and modern GPT/GPT-4o families as
+            # web-search capable via the Responses API.
             lower_id = model_id.lower()
             web_search_capable = (
                 ('search-preview' in lower_id)
                 or lower_id.startswith('gpt-5')
+                or lower_id.startswith('gpt-6')
                 or lower_id.startswith('gpt-4o')
             )
             
@@ -1356,10 +1376,13 @@ def anthropic_model_supports_web_search(model_id):
     if not model_id:
         return False
     lower = str(model_id).lower()
-    # Claude 4.x Opus/Sonnet and Claude 3.5/3.7 support web search
+    # Claude 4.x Opus/Sonnet, Claude 3.5/3.7, and the current Claude
+    # Fable 5.1/Opus 5 families support web search.
     return (
         'opus-4' in lower or
         'sonnet-4' in lower or
+        'claude-fable-5-1' in lower or
+        'claude-opus-5' in lower or
         '-3-7-' in lower or
         '-3-5-' in lower or
         'claude-3-5-haiku' in lower
@@ -1367,12 +1390,46 @@ def anthropic_model_supports_web_search(model_id):
 
 
 def anthropic_model_uses_opus_adaptive_effort(model_id):
-    """Claude Opus 4.7+ rejects manual thinking budgets and sampling params."""
+    """Return True for Claude models that use adaptive thinking and effort."""
     if not model_id:
         return False
     lower = str(model_id).lower()
+    if re.search(r"claude-(?:opus|sonnet|fable)-5(?:\b|[-.])", lower):
+        return True
     match = re.search(r"claude-opus-4[-.](\d{1,2})(?:\b|-)", lower)
     return bool(match and int(match.group(1)) >= 7)
+
+
+def anthropic_model_rejects_sampling_params(model_id):
+    """Return True for adaptive-thinking Claude models that reject temperature."""
+    if not model_id:
+        return False
+    return anthropic_model_uses_opus_adaptive_effort(model_id)
+
+
+def anthropic_adaptive_thinking_settings(model_id):
+    """Return the output ceiling and effort for an adaptive-thinking model."""
+    lower = str(model_id or "").lower()
+    if re.search(r"claude-(?:opus|sonnet|fable)-5(?:\b|[-.])", lower):
+        return CLAUDE_5_MAX_TOKENS, CLAUDE_5_THINKING_EFFORT
+    return CLAUDE_OPUS47_MAX_TOKENS, CLAUDE_OPUS47_THINKING_EFFORT
+
+
+def anthropic_request_timeout_seconds(model_id, web_search=False):
+    """Give Claude 5 script generation room for its default adaptive thinking."""
+    if web_search:
+        return ANTHROPIC_WEB_SEARCH_TIMEOUT_SECONDS
+    lower = str(model_id or "").lower()
+    if re.search(r"claude-(?:opus|sonnet|fable)-5(?:\b|[-.])", lower):
+        return CLAUDE_5_TIMEOUT_SECONDS
+    return ANTHROPIC_DEFAULT_TIMEOUT_SECONDS
+
+
+def openai_web_search_max_output_tokens_for_model(model_id):
+    """Allow Astra enough room for both reasoning and the visible news brief."""
+    if str(model_id or "").lower().startswith("gpt-6-astra"):
+        return OPENAI_ASTRA_WEB_SEARCH_MAX_OUTPUT_TOKENS
+    return OPENAI_WEB_SEARCH_MAX_OUTPUT_TOKENS
 
 
 def openai_web_search_reasoning_effort_for_model(model_id):
@@ -1391,6 +1448,7 @@ def model_requires_forced_web_search(model_id):
         return False
     lower = str(model_id).lower()
     return (
+        ('gpt-6-astra' in lower) or
         # Keep most GPT-5 models on auto tool choice; forcing can cause long tool-call loops
         # with no assistant text returned for this workflow.
         ('gpt-5.2' in lower) or
@@ -1405,7 +1463,7 @@ def openai_chat_uses_max_completion_tokens(model_id):
     if not model_id:
         return False
     lower = str(model_id).lower()
-    return lower.startswith(("gpt-5", "o1", "o3", "o4"))
+    return lower.startswith(("gpt-5", "gpt-6", "o1", "o3", "o4"))
 
 
 def fetch_anthropic_models():
@@ -1974,10 +2032,10 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                 return "⏰ Research timeout reached. Please try with a more specific request or use a different model."
             
             # Attempt with enough room for the requested brief without inviting costly sprawl.
-            resp_max_tokens = OPENAI_WEB_SEARCH_MAX_OUTPUT_TOKENS
+            resp_max_tokens = openai_web_search_max_output_tokens_for_model(model)
             try:
                 _model_lower = str(model).lower()
-                _is_gpt5 = _model_lower.startswith("gpt-5")
+                _is_gpt5 = _model_lower.startswith(("gpt-5", "gpt-6"))
                 _is_gpt4o = _model_lower.startswith("gpt-4o")
                 _gpt5_reasoning_effort = openai_web_search_reasoning_effort_for_model(model) if web_search else "medium"
 
@@ -2170,7 +2228,7 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
                 if hasattr(response, 'id') and response.id:
                     followup_kwargs["previous_response_id"] = response.id
                 _model_lower_followup = str(model).lower()
-                if _model_lower_followup.startswith("gpt-5"):
+                if _model_lower_followup.startswith(("gpt-5", "gpt-6")):
                     # Keep follow-up synthesis bounded for faster workflow completion.
                     followup_kwargs["reasoning"] = {"effort": OPENAI_GPT5_WEB_SEARCH_RETRY_REASONING_EFFORT}
                 followup_response = client.responses.create(**followup_kwargs)
@@ -2200,7 +2258,7 @@ def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False)
             # Always omit temperature for models that don't support custom temperature
             model_lower = str(model).lower()
             models_without_temp = {"o4-mini", "o4-mini-2025-01-31"}
-            is_gpt5 = model_lower.startswith("gpt-5")
+            is_gpt5 = model_lower.startswith(("gpt-5", "gpt-6"))
             uses_max_completion_tokens = openai_chat_uses_max_completion_tokens(model)
             token_limit_param = "max_completion_tokens" if uses_max_completion_tokens else "max_tokens"
             kwargs = {
@@ -2425,7 +2483,7 @@ def call_anthropic_model(prompt, model="claude-3-sonnet", temperature=0.8, web_s
             msg = "❌ Anthropic API key is not configured. Please check your .env file."
             print(msg)
             sys.exit(1)
-        anthropic_timeout = ANTHROPIC_WEB_SEARCH_TIMEOUT_SECONDS if web_search else ANTHROPIC_DEFAULT_TIMEOUT_SECONDS
+        anthropic_timeout = anthropic_request_timeout_seconds(model, web_search)
         client = anthropic.Anthropic(
             api_key=os.getenv('ANTHROPIC_API_KEY'),
             timeout=anthropic_timeout,
@@ -2437,29 +2495,31 @@ def call_anthropic_model(prompt, model="claude-3-sonnet", temperature=0.8, web_s
         force_web_tool_use = web_search and model_requires_forced_web_search(model)
         
         uses_opus_adaptive_effort = anthropic_model_uses_opus_adaptive_effort(model)
+        rejects_sampling_params = anthropic_model_rejects_sampling_params(model)
         enable_opus_adaptive_thinking = (
             CLAUDE_OPUS47_ENABLE_EXTENDED_THINKING
             and uses_opus_adaptive_effort
             and not web_search
         )
+        adaptive_max_tokens, adaptive_effort = anthropic_adaptive_thinking_settings(model)
 
         # Build the API call parameters.
         api_params = {
             "model": model,
-            "max_tokens": CLAUDE_OPUS47_MAX_TOKENS if enable_opus_adaptive_thinking else 8192,
+            "max_tokens": adaptive_max_tokens if enable_opus_adaptive_thinking else 8192,
             "messages": [{"role": "user", "content": prompt}]
         }
 
         if enable_opus_adaptive_thinking:
             api_params["thinking"] = {"type": "adaptive"}
-            api_params["extra_body"] = {"output_config": {"effort": CLAUDE_OPUS47_THINKING_EFFORT}}
+            api_params["extra_body"] = {"output_config": {"effort": adaptive_effort}}
             print(
                 f"🧠 Adaptive thinking enabled for {model}: "
-                f"{CLAUDE_OPUS47_THINKING_EFFORT} effort, "
-                f"{CLAUDE_OPUS47_MAX_TOKENS} max output tokens"
+                f"{adaptive_effort} effort, "
+                f"{adaptive_max_tokens} max output tokens"
             )
-        elif uses_opus_adaptive_effort:
-            # Claude Opus 4.7+ rejects non-default sampling parameters.
+        elif rejects_sampling_params:
+            # Adaptive-thinking Claude models reject non-default sampling parameters.
             print(f"ℹ️ Skipping temperature for {model} because this model rejects non-default sampling params.")
         elif temperature is not None:
             api_params["temperature"] = temperature
@@ -2714,6 +2774,29 @@ def is_elevenlabs_credit_quota_error(error_message, status_code=None):
     return False
 
 
+def build_google_voice_fallback_step(location_id, save_location_id, title_reference=None):
+    """Build the GV1 equivalent of an ElevenLabs workflow step."""
+    fallback_step = (
+        f"L{location_id}GV{GOOGLE_CHIRP3_DEFAULT_VOICE_ID}SL{save_location_id}"
+    )
+    if title_reference:
+        fallback_step += f"T{title_reference}"
+    return fallback_step
+
+
+def cleanup_partial_audio_files(*paths):
+    """Best-effort cleanup for incomplete audio left by a failed streaming call."""
+    for path in paths:
+        if not path:
+            continue
+        try:
+            path_obj = Path(path)
+            if path_obj.exists():
+                path_obj.unlink()
+        except Exception as cleanup_error:
+            print(f"[WARNING] Could not remove partial audio file {path}: {cleanup_error}")
+
+
 def get_elevenlabs_model_id(eleven_config=None):
     if eleven_config:
         model_id = eleven_config.get("Model")
@@ -2822,6 +2905,8 @@ def generate_voice_audio(text, voice_id, output_path, eleven_config=None):
         str or None: Path to generated audio file, or None if failed
         On credit/quota errors, raises ValueError with error details
     """
+    temp_audio_paths = []
+    current_temp_audio_path = None
     try:
         from elevenlabs.client import ElevenLabs
         chunks = split_text_into_chunks(text, max_length=ELEVENLABS_CHUNK_MAX_CHARS)
@@ -2848,6 +2933,8 @@ def generate_voice_audio(text, voice_id, output_path, eleven_config=None):
                 except Exception as e:
                     print(f"❌ ElevenLabs client error: {e}")
                     traceback.print_exc()
+                    if is_elevenlabs_credit_quota_error(str(e), None):
+                        raise ValueError(f"ElevenLabs credit/quota error: {e}") from e
                     print("[DEBUG] Falling back to REST API...")
                     return generate_voice_audio_rest(text, voice_id, output_path, eleven_config)
             else:
@@ -2868,6 +2955,8 @@ def generate_voice_audio(text, voice_id, output_path, eleven_config=None):
                 except Exception as e:
                     print(f"❌ ElevenLabs client error: {e}")
                     traceback.print_exc()
+                    if is_elevenlabs_credit_quota_error(str(e), None):
+                        raise ValueError(f"ElevenLabs credit/quota error: {e}") from e
                     print("[DEBUG] Falling back to REST API...")
                     return generate_voice_audio_rest(text, voice_id, output_path, eleven_config)
             with open(output_path, 'wb') as f:
@@ -2877,10 +2966,10 @@ def generate_voice_audio(text, voice_id, output_path, eleven_config=None):
             return output_path
         else:
             # Multiple chunks: process each, then merge
-            temp_audio_paths = []
             client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
             for idx, chunk_text in enumerate(chunks):
                 temp_path = MP3_OUTPUT_DIR / f"temp_audio_{int(time.time())}_{os.getpid()}_chunk_{idx+1}.mp3"
+                current_temp_audio_path = temp_path
                 previous_text = chunks[idx - 1] if idx > 0 else None
                 next_text = chunks[idx + 1] if idx + 1 < len(chunks) else None
                 print(f"[DEBUG] Sending chunk {idx+1}/{len(chunks)} to Eleven Labs API (length: {len(chunk_text)})")
@@ -2989,6 +3078,16 @@ def generate_voice_audio(text, voice_id, output_path, eleven_config=None):
     except ImportError:
         print("⚠️ ElevenLabs Python client not installed. Falling back to REST API...")
         return generate_voice_audio_rest(text, voice_id, output_path, eleven_config)
+    except ValueError:
+        cleanup_partial_audio_files(output_path, current_temp_audio_path, *temp_audio_paths)
+        raise
+    except Exception as e:
+        # The SDK streams audio. Account/quota errors can therefore be raised
+        # while iterating the stream, after convert() has already returned.
+        cleanup_partial_audio_files(output_path, current_temp_audio_path, *temp_audio_paths)
+        if is_elevenlabs_credit_quota_error(str(e), None):
+            raise ValueError(f"ElevenLabs credit/quota error: {e}") from e
+        raise
 
 
 def generate_voice_audio_rest(text, voice_id, output_path, eleven_config=None):
@@ -3905,14 +4004,17 @@ if __name__ == '__main__':
     # Check if a specific workflow ID is requested via environment variable
     # Default recommended workflow: Workflow ID 43 (uses GPT 5.1 + Claude Sonnet 4.5)
     requested_workflow_id = os.getenv('WORKFLOW_ID')
+    processed_workflow_count = 0
     
     for workflow_idx, workflow_row in workflow_df.iterrows():
         # If a specific workflow ID is requested, only process that one
-        if requested_workflow_id and str(workflow_row['Workflow ID']) != str(requested_workflow_id):
+        if requested_workflow_id:
+            if str(workflow_row['Workflow ID']) != str(requested_workflow_id):
+                continue
+        elif str(workflow_row.get('Active', '')).strip().upper() != 'Y':
             continue
-            
-        if str(workflow_row.get('Active', '')).strip().upper() != 'Y':
-            continue
+
+        processed_workflow_count += 1
         workflow_id = workflow_row['Workflow ID']
         # Get custom topic from workflow row, or fall back to environment variable
         custom_topic = workflow_row.get('Custom Topic If Required', '')
@@ -4220,7 +4322,8 @@ if __name__ == '__main__':
                     location_id = eleven_match.group(1)
                     eleven_id = eleven_match.group(2)
                     save_location_id = eleven_match.group(3)
-                    title_resp_idx = int(eleven_match.group(4)) - 1 if eleven_match.group(4) else None
+                    title_reference = eleven_match.group(4)
+                    title_resp_idx = int(title_reference) - 1 if title_reference else None
                     
                     # Get location details for source folder
                     source_location = get_location_by_id(location_id)
@@ -4298,6 +4401,8 @@ if __name__ == '__main__':
                     # Generate audio using Eleven Labs
                     print(f"    > Generating audio with voice: {eleven_config['Voice']}")
                     temp_audio_path = MP3_OUTPUT_DIR / f"temp_audio_{workflow_id}_step_{i+1}.mp3"
+                    completed_audio_step = step
+                    completed_voice_name = eleven_config.get('Voice', 'Unknown')
                     
                     # Try ElevenLabs, catch credit/quota errors for fallback to Google Voice
                     try:
@@ -4320,12 +4425,18 @@ if __name__ == '__main__':
                             # End the entire workflow immediately
                             print("[FATAL] Eleven Labs API error encountered. Exiting workflow.")
                             sys.exit(1)
-                    except ValueError as e:
+                    except Exception as e:
                         # Check if this is a credit/quota error
                         error_msg = str(e)
                         if "credit/quota" in error_msg.lower() or is_elevenlabs_credit_quota_error(error_msg, None):
+                            fallback_step = build_google_voice_fallback_step(
+                                location_id,
+                                save_location_id,
+                                title_reference,
+                            )
+                            completed_audio_step = fallback_step
                             print(f"    > ⚠️ ElevenLabs credit/quota error detected: {error_msg}")
-                            print(f"    > 🔄 Falling back to Google Voice (GV1) instead of E1")
+                            print(f"    > 🔄 Rerunning audio generation as {fallback_step}")
                             
                             # Log the fallback in workflow steps
                             workflow_steps_records.append([
@@ -4337,11 +4448,12 @@ if __name__ == '__main__':
                                 step,
                                 text_content,
                                 '',
-                                f"ElevenLabs credit/quota error: {error_msg}. Falling back to Google Voice."
+                                f"ElevenLabs credit/quota error: {error_msg}. Rerunning audio generation as {fallback_step}."
                             ])
                             
                             # Fallback to Google Voice GV1 (Chirp 3 Alnilam) using same location IDs
                             voice_name = get_google_chirp3_voice_name_by_id(GOOGLE_CHIRP3_DEFAULT_VOICE_ID)
+                            completed_voice_name = voice_name
                             
                             print(f"    > Generating audio with Google Voice: {voice_name}")
                             temp_audio_path = MP3_OUTPUT_DIR / f"temp_google_audio_{workflow_id}_step_{i+1}.mp3"
@@ -4394,7 +4506,7 @@ if __name__ == '__main__':
                     
                     # Check if custom title is requested
                     # Determine voice name for filename (could be ElevenLabs or Google Voice fallback)
-                    voice_name_for_filename = eleven_config.get('Voice', 'Unknown') if eleven_config else 'Unknown'
+                    voice_name_for_filename = completed_voice_name
                     if title_resp_idx is not None and 0 <= title_resp_idx < len(all_outputs):
                         title_text = all_outputs[title_resp_idx]
                         extracted_title = extract_title_from_text(title_text)
@@ -4436,7 +4548,7 @@ if __name__ == '__main__':
                         workflow_id,
                         workflow_id,
                         workflow_code,
-                        step,
+                        completed_audio_step,
                         text_content,
                         audio_path,
                         log_msg
@@ -4927,11 +5039,19 @@ if __name__ == '__main__':
             )
             print("Final audio and description script sent in one email.")
 
-    # After the loop, check if all steps were executed
-    if len(executed_steps) != len(steps):
-        print(f"[WARNING] Not all workflow steps were executed! Steps: {len(steps)}, Executed: {len(executed_steps)}")
-    else:
-        print(f"[DEBUG] All workflow steps executed: {len(steps)} steps.")
+        # Confirm completion for this workflow while its step state is in scope.
+        if len(executed_steps) != len(steps):
+            print(f"[WARNING] Not all workflow steps were executed! Steps: {len(steps)}, Executed: {len(executed_steps)}")
+        else:
+            print(f"[DEBUG] All workflow steps executed: {len(steps)} steps.")
+
+    if processed_workflow_count == 0:
+        selection = (
+            f"requested Workflow ID {requested_workflow_id}"
+            if requested_workflow_id
+            else "an Active=Y workflow"
+        )
+        print(f"[WARNING] No workflow matched {selection}; nothing was run.")
 
     # print("Critical error message")
     # sys.exit(1)

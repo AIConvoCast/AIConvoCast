@@ -2,7 +2,7 @@ numpy<2.0.0
 pandas
 gspread>=5.10.0
 requests
-openai
+openai>=3.11.0
 pydub
 XlsxWriter
 python-dotenv
@@ -13,6 +13,6 @@ elevenlabs
 chardet
 google-cloud-storage
 google-cloud-texttospeech
-anthropic>=0.7.0
+anthropic>=1.4.0
 google-generativeai>=0.3.0
 packaging>=24.0
