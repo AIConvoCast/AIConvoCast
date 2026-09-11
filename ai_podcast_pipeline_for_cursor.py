@@ -5,6 +5,12 @@ import requests
 import openai
 from openai import OpenAI
 from pydub import AudioSegment
+from audio_mastering import (
+    export_audio,
+    load_audio_for_merge,
+    register_uploaded_audio_master,
+    copy_uploaded_audio_master,
+)
 from dotenv import load_dotenv
 import time
 import re
@@ -162,6 +168,7 @@ def upload_file_to_gcs(file_path, destination_blob_name):
                 print(f"⚠️ Warning: Failed to set GCS metadata for text file: {meta_err}")
         else:
             blob.upload_from_filename(file_path)
+            register_uploaded_audio_master(file_path, destination_blob_name)
         
         # For uniform bucket-level access, we don't need to make individual objects public
         # The bucket's IAM permissions control access
@@ -312,7 +319,7 @@ def upload_audio_to_gcs(audio_file_path, destination_blob_name):
     return upload_file_to_gcs(audio_file_path, destination_blob_name)
 
 def download_latest_mp3_from_gcs(folder_prefix):
-    """Downloads the latest MP3 file from a Google Cloud Storage folder."""
+    """Get the latest MP3, using its local WAV master for assembly if available."""
     try:
         latest_file = get_latest_file_in_gcs_folder(folder_prefix)
         if not latest_file:
@@ -321,6 +328,10 @@ def download_latest_mp3_from_gcs(folder_prefix):
             
         # Download to temporary file
         temp_path = MP3_OUTPUT_DIR / f"temp_{os.path.basename(latest_file)}"
+        master_copy = copy_uploaded_audio_master(latest_file, temp_path)
+        if master_copy:
+            print(f"✅ Using local lossless audio for: {latest_file}")
+            return master_copy
         result = download_file_from_gcs(latest_file, temp_path)
         
         if result:
@@ -334,10 +345,14 @@ def download_latest_mp3_from_gcs(folder_prefix):
         return None
 
 def download_mp3_file_from_gcs(blob_name):
-    """Downloads a specific MP3 file from Google Cloud Storage."""
+    """Get specific audio, using its local WAV master for assembly if available."""
     try:
         # Download to temporary file
         temp_path = MP3_OUTPUT_DIR / f"temp_{os.path.basename(blob_name)}"
+        master_copy = copy_uploaded_audio_master(blob_name, temp_path)
+        if master_copy:
+            print(f"✅ Using local lossless audio for: {blob_name}")
+            return master_copy
         result = download_file_from_gcs(blob_name, temp_path)
         
         if result:
@@ -757,13 +772,15 @@ except ImportError:
 MP3_OUTPUT_DIR = Path("generated_mp3")
 MP3_OUTPUT_DIR.mkdir(exist_ok=True)
 
-# Clean up old mp3 files (older than 5 days)
+# Clean up old MP3 files and their local WAV masters (older than 5 days).
 def cleanup_old_mp3_files():
     now = time.time()
     cutoff = now - 5 * 24 * 60 * 60  # 5 days in seconds
-    for mp3_file in MP3_OUTPUT_DIR.glob("*.mp3"):
+    for mp3_file in MP3_OUTPUT_DIR.iterdir():
+        if mp3_file.suffix.lower() not in {".mp3", ".wav"}:
+            continue
         if mp3_file.is_file() and mp3_file.stat().st_mtime < cutoff:
-            print(f"[CLEANUP] Deleting old mp3 file: {mp3_file}")
+            print(f"[CLEANUP] Deleting old audio file: {mp3_file}")
             try:
                 mp3_file.unlink()
             except Exception as e:
@@ -3214,47 +3231,32 @@ def generate_google_voice_audio(text, voice_name, output_path):
         print(f"[DEBUG] generate_google_voice_audio: Generating audio with Google TTS")
         print(f"[DEBUG] Voice: {voice_name}, Text length: {len(text)}")
         
-        # Split text into chunks for longer texts (Google TTS has a 5000 character limit)
+        # Keep the existing sentence-aware chunk size and brisk speaking rate.
         chunks = split_text_into_chunks(text, max_length=4000)
         print(f"[DEBUG] generate_google_voice_audio: Preparing to send {len(chunks)} chunk(s) to Google TTS API.")
+
+        if not chunks:
+            raise ValueError("Cannot synthesize empty text")
         
         if len(chunks) == 1:
             return _generate_single_google_chunk(chunks[0], voice_name, output_path)
         else:
-            # Handle multiple chunks
-            temp_audio_paths = []
-            for idx, chunk_text in enumerate(chunks):
-                temp_path = MP3_OUTPUT_DIR / f"temp_google_audio_{int(time.time())}_{os.getpid()}_chunk_{idx+1}.mp3"
-                print(f"[DEBUG] Sending chunk {idx+1}/{len(chunks)} to Google TTS API (length: {len(chunk_text)})")
-                result = _generate_single_google_chunk(chunk_text, voice_name, temp_path)
-                if result:
+            # Assemble uncompressed chunks, then encode the requested MP3 once.
+            # TemporaryDirectory also cleans up if synthesis or export fails.
+            with tempfile.TemporaryDirectory(prefix="google_tts_", dir=MP3_OUTPUT_DIR) as chunk_dir:
+                temp_audio_paths = []
+                extension = (
+                    ".wav" if GOOGLE_CHIRP3_AUDIO_SETTINGS["audio_encoding"]
+                    == texttospeech.AudioEncoding.LINEAR16 else ".mp3"
+                )
+                for idx, chunk_text in enumerate(chunks):
+                    temp_path = Path(chunk_dir) / f"chunk_{idx+1}{extension}"
+                    print(f"[DEBUG] Sending chunk {idx+1}/{len(chunks)} to Google TTS API (length: {len(chunk_text)})")
+                    result = _generate_single_google_chunk(chunk_text, voice_name, temp_path)
+                    if not result:
+                        return None
                     temp_audio_paths.append(result)
-                else:
-                    # Clean up any previous temp files
-                    for p in temp_audio_paths:
-                        try: 
-                            os.remove(p)
-                        except: 
-                            pass
-                    return None
-            
-            # Merge all chunks
-            merged_path = MP3_OUTPUT_DIR / f"merged_google_audio_{int(time.time())}_{os.getpid()}.mp3"
-            print(f"[DEBUG] Merging {len(temp_audio_paths)} Google TTS chunk files into {merged_path}")
-            merge_multiple_audio_files(temp_audio_paths, merged_path)
-            
-            # Clean up temp files
-            for p in temp_audio_paths:
-                try: 
-                    os.remove(p)
-                except: 
-                    pass
-            
-            if merged_path and os.path.exists(merged_path):
-                print(f"✅ Google TTS audio generated and merged successfully: {merged_path}")
-            else:
-                print(f"❌ Merged Google TTS audio file {merged_path} was not created!")
-            return merged_path
+                return merge_multiple_audio_files(temp_audio_paths, output_path)
             
     except Exception as e:
         print(f"❌ Google TTS error: {e}")
@@ -3284,11 +3286,7 @@ def build_google_chirp3_audio_config(include_volume_gain=True, include_speaking_
 def write_google_tts_audio_content(audio_content, output_path):
     if GOOGLE_CHIRP3_AUDIO_SETTINGS["audio_encoding"] == texttospeech.AudioEncoding.LINEAR16:
         audio = AudioSegment.from_file(io.BytesIO(audio_content), format="wav")
-        audio.export(
-            output_path,
-            format="mp3",
-            bitrate=GOOGLE_CHIRP3_AUDIO_SETTINGS["mp3_bitrate"],
-        )
+        export_audio(audio, output_path, bitrate=GOOGLE_CHIRP3_AUDIO_SETTINGS["mp3_bitrate"])
     else:
         with open(output_path, "wb") as out:
             out.write(audio_content)
@@ -3351,7 +3349,7 @@ def _generate_single_google_chunk(text, voice_name, output_path):
             name=full_voice_name
         )
         
-        # Chirp voices can reject some audio params; try highest-fidelity first, then degrade gracefully.
+        # Retry optional parameters if necessary, always preserving the 1.08x pace.
         audio_config_variants = [
             (
                 "linear16_rate_volume_effects",
@@ -3360,14 +3358,6 @@ def _generate_single_google_chunk(text, voice_name, output_path):
             (
                 "linear16_rate_only",
                 build_google_chirp3_audio_config(include_volume_gain=False, include_effects_profile=False)
-            ),
-            (
-                "linear16_natural_rate",
-                build_google_chirp3_audio_config(
-                    include_volume_gain=False,
-                    include_speaking_rate=False,
-                    include_effects_profile=False
-                )
             )
         ]
         
@@ -3479,11 +3469,11 @@ def upload_audio_to_drive_oauth(folder_id, filename, audio_file_path):
 
 def merge_audio(intro_path, main_path, outro_path, final_path):
     try:
-        intro = AudioSegment.from_file(intro_path)
-        main = AudioSegment.from_file(main_path)
-        outro = AudioSegment.from_file(outro_path)
+        intro = load_audio_for_merge(intro_path)
+        main = load_audio_for_merge(main_path)
+        outro = load_audio_for_merge(outro_path)
         final = intro + main + outro
-        final.export(final_path, format="mp3", bitrate=DEFAULT_MP3_EXPORT_BITRATE)
+        export_audio(final, final_path, bitrate=DEFAULT_MP3_EXPORT_BITRATE)
         print(f"✅ Merged audio saved: {final_path}")
     except Exception as e:
         print(f"❌ Merge failed: {e}")
@@ -3584,7 +3574,7 @@ def download_mp3_file_from_drive_oauth(file_url):
         return None
 
 def merge_multiple_audio_files(audio_paths, output_path):
-    """Merges multiple audio files into a single MP3 file."""
+    """Merge audio using available WAV masters and encode only the final MP3."""
     try:
         if not audio_paths:
             print("❌ No audio files provided for merging")
@@ -3593,17 +3583,17 @@ def merge_multiple_audio_files(audio_paths, output_path):
         print(f"🔗 Merging {len(audio_paths)} audio files...")
         
         # Load the first audio file
-        combined = AudioSegment.from_file(audio_paths[0])
+        combined = load_audio_for_merge(audio_paths[0])
         print(f"  - Loaded: {audio_paths[0]}")
         
         # Add subsequent audio files
         for i, audio_path in enumerate(audio_paths[1:], 1):
-            audio = AudioSegment.from_file(audio_path)
+            audio = load_audio_for_merge(audio_path)
             combined += audio
             print(f"  - Added: {audio_path}")
         
         # Export the combined audio
-        combined.export(output_path, format="mp3", bitrate=DEFAULT_MP3_EXPORT_BITRATE)
+        export_audio(combined, output_path, bitrate=DEFAULT_MP3_EXPORT_BITRATE)
         print(f"✅ Merged audio saved: {output_path}")
         return output_path
         

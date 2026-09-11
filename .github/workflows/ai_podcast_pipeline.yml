@@ -47,6 +47,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Verify audio processing
+        run: python -m unittest test_google_audio_quality -v
+
       - name: Create Google credentials file
         run: |
           echo '${{ secrets.GOOGLE_CREDS_JSON }}' > jmio-google-api.json

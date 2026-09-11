@@ -1,0 +1,59 @@
+name: Audio Quality Checks
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'audio_mastering.py'
+      - 'ai_podcast_pipeline_for_cursor.py'
+      - 'test_google_audio_quality.py'
+      - 'requirements.txt'
+      - '.github/workflows/audio-quality-checks.yml'
+      - '.github/workflows/ai_podcast_pipeline.yml'
+      - '.github/workflows/manual_ai_podcast_pipeline.yml'
+  pull_request:
+    paths:
+      - 'audio_mastering.py'
+      - 'ai_podcast_pipeline_for_cursor.py'
+      - 'test_google_audio_quality.py'
+      - 'requirements.txt'
+      - '.github/workflows/audio-quality-checks.yml'
+      - '.github/workflows/ai_podcast_pipeline.yml'
+      - '.github/workflows/manual_ai_podcast_pipeline.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audio-quality:
+    name: Verify podcast audio on Ubuntu
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install pipeline dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip check
+
+      - name: Verify Python modules
+        run: |
+          python -m py_compile ai_podcast_pipeline_for_cursor.py audio_mastering.py test_google_audio_quality.py
+          python -c "import audio_mastering; from google.cloud import storage, texttospeech; import pandas, gspread, openai, anthropic"
+
+      - name: Verify audio processing
+        run: python -m unittest test_google_audio_quality -v
