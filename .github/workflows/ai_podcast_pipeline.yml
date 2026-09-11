@@ -26,7 +26,33 @@ on:
         default: false
 
 jobs:
+  check-schedule:
+    name: Check for a manual run today
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      should_run: ${{ steps.history.outputs.should_run }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Check manual trigger history
+        id: history
+        run: python check_scheduled_podcast.py
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
   run-pipeline:
+    needs: check-schedule
+    if: needs.check-schedule.outputs.should_run == 'true'
     runs-on: ubuntu-latest
     name: Run AI Podcast Pipeline
     timeout-minutes: 30

@@ -7,6 +7,8 @@ on:
       - 'audio_mastering.py'
       - 'ai_podcast_pipeline_for_cursor.py'
       - 'test_google_audio_quality.py'
+      - 'check_scheduled_podcast.py'
+      - 'test_scheduled_podcast.py'
       - 'requirements.txt'
       - '.github/workflows/audio-quality-checks.yml'
       - '.github/workflows/ai_podcast_pipeline.yml'
@@ -16,6 +18,8 @@ on:
       - 'audio_mastering.py'
       - 'ai_podcast_pipeline_for_cursor.py'
       - 'test_google_audio_quality.py'
+      - 'check_scheduled_podcast.py'
+      - 'test_scheduled_podcast.py'
       - 'requirements.txt'
       - '.github/workflows/audio-quality-checks.yml'
       - '.github/workflows/ai_podcast_pipeline.yml'
@@ -30,6 +34,9 @@ jobs:
     name: Verify podcast audio on Ubuntu
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -52,8 +59,24 @@ jobs:
 
       - name: Verify Python modules
         run: |
-          python -m py_compile ai_podcast_pipeline_for_cursor.py audio_mastering.py test_google_audio_quality.py
+          python -m py_compile ai_podcast_pipeline_for_cursor.py audio_mastering.py test_google_audio_quality.py check_scheduled_podcast.py test_scheduled_podcast.py
           python -c "import audio_mastering; from google.cloud import storage, texttospeech; import pandas, gspread, openai, anthropic"
 
       - name: Verify audio processing
         run: python -m unittest test_google_audio_quality -v
+
+      - name: Verify scheduled run decisions
+        run: python -m unittest test_scheduled_podcast -v
+
+      - name: Verify GitHub workflow history access
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import os
+          from check_scheduled_podcast import github_api_get
+          repository = os.environ['GITHUB_REPOSITORY']
+          history = github_api_get(f'/repos/{repository}/actions/workflows/ai_podcast_pipeline.yml/runs', {'event': 'workflow_dispatch', 'per_page': 1})
+          assert 'workflow_runs' in history
+          print('GitHub workflow history is readable with the Actions token.')
+          PY
