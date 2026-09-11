@@ -4,6 +4,10 @@ permissions:
   contents: read
 
 on:
+  schedule:
+    # Sunday through Thursday, 4:30 p.m. Eastern; follows daylight saving time.
+    - cron: '30 16 * * 0-4'
+      timezone: 'America/New_York'
   workflow_dispatch:
     inputs:
       custom_topic:
@@ -89,7 +93,7 @@ jobs:
           echo "Starting AI Podcast Pipeline..."
           echo "Custom Topic: ${{ github.event.inputs.custom_topic || 'None' }}"
           echo "Workflow ID: ${{ github.event.inputs.workflow_id || 'Active Y from Workflows tab' }}"
-          echo "Trigger: ${{ github.event.name }}"
+          echo "Trigger: ${{ github.event_name }}"
           
           # Debug: Check if environment variables are set
           echo "Checking environment variables..."
