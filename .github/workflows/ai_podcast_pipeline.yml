@@ -5,9 +5,9 @@ permissions:
 
 on:
   schedule:
-    # Sunday through Thursday, 2:30 p.m. Eastern; follows daylight saving time.
-    # Two hours early to allow for observed GitHub dispatch delays; timing can vary.
-    - cron: '30 14 * * 0-4'
+    # Sunday through Thursday, 3:00 p.m. Eastern; follows daylight saving time.
+    # Allows for observed GitHub dispatch delays; actual start time can vary.
+    - cron: '0 15 * * 0-4'
       timezone: 'America/New_York'
   workflow_dispatch:
     inputs:
