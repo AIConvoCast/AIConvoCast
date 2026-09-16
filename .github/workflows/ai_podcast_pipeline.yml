@@ -113,6 +113,9 @@ jobs:
           python test_env_vars.py
         env:
           GMAIL_OAUTH_TOKEN_B64: ${{ secrets.GMAIL_OAUTH_TOKEN_B64 }}
+          PODCAST_SMTP_USERNAME: ${{ secrets.PODCAST_SMTP_USERNAME }}
+          PODCAST_SMTP_PASSWORD: ${{ secrets.PODCAST_SMTP_PASSWORD }}
+          RESEARCH_SOL_BASELINE_USD: ${{ vars.RESEARCH_SOL_BASELINE_USD }}
 
       - name: Run AI Podcast Pipeline
         id: run-pipeline
@@ -165,6 +168,9 @@ jobs:
           PODCAST_EMAIL_FROM: AIConvoCast@gmail.com
           PODCAST_EMAIL_TO: ianeoconnell@gmail.com
           GMAIL_OAUTH_TOKEN_B64: ${{ secrets.GMAIL_OAUTH_TOKEN_B64 }}
+          PODCAST_SMTP_USERNAME: ${{ secrets.PODCAST_SMTP_USERNAME }}
+          PODCAST_SMTP_PASSWORD: ${{ secrets.PODCAST_SMTP_PASSWORD }}
+          RESEARCH_SOL_BASELINE_USD: ${{ vars.RESEARCH_SOL_BASELINE_USD }}
 
       - name: Upload generated audio files
         if: always()

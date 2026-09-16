@@ -8,12 +8,20 @@ import json
 import mimetypes
 import os
 import smtplib
+import ssl
+import sys
+from datetime import datetime, timezone
 from email.message import EmailMessage
+from email import policy
+from email.parser import BytesParser
+from email.utils import formatdate, make_msgid
 from pathlib import Path
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+from service_retry import retry_transient
 
 
 DEFAULT_RECIPIENT = "ianeoconnell@gmail.com"
@@ -24,10 +32,22 @@ DEFAULT_GMAIL_TOKEN_FILE = "gmail_oauth_token.json"
 GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send"
 
 
+class DeliveryNotAttempted(RuntimeError):
+    """An alternate backend is safe because no message was submitted."""
+
+
+class DeliveryRejected(RuntimeError):
+    """The server explicitly rejected the message; it was not accepted."""
+
+
+class DeliveryUncertain(RuntimeError):
+    """Do not automatically resend: the server may have accepted the message."""
+
+
 def _required_env(name: str) -> str:
     value = os.getenv(name, "").strip()
     if not value:
-        raise RuntimeError(
+        raise DeliveryNotAttempted(
             f"Email delivery is not configured: set {name} in the local .env "
             "file and as a GitHub Actions secret."
         )
@@ -82,6 +102,8 @@ def build_podcast_email(
     message["From"] = sender
     message["To"] = recipient
     message["Subject"] = title or f"AI Convo Cast - workflow {workflow_id}"
+    message["Date"] = formatdate(localtime=True)
+    message["Message-ID"] = make_msgid(domain=sender.rsplit("@", 1)[-1])
     message.set_content(
         "Your AI Convo Cast generation completed successfully.\n\n"
         "The final podcast audio and its title/description script are attached "
@@ -118,10 +140,8 @@ def _load_gmail_oauth_credentials() -> Credentials:
     """Load a send-only Gmail OAuth grant from an env secret or local file."""
     token_b64 = os.getenv("GMAIL_OAUTH_TOKEN_B64", "").strip()
     token_json = os.getenv("GMAIL_OAUTH_TOKEN_JSON", "").strip()
-    token_file = Path(
-        os.getenv("GMAIL_OAUTH_TOKEN_FILE", DEFAULT_GMAIL_TOKEN_FILE).strip()
-        or DEFAULT_GMAIL_TOKEN_FILE
-    )
+    default_token_file = Path(__file__).resolve().with_name(DEFAULT_GMAIL_TOKEN_FILE)
+    token_file = Path(os.getenv("GMAIL_OAUTH_TOKEN_FILE", "").strip() or default_token_file)
 
     if token_b64:
         try:
@@ -161,7 +181,7 @@ def _load_gmail_oauth_credentials() -> Credentials:
         )
     if not credentials.valid:
         try:
-            credentials.refresh(Request())
+            retry_transient(lambda: credentials.refresh(Request()), label="Gmail authorization")
         except Exception as exc:
             raise RuntimeError(
                 "The Gmail OAuth grant could not be refreshed. Reauthorize "
@@ -170,19 +190,34 @@ def _load_gmail_oauth_credentials() -> Credentials:
     return credentials
 
 
-def _send_with_gmail_api(message: EmailMessage) -> None:
-    credentials = _load_gmail_oauth_credentials()
+def _send_with_gmail_api(message: EmailMessage, credentials=None) -> None:
+    try:
+        if credentials is None:
+            credentials = _load_gmail_oauth_credentials()
+        service = retry_transient(
+            lambda: build("gmail", "v1", credentials=credentials, cache_discovery=False),
+            label="Gmail connection",
+        )
+    except Exception as exc:
+        raise DeliveryNotAttempted(
+            "Gmail could not connect or authorize. An expired/revoked grant requires "
+            "configure_gmail_oauth.py; temporary connection failures were retried."
+        ) from exc
     raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode("ascii")
-    service = build(
-        "gmail",
-        "v1",
-        credentials=credentials,
-        cache_discovery=False,
-    )
-    service.users().messages().send(
-        userId="me",
-        body={"raw": raw_message},
-    ).execute()
+    try:
+        # Retry an explicit rate-limit rejection. Timeouts/5xx after submission
+        # are ambiguous, so do not automatically send a duplicate via SMTP.
+        retry_transient(
+            lambda: service.users().messages().send(userId="me", body={"raw": raw_message}).execute(),
+            label="Gmail rate limit",
+            predicate=lambda exc: isinstance(exc, HttpError) and exc.resp.status == 429,
+        )
+    except HttpError as exc:
+        if 400 <= exc.resp.status < 500 and exc.resp.status != 408:
+            raise DeliveryRejected(f"Gmail rejected delivery (HTTP {exc.resp.status}).") from exc
+        raise DeliveryUncertain("Gmail delivery was not confirmed; check Sent before resending.") from exc
+    except Exception as exc:
+        raise DeliveryUncertain("Gmail delivery was not confirmed; check Sent before resending.") from exc
 
 
 def _send_with_smtp(message: EmailMessage) -> None:
@@ -195,9 +230,97 @@ def _send_with_smtp(message: EmailMessage) -> None:
     except ValueError as exc:
         raise RuntimeError("PODCAST_SMTP_PORT must be a number.") from exc
 
-    with smtplib.SMTP_SSL(host, port, timeout=60) as smtp:
-        smtp.login(username, password)
-        smtp.send_message(message)
+    def connect():
+        smtp = smtplib.SMTP_SSL(host, port, timeout=60, context=ssl.create_default_context())
+        try:
+            smtp.login(username, password)
+            return smtp
+        except Exception:
+            smtp.close()
+            raise
+
+    try:
+        smtp = retry_transient(connect, label="SMTP connection")
+    except Exception as exc:
+        raise DeliveryNotAttempted("SMTP could not connect or authenticate.") from exc
+    try:
+        retry_transient(
+            lambda: smtp.send_message(message),
+            label="SMTP rate limit",
+            predicate=lambda exc: isinstance(exc, smtplib.SMTPDataError) and 400 <= exc.smtp_code < 500,
+        )
+    except (smtplib.SMTPDataError, smtplib.SMTPRecipientsRefused, smtplib.SMTPSenderRefused) as exc:
+        raise DeliveryRejected("SMTP rejected the email; it remains saved locally.") from exc
+    except Exception as exc:
+        raise DeliveryUncertain("SMTP delivery was not confirmed; check Sent before resending.") from exc
+    finally:
+        # A failed QUIT must not turn a successful send into a retry.
+        smtp.close()
+
+
+def _deliver(message, backend):
+    if backend == "smtp":
+        _send_with_smtp(message)
+        return "smtp"
+    try:
+        _send_with_gmail_api(message)
+        return "gmail_api"
+    except (DeliveryNotAttempted, DeliveryRejected) as gmail_error:
+        if (os.getenv("PODCAST_SMTP_USERNAME") and os.getenv("PODCAST_SMTP_PASSWORD")
+                and os.getenv("PODCAST_SMTP_FALLBACK", "true").lower() not in {"0", "false", "no"}):
+            print("Gmail did not accept the message; using the configured SMTP fallback.")
+            try:
+                _send_with_smtp(message)
+                return "smtp"
+            except (DeliveryNotAttempted, DeliveryRejected):
+                pass  # Both attempts definitively failed before acceptance.
+        # Only an interactive local run may renew an expired local grant.
+        # Never prompt on a GitHub runner, retry ambiguous delivery, or replace
+        # an explicitly supplied token secret with a different credential.
+        if _can_renew_local_grant(gmail_error):
+            from configure_gmail_oauth import authorize_local_gmail
+            print("Local Gmail authorization expired. Complete the Google sign-in to deliver this saved episode.")
+            try:
+                credentials = authorize_local_gmail()
+            except Exception as exc:
+                raise DeliveryNotAttempted("Local sign-in was not completed. Run python configure_gmail_oauth.py, then resend the saved email.") from exc
+            _send_with_gmail_api(message, credentials=credentials)
+            return "gmail_api"
+        raise gmail_error
+
+
+def _can_renew_local_grant(error):
+    if (os.getenv("GITHUB_ACTIONS") or not sys.stdin.isatty()
+            or os.getenv("GMAIL_OAUTH_TOKEN_B64") or os.getenv("GMAIL_OAUTH_TOKEN_JSON")
+            or os.getenv("GMAIL_OAUTH_TOKEN_FILE")
+            or os.getenv("PODCAST_LOCAL_REAUTHORIZE", "true").lower() in {"0", "false", "no"}):
+        return False
+    while error is not None:
+        if "invalid_grant" in str(error).lower():
+            return True
+        error = error.__cause__
+    return False
+
+
+def _write_status(path, state, **details):
+    temporary = path.with_suffix(".tmp")
+    temporary.write_text(json.dumps({"status": state, "updated_at": datetime.now(timezone.utc).isoformat(),
+                                     **details}, indent=2), encoding="utf-8")
+    temporary.replace(path)
+
+
+def _deliver_saved(message, message_path, backend):
+    status_path = message_path.with_suffix(".json")
+    # A crash during submission has an unknown result; never auto-resend it.
+    _write_status(status_path, "sending", message_id=str(message["Message-ID"]))
+    try:
+        used_backend = _deliver(message, backend)
+    except Exception as exc:
+        state = "failed" if isinstance(exc, (DeliveryNotAttempted, DeliveryRejected)) else "uncertain"
+        _write_status(status_path, state, error_type=type(exc).__name__)
+        print(f"Email {state}. Audio and description are preserved in {message_path}")
+        raise
+    _write_status(status_path, "sent", backend=used_backend)
 
 
 def send_podcast_email(
@@ -236,7 +359,33 @@ def send_podcast_email(
         description_filename=description_filename,
     )
 
-    if backend == "gmail_api":
-        _send_with_gmail_api(message)
-    else:
-        _send_with_smtp(message)
+    outbox = Path(os.getenv("PODCAST_EMAIL_OUTBOX", str(Path(audio_path).parent / "email_outbox")))
+    outbox.mkdir(parents=True, exist_ok=True)
+    message_path = outbox / (str(message["Message-ID"]).strip("<>").split("@")[0] + ".eml")
+    with message_path.open("xb") as stream:
+        stream.write(message.as_bytes())
+    _deliver_saved(message, message_path, backend)
+
+
+def resend_saved_email(path, *, allow_uncertain=False):
+    """Explicit recovery command; never regenerate audio or silently duplicate mail."""
+    path = Path(path)
+    status_path = path.with_suffix(".json")
+    state = json.loads(status_path.read_text(encoding="utf-8")).get("status") if status_path.exists() else "uncertain"
+    if state == "sent":
+        raise RuntimeError("This email was already sent.")
+    if state in {"sending", "uncertain"} and not allow_uncertain:
+        raise RuntimeError("Check Sent first, then use --confirm-not-delivered if the email is missing.")
+    message = BytesParser(policy=policy.default).parsebytes(path.read_bytes())
+    _deliver_saved(message, path, os.getenv("PODCAST_EMAIL_BACKEND", "gmail_api"))
+
+
+if __name__ == "__main__":
+    import argparse
+    from dotenv import load_dotenv
+    load_dotenv()
+    parser = argparse.ArgumentParser(description="Resend a saved podcast email without regenerating audio.")
+    parser.add_argument("--resend", required=True, type=Path)
+    parser.add_argument("--confirm-not-delivered", action="store_true")
+    args = parser.parse_args()
+    resend_saved_email(args.resend, allow_uncertain=args.confirm_not_delivered)

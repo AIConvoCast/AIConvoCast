@@ -7,6 +7,15 @@ on:
       - 'audio_mastering.py'
       - 'ai_podcast_pipeline_for_cursor.py'
       - 'test_google_audio_quality.py'
+      - 'google_pronunciations.py'
+      - 'podcast_email.py'
+      - 'service_retry.py'
+      - 'local_artifacts.py'
+      - 'news_research.py'
+      - 'test_pipeline_recovery.py'
+      - 'test_news_research.py'
+      - 'test_podcast_email.py'
+      - 'test_google_pronunciations.py'
       - 'check_scheduled_podcast.py'
       - 'test_scheduled_podcast.py'
       - 'requirements.txt'
@@ -18,6 +27,15 @@ on:
       - 'audio_mastering.py'
       - 'ai_podcast_pipeline_for_cursor.py'
       - 'test_google_audio_quality.py'
+      - 'google_pronunciations.py'
+      - 'podcast_email.py'
+      - 'service_retry.py'
+      - 'local_artifacts.py'
+      - 'news_research.py'
+      - 'test_pipeline_recovery.py'
+      - 'test_news_research.py'
+      - 'test_podcast_email.py'
+      - 'test_google_pronunciations.py'
       - 'check_scheduled_podcast.py'
       - 'test_scheduled_podcast.py'
       - 'requirements.txt'
@@ -59,11 +77,11 @@ jobs:
 
       - name: Verify Python modules
         run: |
-          python -m py_compile ai_podcast_pipeline_for_cursor.py audio_mastering.py test_google_audio_quality.py check_scheduled_podcast.py test_scheduled_podcast.py
+          python -m py_compile ai_podcast_pipeline_for_cursor.py audio_mastering.py google_pronunciations.py test_google_pronunciations.py test_google_audio_quality.py check_scheduled_podcast.py test_scheduled_podcast.py
           python -c "import audio_mastering; from google.cloud import storage, texttospeech; import pandas, gspread, openai, anthropic"
 
       - name: Verify audio processing
-        run: python -m unittest test_google_audio_quality -v
+        run: python -m unittest test_google_audio_quality test_google_pronunciations test_podcast_email test_pipeline_recovery test_news_research -v
 
       - name: Verify scheduled run decisions
         run: python -m unittest test_scheduled_podcast -v

@@ -17,6 +17,8 @@ from pydub import AudioSegment
 from pydub.generators import Sine
 
 import audio_mastering
+from google_pronunciations import build_google_synthesis_input
+from local_artifacts import LocalArtifacts, ReusableAudioCache
 
 
 def load_pipeline_audio(output_dir):
@@ -47,6 +49,9 @@ def load_pipeline_audio(output_dir):
         traceback=traceback, AudioSegment=AudioSegment, texttospeech=texttospeech,
         MP3_OUTPUT_DIR=Path(output_dir), ELEVENLABS_CHUNK_MAX_CHARS=2500,
         GCS_BUCKET_NAME="test-bucket",
+        LOCAL_ARTIFACTS=LocalArtifacts(Path(output_dir) / "runs"), GCS_RETRY=None,
+        ReusableAudioCache=ReusableAudioCache,
+        build_google_synthesis_input=build_google_synthesis_input,
         export_audio=audio_mastering.export_audio,
         load_audio_for_merge=audio_mastering.load_audio_for_merge,
         register_uploaded_audio_master=audio_mastering.register_uploaded_audio_master,
@@ -113,6 +118,55 @@ class GoogleAudioQualityTests(unittest.TestCase):
         self.assertEqual(self.generate(), self.output)
         self.assertEqual(self.read_wav(self.output.with_suffix(".wav")).raw_data, self.chunks[0].raw_data)
 
+    def test_business_pronunciations_apply_to_every_chunk_and_voice(self):
+        chunks = ["NVIDIA announced a chip. Nvidia shared more.", "nvidia’s partners use OpenAI and xAI."]
+        self.api["split_text_into_chunks"].return_value = chunks
+        self.assertEqual(self.api["generate_google_voice_audio"](
+            " ".join(chunks), "Achernar", self.output,
+        ), self.output)
+        calls = self.client.synthesize_speech.call_args_list
+        self.assertEqual(len(calls), 2)
+        for chunk, call in zip(chunks, calls):
+            self.assertEqual(call.kwargs["input"], build_google_synthesis_input(chunk))
+            self.assertTrue(call.kwargs["input"].custom_pronunciations.pronunciations)
+            self.assertEqual(call.kwargs["voice"].name, "en-US-Chirp3-HD-Achernar")
+
+    def test_audio_config_retry_keeps_business_pronunciations(self):
+        self.api["split_text_into_chunks"].return_value = ["NVIDIA’s chips power OpenAI."]
+        self.client.synthesize_speech.side_effect = [
+            ValueError("invalid argument: volume_gain_db"),
+            SimpleNamespace(audio_content=b"test audio"),
+        ]
+        self.api["write_google_tts_audio_content"] = Mock()
+        self.assertEqual(self.generate(), self.output)
+        calls = self.client.synthesize_speech.call_args_list
+        self.assertEqual(len(calls), 2)
+        first_input = calls[0].kwargs["input"]
+        self.assertEqual(first_input.custom_pronunciations.pronunciations[0].phrase, "NVIDIA's")
+        self.assertEqual(first_input, calls[1].kwargs["input"])
+        for call in calls:
+            self.assertAlmostEqual(call.kwargs["audio_config"].speaking_rate, 1.08)
+
+    def test_long_sentence_keeps_company_name_whole_at_chunk_boundary(self):
+        self.api["split_text_into_chunks"] = load_pipeline_audio(self.output_dir)["split_text_into_chunks"]
+        text = "word " * 799 + "NVIDIA's chips power the platform."
+        self.assertEqual(self.api["generate_google_voice_audio"](text, "Alnilam", self.output), self.output)
+        inputs = [call.kwargs["input"] for call in self.client.synthesize_speech.call_args_list]
+        self.assertEqual(len(inputs), 2)
+        self.assertEqual(" ".join(item.text for item in inputs), text)
+        self.assertTrue(all(len(item.text) <= 4000 for item in inputs))
+        self.assertTrue(inputs[1].text.startswith("NVIDIA's"))
+        self.assertEqual(inputs[1].custom_pronunciations.pronunciations[0].pronunciation, "ɛnˈvɪdiəz")
+
+    def test_google_word_splitting_handles_whitespace_and_oversized_tokens(self):
+        split = load_pipeline_audio(self.output_dir)["split_text_into_chunks"]
+        for separator in (" ", "\n", "\t"):
+            with self.subTest(separator=separator):
+                self.assertEqual(split(f"abc{separator}NVIDIA", max_length=7, preserve_words=True),
+                                 ["abc", "NVIDIA"])
+        self.assertEqual(split("abcdefghij", max_length=4, preserve_words=True), ["abcd", "efgh", "ij"])
+        self.assertEqual(split("abc NVIDIA", max_length=7), ["abc NVI", "DIA"])
+
     def test_episode_merge_uses_master_after_uploaded_mp3_is_deleted(self):
         self.generate()
         blob_name = "narration/episode.mp3"
@@ -135,7 +189,10 @@ class GoogleAudioQualityTests(unittest.TestCase):
 
     def test_uncached_mp3_still_downloads(self):
         self.api["get_latest_file_in_gcs_folder"] = Mock(return_value="older/file.mp3")
-        self.api["download_file_from_gcs"] = Mock(return_value=True)
+        def downloaded(blob_name, destination):
+            Path(destination).write_bytes(b"downloaded audio")
+            return destination
+        self.api["download_file_from_gcs"] = Mock(side_effect=downloaded)
         result = self.api["download_latest_mp3_from_gcs"]("older/")
         self.assertEqual(result.suffix, ".mp3")
         self.api["download_file_from_gcs"].assert_called_once()
@@ -158,7 +215,10 @@ class GoogleAudioQualityTests(unittest.TestCase):
     def test_explicit_blob_uses_matching_master_only(self):
         self.generate()
         audio_mastering.register_uploaded_audio_master(self.output, "exact.mp3")
-        self.api["download_file_from_gcs"] = Mock(return_value=True)
+        def downloaded(blob_name, destination):
+            Path(destination).write_bytes(b"downloaded audio")
+            return destination
+        self.api["download_file_from_gcs"] = Mock(side_effect=downloaded)
         self.assertEqual(self.api["download_mp3_file_from_gcs"]("exact.mp3").suffix, ".wav")
         self.assertEqual(self.api["download_mp3_file_from_gcs"]("other.mp3").suffix, ".mp3")
 

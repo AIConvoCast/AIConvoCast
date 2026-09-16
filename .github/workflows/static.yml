@@ -12,6 +12,7 @@ on:
       - 'contact.js'
       - 'build_site.py'
       - 'test_site.py'
+      - 'check_site.py'
       - 'ai-convo-cast-logo.jpg'
       - 'manifest.json'
       - 'CNAME'
@@ -62,3 +63,7 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+      - name: Enable HTTPS when GitHub finishes certificate issuance
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python check_site.py --enable-https

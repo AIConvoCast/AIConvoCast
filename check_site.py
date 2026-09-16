@@ -2,10 +2,42 @@
 
 from datetime import datetime, timezone
 import json
+import os
 import socket
 import ssl
 from urllib.parse import urlsplit
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
+from urllib.error import HTTPError
+
+
+def enable_https_when_ready():
+    """Only strengthen HTTPS, using the existing Pages workflow permission."""
+    repository = os.environ["GITHUB_REPOSITORY"]
+    if repository.lower() != "aiconvocast/aiconvocast":
+        raise RuntimeError("HTTPS configuration is restricted to the AIConvoCast repository")
+    url = f"https://api.github.com/repos/{repository}/pages"
+    headers = {"Authorization": "Bearer " + os.environ["GITHUB_TOKEN"],
+               "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
+    with urlopen(Request(url, headers=headers), timeout=30) as response:
+        settings = json.load(response)
+    if settings.get("cname") != "aiconvocast.com":
+        raise RuntimeError("Pages custom domain changed; check hosting settings")
+    if settings.get("https_enforced"):
+        print("HTTPS enforcement is already enabled.")
+        return True
+    request = Request(url, headers={**headers, "Content-Type": "application/json"},
+                      data=b'{"https_enforced": true}', method="PUT")
+    try:
+        with urlopen(request, timeout=30):
+            pass
+    except HTTPError as exc:
+        detail = json.loads(exc.read()).get("message", "")
+        if exc.code == 404 and "certificate has not finished" in detail.lower():
+            print("::warning::GitHub is still issuing the domain certificate. HTTPS enforcement will retry on the next site deployment.")
+            return False
+        raise
+    print("HTTPS enforcement enabled.")
+    return True
 
 
 def check_site():
@@ -32,4 +64,8 @@ def check_site():
 
 
 if __name__ == "__main__":
-    check_site()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--enable-https", action="store_true")
+    args = parser.parse_args()
+    enable_https_when_ready() if args.enable_https else check_site()

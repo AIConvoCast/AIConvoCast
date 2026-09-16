@@ -36,6 +36,34 @@ Successfully integrated Google Cloud Text-to-Speech with Chirp 3 HD voices into 
 
 ## Usage Instructions
 
+### Business-name pronunciation
+
+Google voice generation attaches an explicit IPA pronunciation dictionary to
+each cleaned audio chunk using [Chirp 3 custom pronunciations](https://docs.cloud.google.com/text-to-speech/docs/chirp3-hd#custom_pronunciations).
+NVIDIA is pronounced **en-VID-ee-uh**, OpenAI as **Open A I**, and xAI as
+**X A I**. Rules cover capitalization variants and possessives with straight
+or curly apostrophes. Written scripts, titles, and descriptions keep their
+original spelling; names and acronyms outside the dictionary use Google's
+normal pronunciation.
+
+Only the speech request normalizes matching names to the dictionary spelling,
+avoiding duplicate rules when a script mixes `NVIDIA` and `Nvidia`. Possessives
+are sent before base names so Google's substitutions do not overlap. Google
+chunking prefers whitespace when splitting long sentences to keep names intact.
+
+To add or tune a business name, edit `BUSINESS_NAME_PRONUNCIATIONS` in
+`google_pronunciations.py`. Values use IPA; add a separate `Name's` entry for
+the possessive pronunciation. Longer phrases take precedence over shorter
+ones, and each chunk sends only the matching entries. Audio-configuration
+retries retain these pronunciation rules. Install `requirements.txt` to use
+the required Google client version (2.25.1 or newer).
+
+Run the offline regression checks with:
+
+```bash
+python -m unittest test_google_pronunciations test_google_audio_quality -v
+```
+
 ### Basic Usage
 To use Google Voice in your workflow, use the pattern: `L8GV1SL4`
 

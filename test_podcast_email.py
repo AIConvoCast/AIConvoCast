@@ -70,7 +70,7 @@ class PodcastEmailTests(unittest.TestCase):
     @patch("podcast_email.smtplib.SMTP_SSL")
     def test_send_uses_one_smtp_message(self, smtp_ssl):
         smtp = MagicMock()
-        smtp_ssl.return_value.__enter__.return_value = smtp
+        smtp_ssl.return_value = smtp
 
         with tempfile.TemporaryDirectory() as temp_dir:
             audio_path = Path(temp_dir) / "episode.mp3"

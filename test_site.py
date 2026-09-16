@@ -4,13 +4,40 @@ from datetime import datetime, timedelta, timezone
 from email.utils import format_datetime
 from html.parser import HTMLParser
 import json
+import io
+import os
 from pathlib import Path
 import re
 import tempfile
 import unittest
+from unittest.mock import patch
+from urllib.error import HTTPError
 import xml.etree.ElementTree as ET
 
 import build_site as site
+from check_site import enable_https_when_ready
+
+
+class HTTPSConfigurationTests(unittest.TestCase):
+    @patch.dict(os.environ, {"GITHUB_REPOSITORY": "AIConvoCast/AIConvoCast", "GITHUB_TOKEN": "test-only"})
+    @patch("check_site.urlopen")
+    def test_certificate_pending_retries_on_later_deployment(self, open_url):
+        settings = io.BytesIO(b'{"cname":"aiconvocast.com","https_enforced":false}')
+        pending = HTTPError("https://api.github.com/repos/AIConvoCast/AIConvoCast/pages", 404, "pending", {},
+                            io.BytesIO(b'{"message":"The certificate has not finished being issued"}'))
+        open_url.side_effect = [settings, pending]
+        self.assertFalse(enable_https_when_ready())
+        request = open_url.call_args.args[0]
+        self.assertEqual(request.method, "PUT")
+        self.assertEqual(json.loads(request.data), {"https_enforced": True})
+
+    @patch.dict(os.environ, {"GITHUB_REPOSITORY": "AIConvoCast/AIConvoCast", "GITHUB_TOKEN": "test-only"})
+    @patch("check_site.urlopen")
+    def test_does_not_modify_an_unexpected_domain(self, open_url):
+        open_url.return_value = io.BytesIO(b'{"cname":"different.example"}')
+        with self.assertRaisesRegex(RuntimeError, "domain changed"):
+            enable_https_when_ready()
+        open_url.assert_called_once()
 
 
 def feed(count=2):

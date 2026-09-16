@@ -32,7 +32,12 @@ from google.auth.transport.requests import Request
 import pickle
 from google.cloud import storage
 from google.cloud import texttospeech
+from google_pronunciations import build_google_synthesis_input
 from podcast_email import send_podcast_email
+from local_artifacts import LocalArtifacts, ReusableAudioCache
+from service_retry import retry_transient, elevenlabs_audio_with_retry, is_transient_error
+from google.api_core.retry import Retry
+from news_research import research_news
 print(storage.__version__)
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -45,6 +50,8 @@ load_dotenv()
 # -----------------------------------------
 GCS_BUCKET_NAME = 'jmio-podcast-storage'  # Replace with your bucket name
 GCS_SERVICE_ACCOUNT_FILE = 'jmio-google-api.json'  # Your existing service account key file
+LOCAL_ARTIFACTS = LocalArtifacts()
+GCS_RETRY = Retry(initial=1, maximum=8, multiplier=2, timeout=30)
 
 def get_gcs_client():
     """Initialize and return a Google Cloud Storage client."""
@@ -57,6 +64,9 @@ def get_gcs_client():
 
 def upload_file_to_gcs(file_path, destination_blob_name):
     """Upload a file to Google Cloud Storage and return the public URL."""
+    # Preserve before any cloud/auth operation or temporary-file cleanup.
+    local_copy = LOCAL_ARTIFACTS.preserve(file_path, destination_blob_name)
+    register_uploaded_audio_master(file_path, destination_blob_name)
     try:
         # FINAL MOJIBAKE PROTECTION FOR TEXT FILES
         if str(file_path).endswith('.txt') or destination_blob_name.endswith('.txt'):
@@ -150,14 +160,15 @@ def upload_file_to_gcs(file_path, destination_blob_name):
         
         client = get_gcs_client()
         if not client:
-            return None
+            print(f"Cloud upload unavailable; saved locally: {local_copy}")
+            return str(local_copy)
             
         bucket = client.bucket(GCS_BUCKET_NAME)
         blob = bucket.blob(destination_blob_name)
         
         # Ensure correct Content-Type for text files so browsers use UTF-8
         if str(file_path).endswith('.txt') or destination_blob_name.endswith('.txt'):
-            blob.upload_from_filename(file_path, content_type='text/plain; charset=utf-8')
+            blob.upload_from_filename(file_path, content_type='text/plain; charset=utf-8', retry=GCS_RETRY, timeout=60)
             try:
                 blob.content_type = 'text/plain; charset=utf-8'
                 # Optional: avoid stale cached incorrect headers
@@ -167,18 +178,22 @@ def upload_file_to_gcs(file_path, destination_blob_name):
             except Exception as meta_err:
                 print(f"⚠️ Warning: Failed to set GCS metadata for text file: {meta_err}")
         else:
-            blob.upload_from_filename(file_path)
+            blob.upload_from_filename(file_path, retry=GCS_RETRY, timeout=60)
             register_uploaded_audio_master(file_path, destination_blob_name)
         
         # For uniform bucket-level access, we don't need to make individual objects public
         # The bucket's IAM permissions control access
         return f"https://storage.googleapis.com/{GCS_BUCKET_NAME}/{destination_blob_name}"
     except Exception as e:
-        print(f"❌ Error uploading to GCS: {e}")
-        return None
+        print(f"GCS upload unavailable ({type(e).__name__}).")
+        print(f"Cloud upload failed; continuing with local artifact: {local_copy}")
+        return str(local_copy)
 
 def download_file_from_gcs(blob_name, local_file_path):
     """Download a file from Google Cloud Storage."""
+    local_copy = LOCAL_ARTIFACTS.restore(blob_name, local_file_path)
+    if local_copy:
+        return local_copy
     try:
         client = get_gcs_client()
         if not client:
@@ -187,7 +202,7 @@ def download_file_from_gcs(blob_name, local_file_path):
         bucket = client.bucket(GCS_BUCKET_NAME)
         blob = bucket.blob(blob_name)
         
-        blob.download_to_filename(local_file_path)
+        blob.download_to_filename(local_file_path, retry=GCS_RETRY, timeout=60)
         return local_file_path
     except Exception as e:
         print(f"❌ Error downloading from GCS: {e}")
@@ -210,13 +225,16 @@ def list_files_in_gcs_folder(folder_prefix):
 
 def get_latest_file_in_gcs_folder(folder_prefix):
     """Get the latest file in a GCS folder based on creation time."""
+    local_name = LOCAL_ARTIFACTS.latest(folder_prefix)
+    if local_name:
+        return local_name
     try:
         client = get_gcs_client()
         if not client:
             return None
             
         bucket = client.bucket(GCS_BUCKET_NAME)
-        blobs = list(bucket.list_blobs(prefix=folder_prefix))
+        blobs = list(bucket.list_blobs(prefix=folder_prefix, retry=GCS_RETRY, timeout=30))
         
         if not blobs:
             return None
@@ -353,7 +371,12 @@ def download_mp3_file_from_gcs(blob_name):
         if master_copy:
             print(f"✅ Using local lossless audio for: {blob_name}")
             return master_copy
+        cache = ReusableAudioCache(MP3_OUTPUT_DIR / "asset_cache")
         result = download_file_from_gcs(blob_name, temp_path)
+        if result:
+            cache.save(blob_name, result)
+        else:
+            result = cache.restore(blob_name, temp_path)
         
         if result:
             print(f"✅ Downloaded MP3 file: {temp_path}")
@@ -1860,6 +1883,9 @@ def force_clean_mojibake(text):
 # -----------------------------------------
 def call_openai_model(prompt, model="gpt-4o", temperature=0.8, web_search=False):
     """Calls the OpenAI API, using the correct endpoint for web search and model type. Logs all errors and unexpected responses."""
+    if web_search and str(model).lower().startswith(("gpt-6-astra", "gpt-5.6-sol")):
+        return research_news(client, prompt, use_astra=str(model).lower().startswith("gpt-6-astra"),
+                             output_directory=LOCAL_ARTIFACTS.directory / "research")
     import sys
     import time
     import signal
@@ -2678,11 +2704,12 @@ def call_google_model(prompt, model="gemini-2.0-flash", temperature=0.8):
         sys.exit(1)
 
 
-def split_text_into_chunks(text, max_length=ELEVENLABS_CHUNK_MAX_CHARS):
+def split_text_into_chunks(text, max_length=ELEVENLABS_CHUNK_MAX_CHARS, preserve_words=False):
     """
     Splits text into chunks of up to max_length characters, preferably on sentence boundaries.
     If a sentence is longer than max_length, it is split into hard chunks.
     Default max_length stays below Eleven Labs v3's 3000 character limit.
+    Google uses preserve_words to keep names intact in long sentences.
     """
     import re
     
@@ -2734,8 +2761,15 @@ def split_text_into_chunks(text, max_length=ELEVENLABS_CHUNK_MAX_CHARS):
     for sentence in sentences:
         # If the sentence itself is too long, split it hard
         while len(sentence) > max_length:
-            part = sentence[:max_length]
-            sentence = sentence[max_length:]
+            split_at = max_length
+            if preserve_words:
+                word_break = re.search(r'\s+\S*$', sentence[:max_length + 1])
+                if word_break and word_break.start() > 0:
+                    split_at = word_break.start()
+            part = sentence[:split_at]
+            sentence = sentence[split_at:]
+            if preserve_words:
+                sentence = sentence.lstrip()
             if current_chunk:
                 chunks.append(current_chunk)
                 current_chunk = ''
@@ -2764,31 +2798,13 @@ def is_elevenlabs_credit_quota_error(error_message, status_code=None):
     Returns:
         bool: True if the error is credit/quota related
     """
-    if not error_message:
-        return False
-    
-    error_lower = str(error_message).lower()
-    
-    # Check for credit/quota related keywords
-    credit_keywords = [
-        'credit', 'quota', 'insufficient', 'balance', 'subscription',
-        'payment required', 'upgrade', 'limit exceeded', 'billing'
-    ]
-    
-    if any(keyword in error_lower for keyword in credit_keywords):
+    if status_code == 402:
         return True
-    
-    # Check status codes
-    if status_code:
-        # 402 = Payment Required (credit/quota)
-        # 429 = Too Many Requests (could be quota/rate limit)
-        if status_code == 402:
-            return True
-        # For 429, we'll check the error message more carefully
-        if status_code == 429 and ('quota' in error_lower or 'credit' in error_lower):
-            return True
-    
-    return False
+    error_lower = str(error_message or "").lower()
+    return any(marker in error_lower for marker in (
+        'quota_exceeded', 'quota exceeded', 'credit', 'insufficient_balance',
+        'insufficient balance', 'payment required', 'subscription_required',
+    ))
 
 
 def build_google_voice_fallback_step(location_id, save_location_id, title_reference=None):
@@ -2938,7 +2954,7 @@ def generate_voice_audio(text, voice_id, output_path, eleven_config=None):
                     if len(chunk_text) > ELEVENLABS_CHUNK_MAX_CHARS:
                         print(f"[WARNING] Chunk is very long ({len(chunk_text)} chars). Consider splitting further if you see timeouts.")
                     start_time = time.time()
-                    audio_stream = client.text_to_speech.convert(
+                    audio_stream = elevenlabs_audio_with_retry(client,
                         text=chunk_text,
                         voice_id=voice_id,
                         voice_settings=voice_settings,
@@ -2952,6 +2968,8 @@ def generate_voice_audio(text, voice_id, output_path, eleven_config=None):
                     traceback.print_exc()
                     if is_elevenlabs_credit_quota_error(str(e), None):
                         raise ValueError(f"ElevenLabs credit/quota error: {e}") from e
+                    if is_transient_error(e):
+                        raise  # This chunk already exhausted its bounded retries.
                     print("[DEBUG] Falling back to REST API...")
                     return generate_voice_audio_rest(text, voice_id, output_path, eleven_config)
             else:
@@ -2960,7 +2978,7 @@ def generate_voice_audio(text, voice_id, output_path, eleven_config=None):
                     if len(chunk_text) > ELEVENLABS_CHUNK_MAX_CHARS:
                         print(f"[WARNING] Chunk is very long ({len(chunk_text)} chars). Consider splitting further if you see timeouts.")
                     start_time = time.time()
-                    audio_stream = client.text_to_speech.convert(
+                    audio_stream = elevenlabs_audio_with_retry(client,
                         text=chunk_text,
                         voice_id=voice_id,
                         voice_settings=build_elevenlabs_voice_settings(),
@@ -2974,6 +2992,8 @@ def generate_voice_audio(text, voice_id, output_path, eleven_config=None):
                     traceback.print_exc()
                     if is_elevenlabs_credit_quota_error(str(e), None):
                         raise ValueError(f"ElevenLabs credit/quota error: {e}") from e
+                    if is_transient_error(e):
+                        raise  # This chunk already exhausted its bounded retries.
                     print("[DEBUG] Falling back to REST API...")
                     return generate_voice_audio_rest(text, voice_id, output_path, eleven_config)
             with open(output_path, 'wb') as f:
@@ -2999,7 +3019,7 @@ def generate_voice_audio(text, voice_id, output_path, eleven_config=None):
                         if len(chunk_text) > ELEVENLABS_CHUNK_MAX_CHARS:
                             print(f"[WARNING] Chunk {idx+1} is very long ({len(chunk_text)} chars). Consider splitting further if you see timeouts.")
                         start_time = time.time()
-                        audio_stream = client.text_to_speech.convert(
+                        audio_stream = elevenlabs_audio_with_retry(client,
                             **build_elevenlabs_convert_kwargs(
                                 chunk_text,
                                 voice_id,
@@ -3028,6 +3048,8 @@ def generate_voice_audio(text, voice_id, output_path, eleven_config=None):
                                 try: os.remove(p)
                                 except: pass
                             raise ValueError(f"ElevenLabs credit/quota error: {error_msg}")
+                        if is_transient_error(e):
+                            raise  # This chunk already exhausted its bounded retries.
                         print("[DEBUG] Falling back to REST API...")
                         for p in temp_audio_paths:
                             try: os.remove(p)
@@ -3040,7 +3062,7 @@ def generate_voice_audio(text, voice_id, output_path, eleven_config=None):
                         if len(chunk_text) > ELEVENLABS_CHUNK_MAX_CHARS:
                             print(f"[WARNING] Chunk {idx+1} is very long ({len(chunk_text)} chars). Consider splitting further if you see timeouts.")
                         start_time = time.time()
-                        audio_stream = client.text_to_speech.convert(
+                        audio_stream = elevenlabs_audio_with_retry(client,
                             **build_elevenlabs_convert_kwargs(
                                 chunk_text,
                                 voice_id,
@@ -3069,6 +3091,8 @@ def generate_voice_audio(text, voice_id, output_path, eleven_config=None):
                                 try: os.remove(p)
                                 except: pass
                             raise ValueError(f"ElevenLabs credit/quota error: {error_msg}")
+                        if is_transient_error(e):
+                            raise  # This chunk already exhausted its bounded retries.
                         print("[DEBUG] Falling back to REST API...")
                         for p in temp_audio_paths:
                             try: os.remove(p)
@@ -3121,7 +3145,13 @@ def generate_voice_audio_rest(text, voice_id, output_path, eleven_config=None):
         try:
             print(f"[DEBUG] ElevenLabs API payload: {json.dumps(payload)[:500]}{'...' if len(json.dumps(payload)) > 500 else ''}")
             start_time = time.time()
-            response = requests.post(url, json=payload, headers=headers, timeout=180)
+            def request_chunk():
+                result = requests.post(url, json=payload, headers=headers, timeout=(10, 180))
+                if is_elevenlabs_credit_quota_error(result.text if result.status_code != 200 else "", result.status_code):
+                    raise ValueError("ElevenLabs credit/quota error: insufficient credits; using the configured voice fallback.")
+                result.raise_for_status()
+                return result
+            response = retry_transient(request_chunk, label="ElevenLabs audio")
             elapsed = time.time() - start_time
             print(f"[DEBUG] ElevenLabs API call took {elapsed:.2f} seconds")
             print(f"[DEBUG] ElevenLabs REST API response status: {response.status_code}")
@@ -3232,7 +3262,7 @@ def generate_google_voice_audio(text, voice_name, output_path):
         print(f"[DEBUG] Voice: {voice_name}, Text length: {len(text)}")
         
         # Keep the existing sentence-aware chunk size and brisk speaking rate.
-        chunks = split_text_into_chunks(text, max_length=4000)
+        chunks = split_text_into_chunks(text, max_length=4000, preserve_words=True)
         print(f"[DEBUG] generate_google_voice_audio: Preparing to send {len(chunks)} chunk(s) to Google TTS API.")
 
         if not chunks:
@@ -3340,8 +3370,9 @@ def _generate_single_google_chunk(text, voice_name, output_path):
         else:
             print("✅ TTS text is clean - proceeding with generation")
         
-        # Set up the synthesis input
-        synthesis_input = texttospeech.SynthesisInput(text=text)
+        # Apply pronunciation rules after cleaning and to every chunk. Keep the
+        # same input on retries so business names never lose their guidance.
+        synthesis_input = build_google_synthesis_input(text)
         
         # Set up the voice parameters
         voice = texttospeech.VoiceSelectionParams(
@@ -4022,6 +4053,7 @@ if __name__ == '__main__':
         steps = [s.strip() for s in workflow_code.split(',') if s.strip()]
         print(f"[DEBUG] Steps to execute: {steps}")
         all_outputs = []  # Track output for every step, even if None
+        LOCAL_ARTIFACTS = LocalArtifacts()
         final_audio_path = None
         final_audio_filename = None
         final_description_text = None
@@ -4038,7 +4070,7 @@ if __name__ == '__main__':
                 output_record[col] = ''
         # Create the initial row in the Outputs tab
         output_row = [to_native(output_record.get(col, '')) for col in outputs_df.columns]
-        outputs_ws.append_row(output_row)
+        LOCAL_ARTIFACTS.log_to_sheet(lambda: outputs_ws.append_row(output_row))
         # Get the row number of the newly created row
         current_output_row = len(outputs_df) + 2  # +2 because of 1-based indexing and header row
         print(f"[INFO] Created Output ID: {output_record['Output ID']} at row {current_output_row}")
@@ -4182,7 +4214,8 @@ if __name__ == '__main__':
                     # After each step, update the Outputs tab with the current output_record
                     output_row = [to_native(output_record.get(col, '')) for col in outputs_df.columns]
                     last_col_letter = colnum_to_excel_col(len(outputs_df.columns))
-                    outputs_ws.update(f'A{current_output_row}:{last_col_letter}{current_output_row}', [output_row])
+                    LOCAL_ARTIFACTS.write_json('outputs.json', output_record)
+                    LOCAL_ARTIFACTS.log_to_sheet(lambda: outputs_ws.update(f'A{current_output_row}:{last_col_letter}{current_output_row}', [output_row]))
                     # Only print the first 100 characters of the output
                     output_col_out = f'Output {2*i+2}'
                     output_val = output_record.get(output_col_out, '')
@@ -4515,7 +4548,7 @@ if __name__ == '__main__':
                             clean_prefix = save_folder_prefix.rstrip('/')
                             destination_path = f"{clean_prefix}/{audio_filename}"
                             file_link = upload_audio_to_gcs(audio_path, destination_path)
-                            log_msg = f"Generated and uploaded audio to Google Cloud Storage: {file_link}"
+                            log_msg = f"Generated audio saved: {file_link}"
                             print(f"    > {log_msg}")
                         else:
                             print(f"File {audio_path} does not exist, skipping upload.")
@@ -4654,7 +4687,7 @@ if __name__ == '__main__':
                     
                     try:
                         audio_link = upload_file_to_gcs(audio_path, f"{save_folder_prefix}/{audio_filename}")
-                        log_msg = f"Google Voice audio generated and saved to Google Cloud Storage: {audio_link}"
+                        log_msg = f"Google Voice audio generated and saved: {audio_link}"
                     except Exception as e:
                         log_msg = f"Failed to save Google Voice audio to Google Cloud Storage: {e}"
                     
@@ -4842,7 +4875,7 @@ if __name__ == '__main__':
                             clean_prefix = save_folder_prefix.rstrip('/')
                             destination_path = f"{clean_prefix}/{audio_filename}"
                             file_link = upload_audio_to_gcs(merged_path, destination_path)
-                            log_msg = f"Merged and uploaded audio to Google Cloud Storage: {file_link}"
+                            log_msg = f"Merged audio saved: {file_link}"
                             print(f"    > {log_msg}")
                         else:
                             print(f"File {merged_path} does not exist, skipping upload.")
@@ -4977,7 +5010,8 @@ if __name__ == '__main__':
                 # After each step, update the Outputs tab with the current output_record
                 output_row = [to_native(output_record.get(col, '')) for col in outputs_df.columns]
                 last_col_letter = colnum_to_excel_col(len(outputs_df.columns))
-                outputs_ws.update(f'A{current_output_row}:{last_col_letter}{current_output_row}', [output_row])
+                LOCAL_ARTIFACTS.write_json('outputs.json', output_record)
+                LOCAL_ARTIFACTS.log_to_sheet(lambda: outputs_ws.update(f'A{current_output_row}:{last_col_letter}{current_output_row}', [output_row]))
                 # Only print the first 100 characters of the output
                 output_col_out = f'Output {2*i+2}'
                 output_val = output_record.get(output_col_out, '')
@@ -4992,10 +5026,11 @@ if __name__ == '__main__':
                 print("[FATAL] Workflow execution halted due to error.")
                 sys.exit(1)
 
-        # Write to Workflow Steps tab
+        # Keep local audit records even when Google logging is unavailable.
+        LOCAL_ARTIFACTS.write_json('workflow_steps.json', workflow_steps_records)
         for ws_row in workflow_steps_records:
             ws_row_native = [to_native(x) for x in ws_row]
-            workflow_steps_ws.append_row(ws_row_native)
+            LOCAL_ARTIFACTS.log_to_sheet(lambda: workflow_steps_ws.append_row(ws_row_native))
         # Mark request as processed (disabled per user request)
         # requests_ws.update_cell(req_idx + 2, requests_df.columns.get_loc('Active') + 1, 'N')
         print(f"✅ Workflow {workflow_id} processed and logged.")

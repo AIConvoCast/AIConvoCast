@@ -54,6 +54,8 @@ def test_environment_variables():
             print("OK GMAIL_OAUTH_TOKEN_JSON: set (value hidden)")
         elif token_file.is_file():
             print(f"OK Gmail OAuth token file: {token_file}")
+        elif os.getenv("PODCAST_SMTP_USERNAME") and os.getenv("PODCAST_SMTP_PASSWORD"):
+            print("Gmail OAuth not configured; SMTP fallback credentials are present.")
         else:
             print(
                 "MISSING Gmail OAuth authorization: set GMAIL_OAUTH_TOKEN_B64 "
