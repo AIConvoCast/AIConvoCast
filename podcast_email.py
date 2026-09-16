@@ -136,7 +136,7 @@ def build_podcast_email(
     return message
 
 
-def _load_gmail_oauth_credentials() -> Credentials:
+def _load_gmail_oauth_credentials(*, force_refresh=False) -> Credentials:
     """Load a send-only Gmail OAuth grant from an env secret or local file."""
     token_b64 = os.getenv("GMAIL_OAUTH_TOKEN_B64", "").strip()
     token_json = os.getenv("GMAIL_OAUTH_TOKEN_JSON", "").strip()
@@ -179,13 +179,14 @@ def _load_gmail_oauth_credentials() -> Credentials:
             "The Gmail OAuth grant has no refresh token. Run "
             "'python configure_gmail_oauth.py' again to reauthorize."
         )
-    if not credentials.valid:
+    if force_refresh or not credentials.valid:
         try:
             retry_transient(lambda: credentials.refresh(Request()), label="Gmail authorization")
         except Exception as exc:
             raise RuntimeError(
                 "The Gmail OAuth grant could not be refreshed. Reauthorize "
-                "AIConvoCast with configure_gmail_oauth.py."
+                "AIConvoCast with configure_gmail_oauth.py. For GitHub runs, also "
+                "replace GMAIL_OAUTH_TOKEN_B64 in the production environment secrets."
             ) from exc
     return credentials
 
@@ -220,7 +221,8 @@ def _send_with_gmail_api(message: EmailMessage, credentials=None) -> None:
         raise DeliveryUncertain("Gmail delivery was not confirmed; check Sent before resending.") from exc
 
 
-def _send_with_smtp(message: EmailMessage) -> None:
+def _connect_smtp():
+    """Authenticate without submitting a message, for delivery or preflight."""
     username = _required_env("PODCAST_SMTP_USERNAME")
     password = _required_env("PODCAST_SMTP_PASSWORD")
     host = os.getenv("PODCAST_SMTP_HOST", DEFAULT_SMTP_HOST).strip()
@@ -240,9 +242,13 @@ def _send_with_smtp(message: EmailMessage) -> None:
             raise
 
     try:
-        smtp = retry_transient(connect, label="SMTP connection")
+        return retry_transient(connect, label="SMTP connection")
     except Exception as exc:
         raise DeliveryNotAttempted("SMTP could not connect or authenticate.") from exc
+
+
+def _send_with_smtp(message: EmailMessage) -> None:
+    smtp = _connect_smtp()
     try:
         retry_transient(
             lambda: smtp.send_message(message),
@@ -258,6 +264,41 @@ def _send_with_smtp(message: EmailMessage) -> None:
         smtp.close()
 
 
+def _smtp_fallback_enabled():
+    return bool(os.getenv("PODCAST_SMTP_USERNAME") and os.getenv("PODCAST_SMTP_PASSWORD")
+                and os.getenv("PODCAST_SMTP_FALLBACK", "true").lower() not in {"0", "false", "no"})
+
+
+def check_email_authorization():
+    """Check a usable delivery credential before paid generation; send no email."""
+    backend = os.getenv("PODCAST_EMAIL_BACKEND", "gmail_api").strip().lower()
+    if backend not in {"gmail_api", "smtp"}:
+        raise RuntimeError("PODCAST_EMAIL_BACKEND must be either 'gmail_api' or 'smtp'.")
+    if backend == "gmail_api":
+        try:
+            # A cached access token can still be valid after its grant expires.
+            _load_gmail_oauth_credentials(force_refresh=True)
+            return "gmail_api"
+        except Exception as gmail_error:
+            if not _smtp_fallback_enabled():
+                raise RuntimeError(
+                    "Gmail authorization failed before generation. Run python "
+                    "configure_gmail_oauth.py locally, then replace GMAIL_OAUTH_TOKEN_B64 "
+                    "in GitHub's production environment secrets with gmail_oauth_token.b64. "
+                    "Temporary connection failures were retried; no email was sent."
+                ) from gmail_error
+            print("Gmail authorization failed; checking the configured SMTP fallback.")
+    try:
+        smtp = _connect_smtp()
+        smtp.close()
+    except Exception as exc:
+        raise RuntimeError(
+            "Email authorization failed before generation. Repair the configured "
+            "Gmail grant or SMTP credentials; no email was sent."
+        ) from exc
+    return "smtp"
+
+
 def _deliver(message, backend):
     if backend == "smtp":
         _send_with_smtp(message)
@@ -266,8 +307,7 @@ def _deliver(message, backend):
         _send_with_gmail_api(message)
         return "gmail_api"
     except (DeliveryNotAttempted, DeliveryRejected) as gmail_error:
-        if (os.getenv("PODCAST_SMTP_USERNAME") and os.getenv("PODCAST_SMTP_PASSWORD")
-                and os.getenv("PODCAST_SMTP_FALLBACK", "true").lower() not in {"0", "false", "no"}):
+        if _smtp_fallback_enabled():
             print("Gmail did not accept the message; using the configured SMTP fallback.")
             try:
                 _send_with_smtp(message)
@@ -380,12 +420,27 @@ def resend_saved_email(path, *, allow_uncertain=False):
     _deliver_saved(message, path, os.getenv("PODCAST_EMAIL_BACKEND", "gmail_api"))
 
 
-if __name__ == "__main__":
+def main(argv=None):
     import argparse
     from dotenv import load_dotenv
     load_dotenv()
-    parser = argparse.ArgumentParser(description="Resend a saved podcast email without regenerating audio.")
-    parser.add_argument("--resend", required=True, type=Path)
+    parser = argparse.ArgumentParser(description="Check email authorization or resend a saved podcast email.")
+    action = parser.add_mutually_exclusive_group(required=True)
+    action.add_argument("--resend", type=Path)
+    action.add_argument("--check-auth", action="store_true", help="Validate credentials without sending email or generating audio.")
     parser.add_argument("--confirm-not-delivered", action="store_true")
-    args = parser.parse_args()
-    resend_saved_email(args.resend, allow_uncertain=args.confirm_not_delivered)
+    args = parser.parse_args(argv)
+    if args.check_auth:
+        try:
+            backend = check_email_authorization()
+        except RuntimeError as exc:
+            print(str(exc))
+            return 1
+        print(f"Email authorization verified via {backend}. No email sent.")
+    else:
+        resend_saved_email(args.resend, allow_uncertain=args.confirm_not_delivered)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

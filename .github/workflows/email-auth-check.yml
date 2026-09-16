@@ -1,0 +1,27 @@
+name: Check podcast email authorization
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check-email:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install email dependencies
+        run: python -m pip install google-auth google-api-python-client python-dotenv requests httpx
+      - name: Check production authorization without sending email
+        run: python podcast_email.py --check-auth
+        env:
+          PODCAST_EMAIL_BACKEND: gmail_api
+          GMAIL_OAUTH_TOKEN_B64: ${{ secrets.GMAIL_OAUTH_TOKEN_B64 }}
+          PODCAST_SMTP_USERNAME: ${{ secrets.PODCAST_SMTP_USERNAME }}
+          PODCAST_SMTP_PASSWORD: ${{ secrets.PODCAST_SMTP_PASSWORD }}

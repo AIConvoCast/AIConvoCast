@@ -5,11 +5,13 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+from google.auth.exceptions import RefreshError
 
 from podcast_email import (
     GMAIL_SEND_SCOPE,
     _load_gmail_oauth_credentials,
     build_podcast_email,
+    check_email_authorization,
     send_podcast_email,
 )
 
@@ -182,6 +184,71 @@ class PodcastEmailTests(unittest.TestCase):
             token_info,
             scopes=[GMAIL_SEND_SCOPE],
         )
+
+
+class EmailAuthorizationTests(unittest.TestCase):
+    def setUp(self):
+        env = patch.dict(os.environ, {"GMAIL_OAUTH_TOKEN_JSON": "{}"}, clear=True)
+        env.start()
+        self.addCleanup(env.stop)
+
+    @patch("podcast_email.build")
+    @patch("podcast_email.Credentials.from_authorized_user_info")
+    def test_preflight_refreshes_even_valid_cached_access_token_without_sending(self, factory, build):
+        credentials = factory.return_value
+        credentials.valid = True
+        self.assertEqual(check_email_authorization(), "gmail_api")
+        credentials.refresh.assert_called_once()
+        build.assert_not_called()
+
+    @patch("podcast_email.smtplib.SMTP_SSL")
+    @patch("podcast_email.Credentials.from_authorized_user_info")
+    def test_revoked_refresh_token_fails_with_github_repair_instructions(self, factory, smtp):
+        factory.return_value.valid = True
+        factory.return_value.refresh.side_effect = RefreshError("invalid_grant: expired")
+        with self.assertRaisesRegex(RuntimeError, "production environment secrets"):
+            check_email_authorization()
+        factory.return_value.refresh.assert_called_once()
+        smtp.assert_not_called()
+
+    @patch("podcast_email.smtplib.SMTP_SSL")
+    @patch("podcast_email._load_gmail_oauth_credentials", side_effect=RuntimeError("invalid_grant"))
+    def test_preflight_accepts_working_smtp_fallback_without_sending(self, gmail, smtp):
+        os.environ.update(PODCAST_SMTP_USERNAME="sender@example.com", PODCAST_SMTP_PASSWORD="password")
+        self.assertEqual(check_email_authorization(), "smtp")
+        smtp.return_value.login.assert_called_once_with("sender@example.com", "password")
+        smtp.return_value.close.assert_called_once()
+        smtp.return_value.send_message.assert_not_called()
+
+    @patch("podcast_email.smtplib.SMTP_SSL")
+    @patch("podcast_email._load_gmail_oauth_credentials", side_effect=RuntimeError("invalid_grant"))
+    def test_disabled_smtp_fallback_does_not_authenticate(self, gmail, smtp):
+        os.environ.update(PODCAST_SMTP_USERNAME="sender@example.com", PODCAST_SMTP_PASSWORD="password",
+                          PODCAST_SMTP_FALLBACK="false")
+        with self.assertRaisesRegex(RuntimeError, "before generation"):
+            check_email_authorization()
+        smtp.assert_not_called()
+
+    @patch("podcast_email.smtplib.SMTP_SSL")
+    @patch("podcast_email._load_gmail_oauth_credentials", side_effect=RuntimeError("invalid_grant"))
+    def test_both_backends_unavailable_fail_before_generation(self, gmail, smtp):
+        import smtplib
+        os.environ.update(PODCAST_SMTP_USERNAME="sender@example.com", PODCAST_SMTP_PASSWORD="password")
+        smtp.return_value.login.side_effect = smtplib.SMTPAuthenticationError(535, b"Invalid credentials")
+        with self.assertRaisesRegex(RuntimeError, "before generation"):
+            check_email_authorization()
+        smtp.return_value.login.assert_called_once()
+        smtp.return_value.close.assert_called_once()
+        smtp.return_value.send_message.assert_not_called()
+
+    @patch("podcast_email.smtplib.SMTP_SSL")
+    @patch("podcast_email._load_gmail_oauth_credentials")
+    def test_smtp_backend_does_not_require_gmail(self, gmail, smtp):
+        os.environ.update(PODCAST_EMAIL_BACKEND="smtp", PODCAST_SMTP_USERNAME="sender@example.com",
+                          PODCAST_SMTP_PASSWORD="password")
+        self.assertEqual(check_email_authorization(), "smtp")
+        gmail.assert_not_called()
+        smtp.return_value.send_message.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -32,6 +32,14 @@ jobs:
       - name: Verify audio processing
         run: python -m unittest test_google_audio_quality -v
 
+      - name: Verify email authorization before paid generation
+        run: python podcast_email.py --check-auth
+        env:
+          PODCAST_EMAIL_BACKEND: gmail_api
+          GMAIL_OAUTH_TOKEN_B64: ${{ secrets.GMAIL_OAUTH_TOKEN_B64 }}
+          PODCAST_SMTP_USERNAME: ${{ secrets.PODCAST_SMTP_USERNAME }}
+          PODCAST_SMTP_PASSWORD: ${{ secrets.PODCAST_SMTP_PASSWORD }}
+
       - name: Set up environment variables
         run: |
           echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> $GITHUB_ENV

@@ -26,6 +26,25 @@ after a definitive Gmail failure. SMTP also requires valid credentials; a reject
 app password cannot be repaired by retrying. Existing GitHub secrets need no change
 when GitHub delivery already works.
 
+If **GitHub** reports `invalid_grant`, renew locally and replace
+`GMAIL_OAUTH_TOKEN_B64` under **Settings > Environments > production > Environment
+secrets** using the contents of `gmail_oauth_token.b64`. A repository-level secret
+does not override an existing environment secret. Never paste token contents into
+logs, issues, or commits. Run **Check podcast email authorization** from Actions
+to verify the production secret without generating an episode or sending mail.
+
+Both pipeline workflows check email authorization before paid generation. The
+check forces a refresh even if the cached access token is still valid, accepts a
+working configured SMTP fallback, and stops the run if neither can authenticate.
+It does not guarantee later message acceptance or replace saved-email recovery.
+The local equivalent is `python podcast_email.py --check-auth`.
+
+Google OAuth apps in **Testing** issue Gmail refresh tokens that expire after
+seven days. For unattended use, change the app's publishing status to
+**In production** in Google Auth Platform > Audience, then authorize again and
+replace the production secret. This removes the testing expiration limit; grants
+can still be revoked. See [Google's token expiration documentation](https://developers.google.com/identity/protocols/oauth2#expiration).
+
 ## Preserving and recovering an episode
 
 Each generated upload is copied into `generated_mp3/runs/<run>/` before cloud work.
