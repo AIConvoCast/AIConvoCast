@@ -68,3 +68,7 @@ merged_audio_*.mp3
 
 # Computer automation agent (private/local use only)
 computer_agent/
+
+# Generated website and local browser test artifacts
+public/
+.site-qa/

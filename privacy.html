@@ -7,28 +7,26 @@
   <meta name="robots" content="index,follow">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#101820">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; frame-ancestors 'none'; base-uri 'self'; upgrade-insecure-requests">
-  <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; media-src https://anchor.fm https://*.cloudfront.net https://*.spotify.com; connect-src 'self' https://formspree.io; form-action https://formspree.io; base-uri 'none'; object-src 'none'; manifest-src 'self'; upgrade-insecure-requests">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
   <link rel="canonical" href="https://aiconvocast.com/privacy.html">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="icon" type="image/jpeg" href="ai-convo-cast-logo.jpg">
-  <link rel="apple-touch-icon" href="ai-convo-cast-logo.jpg">
-  <link rel="manifest" href="manifest.json">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" type="image/jpeg" href="/ai-convo-cast-logo.jpg">
+  <link rel="apple-touch-icon" href="/ai-convo-cast-logo.jpg">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/main.js" defer></script>
 </head>
 <body>
   <a href="#main-content" class="skip-link">Skip to main content</a>
   <header class="header">
     <nav class="nav" aria-label="Main navigation">
-      <a href="index.html" class="brand" aria-label="AI Convo Cast home">
-        <img src="ai-convo-cast-logo.jpg" alt="" width="36" height="36">
+      <a href="/" class="brand" aria-label="AI Convo Cast home">
+        <img src="/ai-convo-cast-logo.jpg" alt="" width="36" height="36">
         <span>AI Convo Cast</span>
       </a>
       <div class="nav-links">
-        <a href="episodes.html" class="nav-link">Episodes</a>
-        <a href="contact.html" class="nav-link">Contact</a>
+        <a href="/episodes.html" class="nav-link">Episodes</a>
+        <a href="/contact.html" class="nav-link">Contact</a>
       </div>
     </nav>
   </header>
@@ -43,9 +41,11 @@
     <section class="contact-section">
       <div class="contact-form">
         <h2>Website Data</h2>
-        <p>The website loads podcast episode data from the public RSS feed and may store a short-lived copy in your browser so pages load faster.</p>
+        <p>Episode pages are built from the public podcast feed. This website does not use analytics cookies or store episode data in browser local storage. GitHub Pages hosts the site and may process routine request information, such as your IP address, to deliver and secure it.</p>
         <h2>Contact Form</h2>
         <p>If you contact us, your form submission is sent through Formspree and used only to respond to your message.</p>
+        <h2>Audio Playback</h2>
+        <p>When you play an episode, your browser requests audio from Spotify/Anchor and its media delivery providers. Those services receive the information needed to deliver the audio. Episode audio is not downloaded until you choose to play it.</p>
         <h2>Podcast Platforms</h2>
         <p>Links to Spotify, Apple Podcasts, Amazon Music, and the RSS feed are governed by those services when you open them.</p>
       </div>
@@ -53,13 +53,10 @@
   </main>
 
   <footer class="footer">
-    <span>&copy; <span id="year"></span> AI Convo Cast</span>
-    <a href="privacy.html">Privacy</a>
+    <span>&copy; <span id="year">{{YEAR}}</span> AI Convo Cast</span>
+    <a href="/privacy.html">Privacy</a>
     <a href="https://anchor.fm/s/101530384/podcast/rss" rel="noopener noreferrer">RSS Feed</a>
     <a href="https://github.com/AIConvoCast/AIConvoCast" rel="noopener noreferrer">GitHub</a>
   </footer>
-  <script>
-    document.getElementById("year").textContent = new Date().getFullYear();
-  </script>
 </body>
 </html>

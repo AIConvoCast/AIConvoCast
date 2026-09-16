@@ -5,6 +5,19 @@ on:
   # Runs on pushes targeting the default branch
   push:
     branches: ["main"]
+    paths:
+      - '*.html'
+      - '*.css'
+      - 'main.js'
+      - 'contact.js'
+      - 'build_site.py'
+      - 'test_site.py'
+      - 'ai-convo-cast-logo.jpg'
+      - 'manifest.json'
+      - 'CNAME'
+      - '.github/workflows/static.yml'
+  schedule:
+    - cron: '17 */2 * * *'
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
@@ -28,15 +41,20 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Setup Pages
         uses: actions/configure-pages@v5
-      - name: Prepare public site
-        run: |
-          mkdir -p public
-          cp index.html episodes.html contact.html privacy.html styles.css main.js ai-convo-cast-logo.jpg manifest.json CNAME public/
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify site generation
+        run: python -m unittest test_site -v
+      - name: Build current episodes and search metadata
+        run: python build_site.py --output public
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:

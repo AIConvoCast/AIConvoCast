@@ -8,28 +8,27 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#101820">
   <meta name="author" content="AI Convo Cast">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; connect-src 'self' https://formspree.io; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; frame-ancestors 'none'; base-uri 'self'; form-action https://formspree.io; upgrade-insecure-requests">
-  <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; media-src https://anchor.fm https://*.cloudfront.net https://*.spotify.com; connect-src 'self' https://formspree.io; form-action https://formspree.io; base-uri 'none'; object-src 'none'; manifest-src 'self'; upgrade-insecure-requests">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
   <link rel="canonical" href="https://aiconvocast.com/contact.html">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="icon" type="image/jpeg" href="ai-convo-cast-logo.jpg">
-  <link rel="apple-touch-icon" href="ai-convo-cast-logo.jpg">
-  <link rel="manifest" href="manifest.json">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" type="image/jpeg" href="/ai-convo-cast-logo.jpg">
+  <link rel="apple-touch-icon" href="/ai-convo-cast-logo.jpg">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/main.js" defer></script>
+  <script src="/contact.js" defer></script>
 </head>
 <body>
   <a href="#main-content" class="skip-link">Skip to main content</a>
   <header class="header">
     <nav class="nav" aria-label="Main navigation">
-      <a href="index.html" class="brand" aria-label="AI Convo Cast home">
-        <img src="ai-convo-cast-logo.jpg" alt="" width="36" height="36">
+      <a href="/" class="brand" aria-label="AI Convo Cast home">
+        <img src="/ai-convo-cast-logo.jpg" alt="" width="36" height="36">
         <span>AI Convo Cast</span>
       </a>
       <div class="nav-links">
-        <a href="episodes.html" class="nav-link">Episodes</a>
-        <a href="contact.html" class="nav-link nav-link-active">Contact</a>
+        <a href="/episodes.html" class="nav-link">Episodes</a>
+        <a href="/contact.html" class="nav-link nav-link-active">Contact</a>
       </div>
     </nav>
   </header>
@@ -42,7 +41,7 @@
     </section>
 
     <section class="contact-section" aria-label="Contact form">
-      <form id="contact-form" class="contact-form" action="https://formspree.io/f/mnqewqzv" method="POST" novalidate autocomplete="on">
+      <form id="contact-form" class="contact-form" action="https://formspree.io/f/mnqewqzv" method="POST" autocomplete="on">
         <input type="hidden" name="data-form" value="contact-aiconvocast">
         <div class="form-row">
           <label for="name">Name</label>
@@ -62,56 +61,16 @@
         </div>
         <button type="submit" class="cta-btn">Send Message</button>
       </form>
-      <div id="thank-you-message" class="status-message success-message" role="status" hidden>Thank you for contacting us. Redirecting to home...</div>
+      <p id="form-status" class="status-message" role="status" tabindex="-1" hidden></p>
+      <p>Prefer email? <a href="mailto:AIConvoCast@gmail.com">AIConvoCast@gmail.com</a></p>
     </section>
   </main>
 
   <footer class="footer">
-    <span>&copy; <span id="year"></span> AI Convo Cast</span>
-    <a href="privacy.html">Privacy</a>
+    <span>&copy; <span id="year">{{YEAR}}</span> AI Convo Cast</span>
+    <a href="/privacy.html">Privacy</a>
     <a href="https://anchor.fm/s/101530384/podcast/rss" rel="noopener noreferrer">RSS Feed</a>
     <a href="https://github.com/AIConvoCast/AIConvoCast" rel="noopener noreferrer">GitHub</a>
   </footer>
-  <script>
-    document.getElementById("year").textContent = new Date().getFullYear();
-    document.getElementById("contact-form").addEventListener("submit", function (event) {
-      event.preventDefault();
-      var form = event.target;
-      var valid = true;
-
-      ["name", "email", "subject", "message"].forEach(function (id) {
-        var field = form.elements[id];
-        if (!field.value.trim()) {
-          field.classList.add("input-error");
-          valid = false;
-        } else {
-          field.classList.remove("input-error");
-        }
-      });
-
-      var email = form.elements.email.value.trim();
-      if (!/^[^@]+@[^@]+\.[^@]+$/.test(email)) {
-        form.elements.email.classList.add("input-error");
-        valid = false;
-      }
-
-      if (!valid) return;
-
-      fetch(form.action, {
-        method: "POST",
-        body: new FormData(form),
-        headers: { Accept: "application/json" },
-        mode: "cors",
-        credentials: "omit"
-      }).then(function (response) {
-        if (!response.ok) throw new Error("Form submission failed");
-        form.hidden = true;
-        document.getElementById("thank-you-message").hidden = false;
-        setTimeout(function () { window.location.href = "/"; }, 2500);
-      }).catch(function () {
-        alert("Sorry, there was a problem submitting your message.");
-      });
-    });
-  </script>
 </body>
 </html>

@@ -9,8 +9,8 @@
   <meta name="theme-color" content="#101820">
   <meta name="author" content="AI Convo Cast">
   <meta name="keywords" content="AI podcast, artificial intelligence news, AI trends, machine learning, tech podcast, daily AI news">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' https://*.cloudfront.net data:; media-src https://anchor.fm https://*.cloudfront.net; connect-src 'self' https://anchor.fm; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; frame-ancestors 'none'; base-uri 'self'; upgrade-insecure-requests">
-  <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; media-src https://anchor.fm https://*.cloudfront.net https://*.spotify.com; connect-src 'self' https://formspree.io; form-action https://formspree.io; base-uri 'none'; object-src 'none'; manifest-src 'self'; upgrade-insecure-requests">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
   <link rel="canonical" href="https://aiconvocast.com/">
   <link rel="alternate" type="application/rss+xml" title="AI Convo Cast RSS" href="https://anchor.fm/s/101530384/podcast/rss">
   <meta property="og:title" content="AI Convo Cast - Daily AI News Podcast">
@@ -44,26 +44,23 @@
     "inLanguage": "en-US"
   }
   </script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="icon" type="image/jpeg" href="ai-convo-cast-logo.jpg">
-  <link rel="apple-touch-icon" href="ai-convo-cast-logo.jpg">
-  <link rel="manifest" href="manifest.json">
-  <link rel="stylesheet" href="styles.css">
-  <script src="main.js" defer></script>
+  <link rel="icon" type="image/jpeg" href="/ai-convo-cast-logo.jpg">
+  <link rel="apple-touch-icon" href="/ai-convo-cast-logo.jpg">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/main.js" defer></script>
 </head>
 <body>
   <a href="#main-content" class="skip-link">Skip to main content</a>
   <header class="header">
     <nav class="nav" aria-label="Main navigation">
-      <a href="index.html" class="brand" aria-label="AI Convo Cast home">
-        <img src="ai-convo-cast-logo.jpg" alt="" width="36" height="36">
+      <a href="/" class="brand" aria-label="AI Convo Cast home">
+        <img src="/ai-convo-cast-logo.jpg" alt="" width="36" height="36">
         <span>AI Convo Cast</span>
       </a>
       <div class="nav-links">
-        <a href="episodes.html" class="nav-link">Episodes</a>
-        <a href="contact.html" class="nav-link">Contact</a>
+        <a href="/episodes.html" class="nav-link">Episodes</a>
+        <a href="/contact.html" class="nav-link">Contact</a>
       </div>
     </nav>
   </header>
@@ -80,7 +77,7 @@
           <a href="https://music.amazon.com/podcasts/7eabb746-7628-43ca-832f-e06b1c97e4df/ai-convo-cast" class="cta-btn cta-btn-secondary" rel="noopener noreferrer" target="_blank">Amazon Music</a>
         </div>
       </div>
-      <img src="ai-convo-cast-logo.jpg" alt="AI Convo Cast cover art" class="hero-logo" width="260" height="260">
+      <img src="/ai-convo-cast-logo.jpg" alt="AI Convo Cast cover art" class="hero-logo" width="260" height="260">
     </section>
 
     <section class="episodes-section" aria-labelledby="episodes-heading">
@@ -89,22 +86,19 @@
           <p class="eyebrow">Fresh from the feed</p>
           <h2 id="episodes-heading">Latest Episodes</h2>
         </div>
-        <a href="episodes.html" class="text-link">View all episodes</a>
+        <a href="/episodes.html" class="text-link">View all episodes</a>
       </div>
-      <div id="latest-episode-highlight" class="latest-episode-highlight" aria-live="polite"></div>
-      <div id="episodes-grid" class="episodes-grid" data-limit="6"></div>
-      <div id="episodes-error" class="status-message" role="status"></div>
+      <div id="latest-episode-highlight" class="latest-episode-highlight">{{LATEST_EPISODE}}</div>
+      <div id="episodes-grid" class="episodes-grid">{{EPISODES}}</div>
+      <p class="feed-updated">{{FEED_UPDATED}}</p>
     </section>
   </main>
 
   <footer class="footer">
-    <span>&copy; <span id="year"></span> AI Convo Cast</span>
-    <a href="privacy.html">Privacy</a>
+    <span>&copy; <span id="year">{{YEAR}}</span> AI Convo Cast</span>
+    <a href="/privacy.html">Privacy</a>
     <a href="https://anchor.fm/s/101530384/podcast/rss" rel="noopener noreferrer">RSS Feed</a>
     <a href="https://github.com/AIConvoCast/AIConvoCast" rel="noopener noreferrer">GitHub</a>
   </footer>
-  <script>
-    document.getElementById("year").textContent = new Date().getFullYear();
-  </script>
 </body>
 </html>

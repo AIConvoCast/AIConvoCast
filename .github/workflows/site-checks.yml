@@ -1,0 +1,29 @@
+name: Website checks
+
+on:
+  push:
+    branches: [main]
+    paths: ['*.html', '*.css', 'main.js', 'contact.js', 'build_site.py', 'test_site.py', 'check_site.py', '.github/workflows/site-checks.yml', '.github/workflows/static.yml']
+  pull_request:
+    paths: ['*.html', '*.css', 'main.js', 'contact.js', 'build_site.py', 'test_site.py', 'check_site.py', '.github/workflows/site-checks.yml', '.github/workflows/static.yml']
+  schedule:
+    - cron: '43 12 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate safe, crawlable site output
+        run: python -m unittest test_site -v
+      - name: Check certificates, redirects, and automatic refresh
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: python check_site.py
