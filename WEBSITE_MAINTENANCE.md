@@ -3,8 +3,10 @@
 GitHub Pages serves the generated `public/` artifact. In repository **Settings >
 Pages**, the source must be **GitHub Actions**, with custom domain `aiconvocast.com`
 and **Enforce HTTPS** enabled after GitHub issues its domain certificate.
-Each deployment also tries to enable HTTPS automatically, so a pending certificate
-will be picked up by a later scheduled deployment without changing DNS again.
+Each deployment checks provisioning and attempts HTTPS enforcement when the
+certificate is ready. GitHub's standard workflow token may lack permission to
+change this owner setting; in that case the workflow warns the repository owner
+to enable **Enforce HTTPS** once in Settings > Pages. It does not change DNS again.
 
 The deploy workflow builds from the Spotify/Anchor RSS feed every two hours and
 when website files change. It creates permanent episode URLs, full show notes,

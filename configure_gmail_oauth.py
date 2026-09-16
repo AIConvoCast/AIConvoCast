@@ -82,9 +82,15 @@ def main() -> int:
             "Desktop app OAuth client from Google Cloud first."
         )
 
-    authorize_local_gmail(client_secrets=client_secrets_path, output=token_path,
-                          github_output=github_secret_path, open_browser=not args.no_browser,
-                          timeout_seconds=args.timeout)
+    try:
+        authorize_local_gmail(client_secrets=client_secrets_path, output=token_path,
+                              github_output=github_secret_path, open_browser=not args.no_browser,
+                              timeout_seconds=args.timeout)
+    except Exception as exc:
+        print(f"Local Google sign-in did not complete ({type(exc).__name__}). "
+              "Run this command again when ready to finish the browser sign-in. "
+              "GitHub credentials were not changed.")
+        return 1
 
     print(f"Created send-only OAuth token: {token_path}")
     print(f"Created GitHub-ready secret file: {github_secret_path}")

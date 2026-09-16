@@ -63,7 +63,7 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-      - name: Enable HTTPS when GitHub finishes certificate issuance
+      - name: Check certificate provisioning and HTTPS enforcement
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: python check_site.py --enable-https

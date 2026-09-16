@@ -22,7 +22,7 @@ class HTTPSConfigurationTests(unittest.TestCase):
     @patch.dict(os.environ, {"GITHUB_REPOSITORY": "AIConvoCast/AIConvoCast", "GITHUB_TOKEN": "test-only"})
     @patch("check_site.urlopen")
     def test_certificate_pending_retries_on_later_deployment(self, open_url):
-        settings = io.BytesIO(b'{"cname":"aiconvocast.com","https_enforced":false}')
+        settings = io.BytesIO(b'{"cname":"aiconvocast.com","https_enforced":false,"https_certificate":{"state":"approved"}}')
         pending = HTTPError("https://api.github.com/repos/AIConvoCast/AIConvoCast/pages", 404, "pending", {},
                             io.BytesIO(b'{"message":"The certificate has not finished being issued"}'))
         open_url.side_effect = [settings, pending]
@@ -30,6 +30,22 @@ class HTTPSConfigurationTests(unittest.TestCase):
         request = open_url.call_args.args[0]
         self.assertEqual(request.method, "PUT")
         self.assertEqual(json.loads(request.data), {"https_enforced": True})
+
+    @patch.dict(os.environ, {"GITHUB_REPOSITORY": "AIConvoCast/AIConvoCast", "GITHUB_TOKEN": "test-only"})
+    @patch("check_site.urlopen")
+    def test_pending_certificate_does_not_attempt_owner_setting(self, open_url):
+        open_url.return_value = io.BytesIO(b'{"cname":"aiconvocast.com","https_enforced":false,"https_certificate":{"state":"authorization_created"}}')
+        self.assertFalse(enable_https_when_ready())
+        open_url.assert_called_once()
+
+    @patch.dict(os.environ, {"GITHUB_REPOSITORY": "AIConvoCast/AIConvoCast", "GITHUB_TOKEN": "test-only"})
+    @patch("check_site.urlopen")
+    def test_owner_permission_is_reported_without_failing_site_deploy(self, open_url):
+        settings = io.BytesIO(b'{"cname":"aiconvocast.com","https_enforced":false,"https_certificate":{"state":"approved"}}')
+        forbidden = HTTPError("https://api.github.com/repos/AIConvoCast/AIConvoCast/pages", 403, "Forbidden", {},
+                              io.BytesIO(b'{"message":"Resource not accessible by integration"}'))
+        open_url.side_effect = [settings, forbidden]
+        self.assertFalse(enable_https_when_ready())
 
     @patch.dict(os.environ, {"GITHUB_REPOSITORY": "AIConvoCast/AIConvoCast", "GITHUB_TOKEN": "test-only"})
     @patch("check_site.urlopen")

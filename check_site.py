@@ -25,6 +25,10 @@ def enable_https_when_ready():
     if settings.get("https_enforced"):
         print("HTTPS enforcement is already enabled.")
         return True
+    certificate = settings.get("https_certificate") or {}
+    if certificate.get("state") not in {"approved", "issued"}:
+        print("::warning::GitHub is still provisioning the domain certificate. Its Pages settings may require up to 24 hours. HTTPS is not yet enforced.")
+        return False
     request = Request(url, headers={**headers, "Content-Type": "application/json"},
                       data=b'{"https_enforced": true}', method="PUT")
     try:
@@ -34,6 +38,9 @@ def enable_https_when_ready():
         detail = json.loads(exc.read()).get("message", "")
         if exc.code == 404 and "certificate has not finished" in detail.lower():
             print("::warning::GitHub is still issuing the domain certificate. HTTPS enforcement will retry on the next site deployment.")
+            return False
+        if exc.code == 403:
+            print("::warning::The certificate is ready, but this workflow cannot change HTTPS enforcement. The repository owner must enable Enforce HTTPS at https://github.com/AIConvoCast/AIConvoCast/settings/pages")
             return False
         raise
     print("HTTPS enforcement enabled.")
