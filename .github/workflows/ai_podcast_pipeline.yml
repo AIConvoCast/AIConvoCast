@@ -1,14 +1,14 @@
 name: Run AI Podcast Pipeline
+run-name: ${{ inputs.dry_run && 'Validate Podcast Scheduler' || ((github.event_name == 'schedule' || inputs.scheduled_run) && 'Scheduled AI Podcast Pipeline' || 'Manual AI Podcast Pipeline') }}
 
 permissions:
   contents: read
 
 on:
   schedule:
-    # Multiple early wake-ups and backups, away from the busy top of the hour.
-    # UTC covers both EST and EDT. Python uses America/New_York to wait until
-    # 4 p.m. Sun-Thu, suppress duplicates, and skip after a manual trigger.
-    - cron: '17 15-22 * * 0-4'
+    # Late fallback only: Google Cloud Scheduler dispatches at 4 p.m. Eastern.
+    # 21:17 UTC is after 4 p.m. in both EST and EDT. Duplicate checks apply.
+    - cron: '17 21 * * 0-4'
   workflow_dispatch:
     inputs:
       custom_topic:
@@ -25,19 +25,29 @@ on:
         required: false
         type: boolean
         default: false
+      scheduled_run:
+        description: 'Automatic scheduler trigger (leave unchecked for a manual run)'
+        required: false
+        type: boolean
+        default: false
+      dry_run:
+        description: 'Validate scheduler checks without generating a podcast'
+        required: false
+        type: boolean
+        default: false
 
-# Keep one automatic runner alive while it waits; newer wake-ups may replace
-# pending backups but must never cancel the active wait or podcast generation.
+# Google dispatches and the native fallback share one automatic run slot.
+# A backup must never cancel active podcast generation.
 # Manual triggers remain immediate and independent.
 concurrency:
-  group: ${{ github.event_name == 'schedule' && 'podcast-automatic' || format('podcast-manual-{0}', github.run_id) }}
+  group: ${{ (github.event_name == 'schedule' || inputs.scheduled_run) && 'podcast-automatic' || format('podcast-manual-{0}', github.run_id) }}
   cancel-in-progress: false
 
 jobs:
   check-schedule:
-    name: Wait for 4 p.m. Eastern and check today's runs
+    name: Check target time and today's runs
     runs-on: ubuntu-latest
-    timeout-minutes: 250  # Up to four hours from noon Eastern, plus setup/API time.
+    timeout-minutes: 5
     permissions:
       contents: read
       actions: read
@@ -52,15 +62,16 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Wait for target time and check run history
+      - name: Check target time and run history
         id: history
-        run: python check_scheduled_podcast.py --wait-until-target
+        run: python check_scheduled_podcast.py
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          PODCAST_SCHEDULED_RUN: ${{ inputs.scheduled_run && 'true' || 'false' }}
 
   run-pipeline:
     needs: check-schedule
-    if: needs.check-schedule.outputs.should_run == 'true'
+    if: needs.check-schedule.outputs.should_run == 'true' && !inputs.dry_run
     runs-on: ubuntu-latest
     name: Run AI Podcast Pipeline
     timeout-minutes: 30
@@ -140,6 +151,7 @@ jobs:
         run: python check_scheduled_podcast.py
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          PODCAST_SCHEDULED_RUN: ${{ inputs.scheduled_run && 'true' || 'false' }}
 
       - name: Run AI Podcast Pipeline
         id: run-pipeline

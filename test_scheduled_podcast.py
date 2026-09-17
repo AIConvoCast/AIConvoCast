@@ -23,7 +23,7 @@ def manual_run(created_at, **changes):
 
 class ScheduledPodcastTests(unittest.TestCase):
     def evaluate(self, runs, scheduled_at="2026-09-13T20:30:00Z", now=None,
-                 jobs=None, allow_early=False):
+                 jobs=None, allow_early=False, event_name="schedule", scheduled_run=False):
         def response(path, params=None):
             if path.endswith("/actions/runs/456"):
                 return {"workflow_id": 10, "created_at": scheduled_at}
@@ -32,9 +32,10 @@ class ScheduledPodcastTests(unittest.TestCase):
             return {"workflow_runs": runs}
         api = Mock(side_effect=response)
         result = schedule.evaluate_run(
-            "schedule", "example/podcast", 456, api_get=api,
+            event_name, "example/podcast", 456, api_get=api,
             now=now or schedule.parse_timestamp(scheduled_at),
             allow_early=allow_early,
+            scheduled_run=scheduled_run,
         )
         return result, api
 
@@ -246,6 +247,42 @@ class ScheduledPodcastTests(unittest.TestCase):
                     contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(schedule.main(wait=True), 0)
             wait.assert_not_called()
+
+    def test_google_dispatch_obeys_time_day_and_manual_history(self):
+        for created, history, expected in [
+            ("2026-09-13T19:59:59Z", [], False),
+            ("2026-09-13T20:00:00Z", [], True),
+            ("2026-09-18T20:00:00Z", [], False),
+            ("2026-09-13T20:00:00Z", [manual_run("2026-09-13T19:00:00Z")], False),
+        ]:
+            with self.subTest(created=created, history=history):
+                result, _ = self.evaluate(history, created, event_name="workflow_dispatch", scheduled_run=True)
+                self.assertEqual(result[0], expected)
+
+    def test_google_dispatch_is_automatic_not_a_manual_suppressor(self):
+        google_run = manual_run("2026-09-13T20:00:00Z", display_title=schedule.AUTOMATIC_RUN_TITLE)
+        # An accepted HTTP dispatch that failed before generation allows the backup.
+        self.assertTrue(self.evaluate([google_run], jobs=[{"steps": []}])[0][0])
+        jobs = [{"steps": [{"name": schedule.GENERATION_STEP, "status": "completed", "conclusion": "success"}]}]
+        result, _ = self.evaluate([google_run], jobs=jobs)
+        self.assertFalse(result[0])
+        self.assertIn("automatic run", result[1])
+
+    def test_validation_dispatch_never_suppresses_real_episode(self):
+        validation = manual_run("2026-09-13T20:00:00Z", display_title=schedule.VALIDATION_RUN_TITLE)
+        result, api = self.evaluate([validation])
+        self.assertTrue(result[0])
+        self.assertFalse(any(call.args[0].endswith("/jobs") for call in api.call_args_list))
+
+    def test_cli_passes_automatic_dispatch_marker(self):
+        with tempfile.TemporaryDirectory() as directory:
+            environment = {"GITHUB_EVENT_NAME": "workflow_dispatch", "GITHUB_REPOSITORY": "example/podcast",
+                           "GITHUB_RUN_ID": "456", "GITHUB_OUTPUT": str(Path(directory) / "output"),
+                           "GITHUB_STEP_SUMMARY": "", "PODCAST_SCHEDULED_RUN": "true"}
+            with patch.dict(os.environ, environment), patch.object(schedule, "evaluate_run", return_value=(False, "Not due")) as evaluate, \
+                    contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(schedule.main(), 0)
+            self.assertTrue(evaluate.call_args.kwargs["scheduled_run"])
 
 
 if __name__ == "__main__":

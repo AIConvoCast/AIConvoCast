@@ -18,6 +18,9 @@ on:
       - 'test_google_pronunciations.py'
       - 'check_scheduled_podcast.py'
       - 'test_scheduled_podcast.py'
+      - 'configure_cloud_scheduler.py'
+      - 'test_cloud_scheduler.py'
+      - 'cloud_scheduler_job.json'
       - 'requirements.txt'
       - '.github/workflows/audio-quality-checks.yml'
       - '.github/workflows/ai_podcast_pipeline.yml'
@@ -38,6 +41,9 @@ on:
       - 'test_google_pronunciations.py'
       - 'check_scheduled_podcast.py'
       - 'test_scheduled_podcast.py'
+      - 'configure_cloud_scheduler.py'
+      - 'test_cloud_scheduler.py'
+      - 'cloud_scheduler_job.json'
       - 'requirements.txt'
       - '.github/workflows/audio-quality-checks.yml'
       - '.github/workflows/ai_podcast_pipeline.yml'
@@ -84,7 +90,7 @@ jobs:
         run: python -m unittest test_google_audio_quality test_google_pronunciations test_podcast_email test_pipeline_recovery test_news_research -v
 
       - name: Verify scheduled run decisions
-        run: python -m unittest test_scheduled_podcast -v
+        run: python -m unittest test_scheduled_podcast test_cloud_scheduler -v
 
       - name: Verify GitHub workflow history access
         env:
