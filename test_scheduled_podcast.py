@@ -1,4 +1,4 @@
-"""Regression checks for manual-trigger suppression of scheduled podcasts."""
+"""Regression checks for the 4 p.m. Eastern automatic podcast and backups."""
 
 import contextlib
 from datetime import datetime, timezone
@@ -22,14 +22,19 @@ def manual_run(created_at, **changes):
 
 
 class ScheduledPodcastTests(unittest.TestCase):
-    def evaluate(self, runs, scheduled_at="2026-09-13T20:30:00Z", now=None):
-        api = Mock(side_effect=[
-            {"workflow_id": 10, "created_at": scheduled_at},
-            {"workflow_runs": runs},
-        ])
+    def evaluate(self, runs, scheduled_at="2026-09-13T20:30:00Z", now=None,
+                 jobs=None, allow_early=False):
+        def response(path, params=None):
+            if path.endswith("/actions/runs/456"):
+                return {"workflow_id": 10, "created_at": scheduled_at}
+            if path.endswith("/jobs"):
+                return {"jobs": jobs or []}
+            return {"workflow_runs": runs}
+        api = Mock(side_effect=response)
         result = schedule.evaluate_run(
             "schedule", "example/podcast", 456, api_get=api,
             now=now or schedule.parse_timestamp(scheduled_at),
+            allow_early=allow_early,
         )
         return result, api
 
@@ -44,7 +49,7 @@ class ScheduledPodcastTests(unittest.TestCase):
         self.assertTrue(allowed)
         path, params = api.call_args.args
         self.assertEqual(path, "/repos/example/podcast/actions/workflows/10/runs")
-        self.assertEqual(params["event"], "workflow_dispatch")
+        self.assertNotIn("event", params)
         self.assertNotIn("status", params)
         self.assertNotIn("branch", params)
 
@@ -69,10 +74,10 @@ class ScheduledPodcastTests(unittest.TestCase):
                 self.assertTrue(self.evaluate([manual_run(previous_day)], scheduled_at)[0][0])
                 self.assertFalse(self.evaluate([manual_run(same_day)], scheduled_at)[0][0])
 
-    def test_daylight_saving_transition_days_and_delayed_runner(self):
+    def test_daylight_saving_transition_days_use_correct_midnight(self):
         for scheduled_at, now, expected in [
-            ("2026-03-08T20:30:00Z", "2026-03-09T08:00:00Z", "2026-03-08T05:00:00+00:00..2026-03-09T03:59:59+00:00"),
-            ("2026-11-01T21:30:00Z", "2026-11-02T09:00:00Z", "2026-11-01T04:00:00+00:00..2026-11-02T04:59:59+00:00"),
+            ("2026-03-08T20:30:00Z", "2026-03-08T20:30:00Z", "2026-03-08T05:00:00+00:00..2026-03-08T20:30:00+00:00"),
+            ("2026-11-01T21:30:00Z", "2026-11-01T21:30:00Z", "2026-11-01T04:00:00+00:00..2026-11-01T21:30:00+00:00"),
         ]:
             with self.subTest(scheduled_at=scheduled_at):
                 (_, _), api = self.evaluate([], scheduled_at, schedule.parse_timestamp(now))
@@ -92,6 +97,89 @@ class ScheduledPodcastTests(unittest.TestCase):
             now=datetime(2026, 9, 13, 20, 40, tzinfo=timezone.utc),
         )
         self.assertFalse(result[0])
+
+    def test_scheduled_generation_never_starts_before_four_in_either_season(self):
+        for early, due in [
+            ("2026-07-15T19:59:59Z", "2026-07-15T20:00:00Z"),
+            ("2026-01-15T20:59:59Z", "2026-01-15T21:00:00Z"),
+        ]:
+            with self.subTest(early=early):
+                self.assertFalse(self.evaluate([], early)[0][0])
+                self.assertTrue(self.evaluate([], due)[0][0])
+
+    def test_warmup_allowed_from_noon_only(self):
+        self.assertFalse(self.evaluate([], "2026-09-13T15:59:59Z", allow_early=True)[0][0])
+        self.assertTrue(self.evaluate([], "2026-09-13T16:00:00Z", allow_early=True)[0][0])
+        self.assertFalse(self.evaluate([], "2026-09-13T16:00:00Z")[0][0])
+
+    def test_only_sunday_through_thursday_are_automatic(self):
+        for day in range(13, 20):  # Sunday through Saturday, September 2026.
+            with self.subTest(day=day):
+                self.assertEqual(self.evaluate([], f"2026-09-{day}T20:00:00Z")[0][0], day < 18)
+
+    def test_stale_run_from_previous_eastern_day_is_skipped(self):
+        (allowed, _), _ = self.evaluate([], "2026-09-13T20:00:00Z",
+                                        now=schedule.parse_timestamp("2026-09-14T20:00:00Z"))
+        self.assertFalse(allowed)
+
+    def test_manual_run_bypasses_weekend_and_time_gates(self):
+        api = Mock(side_effect=AssertionError("No API needed for a manual run"))
+        self.assertTrue(schedule.evaluate_run("workflow_dispatch", "example/podcast", 456,
+                                             api_get=api, now=schedule.parse_timestamp("2026-09-19T13:00:00Z"))[0])
+
+    def test_backup_skips_after_automatic_generation_even_if_it_failed(self):
+        for state, conclusion in [("in_progress", None), ("completed", "success"),
+                                  ("completed", "failure"), ("completed", "cancelled")]:
+            with self.subTest(state=state, conclusion=conclusion):
+                prior = manual_run("2026-09-13T20:00:00Z", event="schedule")
+                jobs = [{"steps": [{"name": schedule.GENERATION_STEP, "status": state,
+                                     "conclusion": conclusion}]}]
+                (allowed, explanation), _ = self.evaluate([prior], jobs=jobs)
+                self.assertFalse(allowed)
+                self.assertIn("already started generation", explanation)
+
+    def test_backup_can_run_after_skipped_guard_or_failed_preflight(self):
+        for steps in [[], [{"name": schedule.GENERATION_STEP, "status": "completed", "conclusion": "skipped"}],
+                      [{"name": "Verify email authorization before paid generation", "status": "completed", "conclusion": "failure"}],
+                      [{"name": schedule.GENERATION_STEP, "status": "queued", "conclusion": None}]]:
+            with self.subTest(steps=steps):
+                prior = manual_run("2026-09-13T20:00:00Z", event="schedule")
+                self.assertTrue(self.evaluate([prior], jobs=[{"steps": steps}])[0][0])
+
+    def test_current_run_is_excluded_from_duplicate_check(self):
+        current = manual_run("2026-09-13T20:00:00Z", id=456, event="schedule")
+        (allowed, _), api = self.evaluate([current])
+        self.assertTrue(allowed)
+        self.assertFalse(any(call.args[0].endswith("/jobs") for call in api.call_args_list))
+
+    def test_generation_from_earlier_attempt_or_job_page_counts(self):
+        api = Mock(side_effect=[{"jobs": [{"steps": []}] * 100}, {"jobs": [{"steps": [
+            {"name": schedule.GENERATION_STEP, "status": "completed", "conclusion": "success"}
+        ]}]}])
+        self.assertTrue(schedule.generation_started("example/podcast", {"id": 123}, api))
+        self.assertEqual(api.call_args.args[1], {"filter": "all", "per_page": 100, "page": 2})
+
+    def test_wait_uses_four_pm_eastern_across_daylight_saving(self):
+        for start, end in [("2026-03-08T19:59:00Z", "2026-03-08T20:00:00Z"),
+                           ("2026-11-01T20:59:00Z", "2026-11-01T21:00:00Z")]:
+            with self.subTest(start=start), contextlib.redirect_stdout(io.StringIO()):
+                now = Mock(side_effect=[schedule.parse_timestamp(start), schedule.parse_timestamp(end)])
+                sleeper = Mock()
+                schedule.wait_until_target(now_fn=now, sleep_fn=sleeper)
+                sleeper.assert_called_once_with(60)
+
+    def test_wait_does_not_delay_late_runner(self):
+        sleeper = Mock()
+        with contextlib.redirect_stdout(io.StringIO()):
+            schedule.wait_until_target(now_fn=lambda: schedule.parse_timestamp("2026-09-13T20:17:00Z"),
+                                       sleep_fn=sleeper)
+        sleeper.assert_not_called()
+
+    def test_wait_fails_closed_if_runner_resumes_next_day(self):
+        now = Mock(side_effect=[schedule.parse_timestamp("2026-09-13T19:59:00Z"),
+                                schedule.parse_timestamp("2026-09-14T20:00:00Z")])
+        with contextlib.redirect_stdout(io.StringIO()), self.assertRaises(RuntimeError):
+            schedule.wait_until_target(now_fn=now, sleep_fn=Mock())
 
     def test_all_history_pages_are_checked(self):
         api = Mock(side_effect=[
@@ -134,6 +222,30 @@ class ScheduledPodcastTests(unittest.TestCase):
                 self.assertEqual(schedule.main(), 0)
             self.assertEqual(output.read_text(), "should_run=false\n")
             self.assertIn("Manual run found today.", summary.read_text())
+
+    def test_manual_trigger_during_wait_prevents_output_permission(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "output"
+            environment = {"GITHUB_EVENT_NAME": "schedule", "GITHUB_REPOSITORY": "example/podcast",
+                           "GITHUB_RUN_ID": "456", "GITHUB_OUTPUT": str(output), "GITHUB_STEP_SUMMARY": ""}
+            with patch.dict(os.environ, environment), patch.object(schedule, "evaluate_run", side_effect=[
+                (True, "Ready to wait."), (False, "Manual run triggered during wait.")
+            ]) as evaluate, patch.object(schedule, "wait_until_target") as wait, contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(schedule.main(wait=True), 0)
+            wait.assert_called_once()
+            self.assertTrue(evaluate.call_args_list[0].kwargs["allow_early"])
+            self.assertNotIn("allow_early", evaluate.call_args_list[1].kwargs)
+            self.assertEqual(output.read_text(), "should_run=false\n")
+
+    def test_manual_dispatch_never_waits(self):
+        with tempfile.TemporaryDirectory() as directory:
+            environment = {"GITHUB_EVENT_NAME": "workflow_dispatch", "GITHUB_REPOSITORY": "example/podcast",
+                           "GITHUB_RUN_ID": "456", "GITHUB_OUTPUT": str(Path(directory) / "output"),
+                           "GITHUB_STEP_SUMMARY": ""}
+            with patch.dict(os.environ, environment), patch.object(schedule, "wait_until_target") as wait, \
+                    contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(schedule.main(wait=True), 0)
+            wait.assert_not_called()
 
 
 if __name__ == "__main__":

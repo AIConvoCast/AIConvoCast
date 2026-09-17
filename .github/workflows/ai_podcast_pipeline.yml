@@ -5,10 +5,10 @@ permissions:
 
 on:
   schedule:
-    # Sunday through Thursday, 3:00 p.m. Eastern; follows daylight saving time.
-    # Allows for observed GitHub dispatch delays; actual start time can vary.
-    - cron: '0 15 * * 0-4'
-      timezone: 'America/New_York'
+    # Multiple early wake-ups and backups, away from the busy top of the hour.
+    # UTC covers both EST and EDT. Python uses America/New_York to wait until
+    # 4 p.m. Sun-Thu, suppress duplicates, and skip after a manual trigger.
+    - cron: '17 15-22 * * 0-4'
   workflow_dispatch:
     inputs:
       custom_topic:
@@ -26,11 +26,18 @@ on:
         type: boolean
         default: false
 
+# Keep one automatic runner alive while it waits; newer wake-ups may replace
+# pending backups but must never cancel the active wait or podcast generation.
+# Manual triggers remain immediate and independent.
+concurrency:
+  group: ${{ github.event_name == 'schedule' && 'podcast-automatic' || format('podcast-manual-{0}', github.run_id) }}
+  cancel-in-progress: false
+
 jobs:
   check-schedule:
-    name: Check for a manual run today
+    name: Wait for 4 p.m. Eastern and check today's runs
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 250  # Up to four hours from noon Eastern, plus setup/API time.
     permissions:
       contents: read
       actions: read
@@ -45,9 +52,9 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Check manual trigger history
+      - name: Wait for target time and check run history
         id: history
-        run: python check_scheduled_podcast.py
+        run: python check_scheduled_podcast.py --wait-until-target
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
@@ -57,6 +64,9 @@ jobs:
     runs-on: ubuntu-latest
     name: Run AI Podcast Pipeline
     timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
     environment: production  # Use your GitHub environment
     
     steps:
@@ -125,8 +135,15 @@ jobs:
           PODCAST_SMTP_PASSWORD: ${{ secrets.PODCAST_SMTP_PASSWORD }}
           RESEARCH_SOL_BASELINE_USD: ${{ vars.RESEARCH_SOL_BASELINE_USD }}
 
+      - name: Recheck today's runs immediately before generation
+        id: final-check
+        run: python check_scheduled_podcast.py
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
       - name: Run AI Podcast Pipeline
         id: run-pipeline
+        if: steps.final-check.outputs.should_run == 'true'
         run: |
           echo "Starting AI Podcast Pipeline..."
           echo "Custom Topic: ${{ github.event.inputs.custom_topic || 'None' }}"
@@ -209,7 +226,7 @@ jobs:
           rm -f .env
 
       - name: Notify on success
-        if: success()
+        if: success() && steps.run-pipeline.outcome == 'success'
         run: |
           echo "✅ AI Podcast Pipeline completed successfully!"
           echo "Run ID: ${{ github.run_id }}"
