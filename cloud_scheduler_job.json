@@ -1,0 +1,24 @@
+{
+  "name": "projects/jmio-434920/locations/us-east1/jobs/aiconvocast-4pm-eastern",
+  "description": "AIConvoCast: 4pm Eastern Sunday-Thursday, with a 4:10pm backup. Daily duplicate/manual checks run in GitHub.",
+  "schedule": "0,10 16 * * 0-4",
+  "timeZone": "America/New_York",
+  "attemptDeadline": "30s",
+  "retryConfig": {
+    "retryCount": 3,
+    "maxRetryDuration": "600s",
+    "minBackoffDuration": "30s",
+    "maxBackoffDuration": "120s",
+    "maxDoublings": 2
+  },
+  "httpTarget": {
+    "uri": "https://api.github.com/repos/AIConvoCast/AIConvoCast/actions/workflows/ai_podcast_pipeline.yml/dispatches",
+    "httpMethod": "POST",
+    "headers": {
+      "Accept": "application/vnd.github+json",
+      "Content-Type": "application/json",
+      "User-Agent": "AIConvoCast-Google-Scheduler",
+      "X-GitHub-Api-Version": "2022-11-28"
+    }
+  }
+}

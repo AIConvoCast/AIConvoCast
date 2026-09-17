@@ -16,6 +16,16 @@ EASTERN = ZoneInfo("America/New_York")
 GENERATION_STEP = "Run AI Podcast Pipeline"
 WARMUP_HOUR = 12
 TARGET_HOUR = 16
+AUTOMATIC_RUN_TITLE = "Scheduled AI Podcast Pipeline"
+VALIDATION_RUN_TITLE = "Validate Podcast Scheduler"
+
+
+def is_automatic_run(run):
+    """The Actions history API exposes run titles, but not dispatch inputs."""
+    return run["event"] == "schedule" or (
+        run["event"] == "workflow_dispatch"
+        and run.get("display_title") == AUTOMATIC_RUN_TITLE
+    )
 
 
 def generation_started(repository, run, api_get):
@@ -58,11 +68,11 @@ def parse_timestamp(value):
 
 
 def evaluate_run(event_name, repository, run_id, api_get=github_api_get, now=None,
-                 allow_early=False):
+                 allow_early=False, scheduled_run=False):
     """Return (should_run, explanation); API errors must prevent automatic runs."""
-    if event_name == "workflow_dispatch":
+    if event_name == "workflow_dispatch" and not scheduled_run:
         return True, "Manual trigger: run the podcast as requested."
-    if event_name != "schedule":
+    if event_name not in {"schedule", "workflow_dispatch"}:
         raise ValueError(f"Unsupported podcast trigger: {event_name}")
 
     now = now or datetime.now(timezone.utc)
@@ -93,15 +103,16 @@ def evaluate_run(event_name, repository, run_id, api_get=github_api_get, now=Non
         for run in runs:
             triggered = parse_timestamp(run["created_at"])
             if (str(run["id"]) == str(run_id) or run["workflow_id"] != workflow_id
-                    or not earliest <= triggered <= latest):
+                    or not earliest <= triggered <= latest
+                    or run.get("display_title") == VALIDATION_RUN_TITLE):
                 continue
-            if run["event"] == "workflow_dispatch":
+            if run["event"] == "workflow_dispatch" and not is_automatic_run(run):
                 # The user requested any manual trigger, regardless of outcome.
                 return False, (
                     f"Scheduled podcast skipped: manual run {run['id']} was triggered "
                     f"on {day} Eastern time. {run['html_url']}"
                 )
-            if run["event"] == "schedule" and generation_started(repository, run, api_get):
+            if is_automatic_run(run) and generation_started(repository, run, api_get):
                 return False, (
                     f"Scheduled podcast skipped: automatic run {run['id']} already "
                     f"started generation on {day} Eastern time. {run['html_url']}"
@@ -134,13 +145,15 @@ def main(wait=False):
         event_name = os.environ["GITHUB_EVENT_NAME"]
         repository = os.environ["GITHUB_REPOSITORY"]
         run_id = os.environ["GITHUB_RUN_ID"]
+        scheduled_run = os.environ.get("PODCAST_SCHEDULED_RUN", "false").lower() == "true"
         should_run, explanation = evaluate_run(
-            event_name, repository, run_id, allow_early=wait,
+            event_name, repository, run_id, allow_early=wait, scheduled_run=scheduled_run,
         )
-        if should_run and wait and event_name == "schedule":
+        if should_run and wait and (event_name == "schedule" or scheduled_run):
             wait_until_target()
             # A manual trigger during the wait must still suppress this episode.
-            should_run, explanation = evaluate_run(event_name, repository, run_id)
+            should_run, explanation = evaluate_run(event_name, repository, run_id,
+                                                   scheduled_run=scheduled_run)
     except Exception as error:
         print(f"Could not verify run history; automatic generation stopped: {error}", file=sys.stderr)
         return 1
