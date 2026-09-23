@@ -1,0 +1,125 @@
+{
+  "synced_at": "2026-09-23T11:41:30Z",
+  "active_workflows": [
+    {
+      "Workflow ID": 24,
+      "Workflow Title": "Update Models Tab with latest model",
+      "Workflow Code": "UM",
+      "Active": "Y",
+      "Custom Topic If Required": ""
+    },
+    {
+      "Workflow ID": 47,
+      "Workflow Title": "Generate with Eleven voice using 5.6 and Opus 5",
+      "Workflow Code": "PPU,PPL15,P10&P8&R2M221,P4&R3M223,P12&R4M220,R5SL10T5,R4SL7T5,L8E1SL4T5,L1&L9&L2SL3T5",
+      "Active": "Y",
+      "Custom Topic If Required": ""
+    }
+  ],
+  "models": [
+    {
+      "Model ID": 220,
+      "Model Name": "claude-opus-5",
+      "Model Default": "N",
+      "Web Search": "N",
+      "Deprecated": "N"
+    },
+    {
+      "Model ID": 221,
+      "Model Name": "gpt-6-astra",
+      "Model Default": "N",
+      "Web Search": "Y",
+      "Deprecated": "N"
+    },
+    {
+      "Model ID": 223,
+      "Model Name": "claude-opus-5",
+      "Model Default": "N",
+      "Web Search": "Y",
+      "Deprecated": "N"
+    }
+  ],
+  "locations": [
+    {
+      "Location ID": 1,
+      "Location Description": "Intro MP3 File",
+      "Type": "File",
+      "File Or Folder": "Intro.mp3",
+      "Location": "Intro.mp3",
+      "Latest": ""
+    },
+    {
+      "Location ID": 2,
+      "Location Description": "Outro MP3 File",
+      "Type": "File",
+      "File Or Folder": "Outro.mp3",
+      "Location": "Outro.mp3",
+      "Latest": ""
+    },
+    {
+      "Location ID": 3,
+      "Location Description": "Podcast Folder Location",
+      "Type": "Folder",
+      "File Or Folder": "podcasts/",
+      "Location": "podcasts/",
+      "Latest": ""
+    },
+    {
+      "Location ID": 4,
+      "Location Description": "Eleven Labs Generated Audio",
+      "Type": "Folder",
+      "File Or Folder": "eleven-labs/",
+      "Location": "eleven-labs/",
+      "Latest": ""
+    },
+    {
+      "Location ID": 7,
+      "Location Description": "Scripts Folder Location",
+      "Type": "Folder",
+      "File Or Folder": "scripts/",
+      "Location": "scripts/",
+      "Latest": ""
+    },
+    {
+      "Location ID": 8,
+      "Location Description": "Latest Text File in Scripts Folder",
+      "Type": "Text",
+      "File Or Folder": "scripts/",
+      "Location": "scripts/",
+      "Latest": "Y"
+    },
+    {
+      "Location ID": 9,
+      "Location Description": "Latest mp3 in Eleven lab Folder",
+      "Type": "mp3",
+      "File Or Folder": "eleven-labs/",
+      "Location": "eleven-labs/",
+      "Latest": "Y"
+    },
+    {
+      "Location ID": 10,
+      "Location Description": "Title and Description Folder Location",
+      "Type": "Folder",
+      "File Or Folder": "descriptions/",
+      "Location": "descriptions/",
+      "Latest": ""
+    }
+  ],
+  "eleven": [
+    {
+      "Eleven ID": 1,
+      "Voice": "21m00Tcm4TlvDq8ikWAM",
+      "Model": "eleven_multilingual_v2",
+      "Stability": 0.39,
+      "Similarity Boost": 0.7,
+      "Style": 0.5,
+      "Speed": 1.06
+    }
+  ],
+  "prompt_names": {
+    "4": "",
+    "8": "",
+    "10": "",
+    "12": ""
+  }
+}

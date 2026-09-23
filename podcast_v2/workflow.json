@@ -13,21 +13,33 @@
       "type": "model",
       "model": "gpt-6-astra",
       "web_search": true,
-      "parts": ["prompt:10", "prompt:8", "step:recent_episodes"]
+      "parts": [
+        "prompt:10",
+        "prompt:8",
+        "step:recent_episodes"
+      ]
     },
     {
       "id": "script",
       "type": "model",
       "model": "claude-opus-5-5",
       "web_search": true,
-      "parts": ["prompt:4", "script_tuning", "step:research"]
+      "parts": [
+        "prompt:4",
+        "script_tuning",
+        "step:research"
+      ]
     },
     {
       "id": "title",
       "type": "model",
       "model": "claude-opus-5-5",
       "web_search": false,
-      "parts": ["prompt:12", "step:script", "script_tuning"]
+      "parts": [
+        "prompt:12",
+        "step:script",
+        "script_tuning"
+      ]
     },
     {
       "id": "save_description",
@@ -51,11 +63,11 @@
       "title_from": "title",
       "elevenlabs": {
         "voice_id": "TX3LPaxmHKxFdv7VOQHJ",
-        "Voice": "Liam",
-        "Model": "eleven_v3",
-        "Stability": 0.5,
+        "Voice": "21m00Tcm4TlvDq8ikWAM",
+        "Model": "eleven_multilingual_v2",
+        "Stability": 0.39,
         "Similarity Boost": 0.7,
-        "Style": 0.0,
+        "Style": 0.5,
         "Speed": 1.06
       },
       "google_fallback_voice_id": "1"
@@ -63,7 +75,11 @@
     {
       "id": "episode",
       "type": "merge_audio",
-      "parts": ["gcs_file:Intro.mp3", "gcs_latest_mp3:eleven-labs/", "gcs_file:Outro.mp3"],
+      "parts": [
+        "gcs_file:Intro.mp3",
+        "gcs_latest_mp3:eleven-labs/",
+        "gcs_file:Outro.mp3"
+      ],
       "folder": "podcasts/",
       "title_from": "title"
     }
