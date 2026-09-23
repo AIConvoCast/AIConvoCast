@@ -1,0 +1,324 @@
+{
+  "updated_at": null,
+  "source": "Seeded from the pipeline model overrides and fallback lists; run Update Models V2 to refresh from provider APIs.",
+  "models": [
+    {
+      "name": "claude-2.0",
+      "provider": "anthropic",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "claude-2.1",
+      "provider": "anthropic",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "claude-3-5-haiku",
+      "provider": "anthropic",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "claude-3-5-haiku-20241022",
+      "provider": "anthropic",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "claude-3-5-sonnet",
+      "provider": "anthropic",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "claude-3-5-sonnet-20240620",
+      "provider": "anthropic",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "claude-3-5-sonnet-20241022",
+      "provider": "anthropic",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "claude-3-7-sonnet-20250219",
+      "provider": "anthropic",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "claude-3-haiku",
+      "provider": "anthropic",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "claude-3-haiku-20240307",
+      "provider": "anthropic",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "claude-3-opus",
+      "provider": "anthropic",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "claude-3-opus-20240229",
+      "provider": "anthropic",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "claude-3-sonnet",
+      "provider": "anthropic",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "claude-3-sonnet-20240229",
+      "provider": "anthropic",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "claude-fable-5",
+      "provider": "anthropic",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "claude-fable-5-1",
+      "provider": "anthropic",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "claude-haiku-4-5-20251001",
+      "provider": "anthropic",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "claude-instant-1.2",
+      "provider": "anthropic",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "claude-opus-4-1-20250805",
+      "provider": "anthropic",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "claude-opus-4-20250514",
+      "provider": "anthropic",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "claude-opus-4-5-20251101",
+      "provider": "anthropic",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "claude-opus-4-6",
+      "provider": "anthropic",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "claude-opus-4-7",
+      "provider": "anthropic",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "claude-opus-4-8",
+      "provider": "anthropic",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "claude-opus-5",
+      "provider": "anthropic",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "claude-opus-5-5",
+      "provider": "anthropic",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "claude-sonnet-4-20250514",
+      "provider": "anthropic",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "claude-sonnet-4-5-20250929",
+      "provider": "anthropic",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "claude-sonnet-4-6",
+      "provider": "anthropic",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "claude-sonnet-5",
+      "provider": "anthropic",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "gemini-2.0-flash",
+      "provider": "google",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "gemini-2.0-flash-lite",
+      "provider": "google",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "gemini-2.5-flash",
+      "provider": "google",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "gemini-2.5-flash-lite",
+      "provider": "google",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "gemini-2.5-pro",
+      "provider": "google",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "chat-latest",
+      "provider": "openai",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "gpt-5.4",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-5.4-2026-03-05",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-5.4-nano-2026-03-17",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-5.4-pro",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-5.4-pro-2026-03-05",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-5.5",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-5.5-2026-04-23",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-5.5-pro",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-5.5-pro-2026-04-23",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-5.6-luna",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-5.6-sol",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-5.6-terra",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-6-astra",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-realtime-2",
+      "provider": "openai",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "gpt-realtime-2.1",
+      "provider": "openai",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "gpt-realtime-2.1-mini",
+      "provider": "openai",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "gpt-realtime-translate",
+      "provider": "openai",
+      "web_search": false,
+      "available": true
+    }
+  ]
+}

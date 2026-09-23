@@ -42,6 +42,9 @@ Thumbs.db
 # Credentials
 *.json
 !manifest.json
+!podcast_v2/workflow.json
+!podcast_v2/models.json
+!podcast_v2/sheet_snapshot.json
 jmio-google-api.json
 client_secret.json
 token.pickle
