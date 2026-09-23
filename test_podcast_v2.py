@@ -5,7 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from podcast_v2 import run_podcast, update_models
+from podcast_v2 import run_podcast, sync_from_sheet, update_models
 
 RSS = b"""<rss><channel>
 <item><title>Newest &amp; best</title><description>&lt;p&gt;Short one.&lt;/p&gt; Help support us</description></item>
@@ -155,6 +155,67 @@ class UpdateModelsV2Tests(unittest.TestCase):
         self.assertFalse(by_name["gpt-old"]["available"])
         # Google returned nothing, so its models are left alone.
         self.assertTrue(by_name["gemini-x"]["available"])
+
+
+class PodcastV2GuardTests(unittest.TestCase):
+    def test_empty_feed_stops_the_run(self):
+        runner = run_podcast.Runner({"steps": []}, FakeLegacy(tempfile.gettempdir()))
+        step = {"id": "recent_episodes", "count": 15, "feed_url": "https://feed"}
+        with mock.patch("requests.get") as get:
+            get.return_value = SimpleNamespace(content=b"<rss><channel></channel></rss>",
+                                               raise_for_status=lambda: None)
+            with self.assertRaises(RuntimeError):
+                runner.run_recent_episodes(step)
+
+    def test_script_tuning_is_not_added_twice(self):
+        legacy = FakeLegacy(tempfile.gettempdir())
+        runner = run_podcast.Runner({"steps": []}, legacy)
+        runner.outputs["research"] = "brief"
+        with tempfile.TemporaryDirectory() as directory:
+            appendix = legacy.OPUS47_SCRIPT_TUNING_APPENDIX.strip()
+            Path(directory, "P4.txt").write_text(f"P4 text\n\n{appendix}\n")
+            runner.prompts_dir = Path(directory)
+            runner.run_model({"id": "script", "model": "claude-opus-5-5", "web_search": True,
+                              "parts": ["prompt:4", "script_tuning", "step:research"]})
+        self.assertEqual(legacy.calls[0][0].count("Additional script requirements"), 1)
+
+
+class SyncFromSheetTests(unittest.TestCase):
+    def test_sync_copies_active_workflow_prompts_and_eleven_settings(self):
+        tabs = {
+            "Workflows": [
+                {"Workflow ID": 47, "Workflow Code": "PPU,PPL15,P10&P8&R2M221,P4&R3M223,P12&R4M220,"
+                                                     "R5SL10T5,R4SL7T5,L8E1SL4T5,L1&L9&L2SL3T5", "Active": "Y"},
+                {"Workflow ID": 23, "Workflow Code": "P1M1", "Active": "N"},
+            ],
+            "Prompts": [
+                {"Prompt ID": 1, "Prompt Name": "Old", "Prompt Description": "unused"},
+                {"Prompt ID": 4, "Prompt Name": "Script", "Prompt Description":
+                    "Script prompt\n\nAdditional script requirements for this run:\n- a\n- b"},
+                {"Prompt ID": 8, "Prompt Name": "Prior", "Prompt Description": "Prior coverage"},
+                {"Prompt ID": 10, "Prompt Name": "Search", "Prompt Description": "Search"},
+                {"Prompt ID": 12, "Prompt Name": "Title", "Prompt Description": "Title prompt"},
+            ],
+            "Models": [{"Model ID": 223, "Model Name": "claude-opus-5"}, {"Model ID": 1, "Model Name": "x"}],
+            "Locations": [{"Location ID": 8, "Location": "scripts/"}, {"Location ID": 5, "Location": "p/"}],
+            "Eleven": [{"Eleven ID": 1, "Voice": "Liam", "Model": "eleven_v3", "Stability": 0.4,
+                        "Similarity Boost": 0.7, "Style": 0, "Speed": 1.1}],
+        }
+        workflow = run_podcast.load_json(run_podcast.WORKFLOW_PATH)
+        prompts, updated, snapshot = sync_from_sheet.build_sync(tabs, workflow)
+        self.assertEqual(sorted(prompts, key=int), ["4", "8", "10", "12"])
+        self.assertEqual(prompts["4"], "Script prompt\n")
+        voice = next(s for s in updated["steps"] if s["type"] == "voice")
+        self.assertEqual(voice["elevenlabs"]["Stability"], 0.4)
+        self.assertEqual(voice["elevenlabs"]["voice_id"], "TX3LPaxmHKxFdv7VOQHJ")
+        self.assertEqual([m["Model ID"] for m in snapshot["models"]], [223])
+        self.assertEqual([l["Location ID"] for l in snapshot["locations"]], [8])
+        # Model choices in workflow.json are never taken from the sheet.
+        self.assertEqual(updated["steps"][2]["model"], "claude-opus-5-5")
+
+    def test_sync_requires_an_active_workflow(self):
+        with self.assertRaises(RuntimeError):
+            sync_from_sheet.build_sync({"Workflows": [], "Prompts": []}, {"steps": []})
 
 
 if __name__ == "__main__":

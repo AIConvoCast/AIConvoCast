@@ -138,10 +138,20 @@ class Runner:
 
         response = requests.get(step["feed_url"], timeout=30)
         response.raise_for_status()
-        return format_recent_episodes(response.content, int(step["count"]))
+        episodes = format_recent_episodes(response.content, int(step["count"]))
+        # Research must see prior coverage; never continue without it.
+        if not episodes:
+            raise RuntimeError(f"No episodes found in {step['feed_url']}; stopping before any paid calls.")
+        return episodes
 
     def run_model(self, step):
-        prompt = "\n\n".join(self.resolve(part) for part in step["parts"])
+        texts = [self.resolve(part) for part in step["parts"]]
+        if "script_tuning" in step["parts"]:
+            # Skip the appendix when a prompt already carries it.
+            tuning = self.resolve("script_tuning")
+            if sum(tuning in text for text in texts) > 1:
+                texts.pop(step["parts"].index("script_tuning"))
+        prompt = "\n\n".join(texts)
         model, web_search = step["model"], bool(step.get("web_search"))
         print(f"  Model: {model}, Web Search: {web_search}")
         # Same sampling choice as V1; adaptive-thinking Claude models ignore it.
