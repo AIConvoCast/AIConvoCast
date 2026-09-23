@@ -18,6 +18,7 @@ This file orients any coding agent working on this repo from a fresh session (e.
 ## Podcast pipeline
 
 - `.github/workflows/ai_podcast_pipeline.yml` is the main pipeline: targets Sun–Thu 4pm Eastern, plus manual `workflow_dispatch` (with `custom_topic`, `workflow_id`, `force_run` inputs). Early UTC wake-ups wait until 4pm using `America/New_York`; backups skip after a manual trigger or prior automatic generation that day. See `PODCAST_SCHEDULING.md`. It runs `ai_podcast_pipeline_for_cursor.py` in the `production` environment.
+- `ai_podcast_pipeline_v2.yml` ("Run AI Podcast V2", manual only) runs the episode from `podcast_v2/` config files with no Google Sheet access; `update_models_v2.yml` refreshes `podcast_v2/models.json`. See `podcast_v2/README.md`.
 - `manual_ai_podcast_pipeline.yml` is a `workflow_dispatch`-only variant — check with the repo owner before assuming both are still needed.
 - Required secrets (see `.env.example` for local dev equivalents): `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `ELEVENLABS_API_KEY`, `GOOGLE_CREDS_JSON`, `GMAIL_OAUTH_TOKEN_B64`, `SHARE_SHEET_WITH_EMAIL`.
 
