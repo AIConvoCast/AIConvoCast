@@ -37,13 +37,21 @@ appendix V1 adds to P4/P12), `gcs_file:<path>`, `gcs_latest_text:<folder>`,
 `gcs_latest_mp3:<folder>`. `title_from` names the step whose `Title:` line
 names the saved files.
 
-## Seeded from the repo, not the live sheet
+## Syncing from the Google Sheet
 
-The prompts were copied from the pipeline's built-in sheet template. The live
-sheet may have been edited since, so compare before relying on V2:
+The **Sync V2 From Sheet** action (`sync_from_sheet.py`) reads the sheet
+read-only and copies, for the workflow marked Active = Y:
 
-- `P4`, `P8`, `P10` come from the template's prompts with the same IDs.
-- `P12` is not in the template; it is seeded from template prompt 5, which
-  starts with the same text as the live P12.
-- ElevenLabs settings use the pipeline defaults (Liam, `eleven_v3`,
-  stability 0.5, similarity 0.7, style 0, speed 1.06).
+- every prompt its code references into `prompts/` (without the Claude
+  script-tuning block V1 appends to P4, which V2 adds itself);
+- the ElevenLabs settings it references into the `voice` step of `workflow.json`;
+- the workflow row, referenced models and locations into `sheet_snapshot.json`.
+
+Model choices in `workflow.json` are never overwritten. Changes land on a
+`sheet-sync/<run id>` branch to review as a pull request.
+
+## Prior-episode check
+
+The first step reads the newest 15 episodes from the RSS feed and passes them,
+with P8, to the research step, as V1 did through the Posted Podcasts tab. If
+the feed can't be read or lists no episodes, the run stops before any paid calls.

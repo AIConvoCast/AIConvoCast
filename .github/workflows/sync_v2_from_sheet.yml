@@ -1,0 +1,59 @@
+name: Sync V2 From Sheet
+
+# Reads (read-only) the active workflow's prompts, models, locations and
+# ElevenLabs settings from the Google Sheet into podcast_v2/, and pushes the
+# result to a sheet-sync/* branch for review as a pull request.
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+
+jobs:
+  sync:
+    name: Sync V2 From Sheet
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        run: pip install gspread google-auth
+
+      - name: Create Google credentials file
+        run: echo '${{ secrets.GOOGLE_CREDS_JSON }}' > jmio-google-api.json
+
+      - name: Read the sheet into podcast_v2/
+        run: python podcast_v2/sync_from_sheet.py
+
+      - name: Remove Google credentials file
+        if: always()
+        run: rm -f jmio-google-api.json
+
+      - name: Check the synced V2 workflow
+        run: python podcast_v2/run_podcast.py --check
+
+      - name: Push changes to a review branch
+        run: |
+          if git diff --quiet -- podcast_v2 && [ -z "$(git ls-files --others --exclude-standard podcast_v2)" ]; then
+            echo "podcast_v2/ already matches the sheet." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          branch="sheet-sync/${{ github.run_id }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add podcast_v2
+          git commit -m "Sync V2 prompts and settings from the Google Sheet"
+          git push origin "$branch"
+          echo "Changes pushed to \`$branch\`; open a pull request from it to review." | tee -a "$GITHUB_STEP_SUMMARY"
