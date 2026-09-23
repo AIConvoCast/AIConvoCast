@@ -1,0 +1,58 @@
+name: Update Models V2
+
+# Refreshes podcast_v2/models.json from the provider model APIs and commits it
+# to the branch this runs on. Does not touch the Google Sheet.
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: update-models-v2-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  update-models:
+    name: Update Models V2
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Fetch models from providers
+        run: python podcast_v2/update_models.py
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
+      - name: Commit updated model list
+        run: |
+          if git diff --quiet -- podcast_v2/models.json; then
+            echo "No model changes."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add podcast_v2/models.json
+          git commit -m "Update V2 model list from provider APIs"
+          git push
+
+      - name: Check the V2 workflow still uses available models
+        run: python podcast_v2/run_podcast.py --check

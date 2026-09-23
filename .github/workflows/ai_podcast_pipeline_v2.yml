@@ -1,0 +1,93 @@
+name: Run AI Podcast V2
+
+# Runs the episode workflow defined in podcast_v2/ (workflow.json, prompts/,
+# models.json) without reading or writing the Google Sheet. Manual only while
+# the original "Run AI Podcast Pipeline" keeps the schedule.
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      send_email:
+        description: 'Email the finished episode'
+        required: false
+        type: boolean
+        default: true
+
+concurrency:
+  group: podcast-v2-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  run-pipeline:
+    name: Run AI Podcast V2
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Validate V2 workflow configuration
+        run: python podcast_v2/run_podcast.py --check
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Verify audio processing
+        run: python -m unittest test_google_audio_quality test_podcast_v2 -v
+
+      - name: Verify email authorization before paid generation
+        if: inputs.send_email
+        run: python podcast_email.py --check-auth
+        env:
+          PODCAST_EMAIL_BACKEND: gmail_api
+          GMAIL_OAUTH_TOKEN_B64: ${{ secrets.GMAIL_OAUTH_TOKEN_B64 }}
+          PODCAST_SMTP_USERNAME: ${{ secrets.PODCAST_SMTP_USERNAME }}
+          PODCAST_SMTP_PASSWORD: ${{ secrets.PODCAST_SMTP_PASSWORD }}
+
+      # Still needed for Cloud Storage and Google text-to-speech; the sheet is not used.
+      - name: Create Google credentials file
+        run: |
+          echo '${{ secrets.GOOGLE_CREDS_JSON }}' > jmio-google-api.json
+
+      - name: Run AI Podcast V2
+        run: python podcast_v2/run_podcast.py ${{ !inputs.send_email && '--no-email' || '' }}
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          PODCAST_EMAIL_BACKEND: gmail_api
+          PODCAST_EMAIL_FROM: AIConvoCast@gmail.com
+          PODCAST_EMAIL_TO: ianeoconnell@gmail.com
+          GMAIL_OAUTH_TOKEN_B64: ${{ secrets.GMAIL_OAUTH_TOKEN_B64 }}
+          PODCAST_SMTP_USERNAME: ${{ secrets.PODCAST_SMTP_USERNAME }}
+          PODCAST_SMTP_PASSWORD: ${{ secrets.PODCAST_SMTP_PASSWORD }}
+          RESEARCH_SOL_BASELINE_USD: ${{ vars.RESEARCH_SOL_BASELINE_USD }}
+
+      - name: Upload generated files
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: podcast-v2-files-${{ github.run_id }}
+          path: generated_mp3/
+          retention-days: 7
+
+      - name: Cleanup
+        if: always()
+        run: rm -rf generated_mp3/ jmio-google-api.json

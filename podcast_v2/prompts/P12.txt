@@ -1,0 +1,45 @@
+Please generate a podcast title and description based on the topic or podcast script provided after "Topic to generate Title and Description based" below. The Podcast title and Description should be generated in a similar tone and style as the 3 examples below. Please try to include the specific companies in the titles in order to help those searching for news on those companies. That said only list 2-3 names max to keep the title as brief as possible. Please avoid using phrases with colons as well.
+
+Please always include Amazon an Affiliate Link to this exact address and say "Help support the podcast by using our affiliate links:
+Eleven Labs: https://try.elevenlabs.io/ibl30sgkibkv"
+
+The end of the description should also always include a disclaimer to indicate the podcast is purely for informational purposes and include disclaimer for affiliate links. Do not include text images, bullets or numbering for subsections to avoid compatibility issues, only text. Never reference a particular time or date in the title to ensure podcasts remain evergreen. Ensure the title and description provide an overview of the topics included and the specific technology or companies involved in order to increase engagement and SEO.
+
+Front-load important keywords and topics in the first 1-2 sentences of the description. For example, begin with "In this episode, we discuss [XYZ]…". Include relevant AI terms, guest names, and company names that relate to the episode. Keep the description concise, 3-4 sentences is ideal. If your episode touches on, say, "OpenAI's latest model release and Google's AI announcement," make sure those phrases appear in the description. Reuse keywords around 5 times in your show's description if feasible.
+
+Example Podcast 1: "Title:
+Automate Your Workflow and Podcast with AI
+Description:
+Discover the power of AI-driven automation to streamline your podcasting process and boost your efficiency. In this episode, we explore how tools like Zapier and Google's Notebook LM can revolutionize your content creation workflow. Learn how to automate tasks such as generating episode titles and descriptions, creating engaging scripts from blog posts or videos, and designing eye-catching cover art with AI image tools like DALL-E and Midjourney. We also dive into no-code automation platforms like Make.com, showing you how to seamlessly integrate AI into your podcasting routine.
+
+Help support the podcast by using our Affiliate Links:
+Eleven Labs: https://try.elevenlabs.io/ibl30sgkibkv
+
+Disclaimer:
+This podcast is an independent production and is not affiliated with, endorsed by, or sponsored by Zapier, Google, OpenAI, DALL-E, Midjourney, Make.com, or any other entities mentioned unless explicitly mentioned. The content provided is for educational and entertainment purposes only and does not constitute professional or technical advice. All trademarks, logos, and copyrights mentioned are the property of their respective owners."
+
+Example Podcast 2: "Title:
+AI's Next Leap: Meta's $65B Bet, Agentic AI, and the Future of Automation
+
+Description:
+In this episode, we break down the latest AI trends, including Meta's massive $65 billion AI infrastructure push, the rise of "agentic AI" capable of autonomous task execution, and new, more efficient AI models reshaping the industry. We also examine the ethical dilemmas surrounding deepfake legislation, copyright lawsuits, and the impact of AI automation on the workforce. From NVIDIA's latest Blackwell architecture to Amazon's Nova models and Google's Gemini 2.0, we analyze how AI is evolving beyond theoretical capabilities into real-world applications.
+
+Help support the podcast by using our affiliate links:
+Eleven Labs: https://try.elevenlabs.io/ibl30sgkibkv
+
+Disclaimer:
+This podcast is an independent production and is not affiliated with, endorsed by, or sponsored by Meta, NVIDIA, Amazon, Google,  or any other entities mentioned unless explicitly mentioned. The content provided is for educational and entertainment purposes only and does not constitute professional, financial, or legal advice."
+
+Example Podcast 3: "Title:
+Bought a Website? How to Setup Domains, Hosting, and SEO
+Description:
+Overview of setting up a website with Namecheap after you've purchased it. From registering a domain and choosing the right hosting plan to building your site with Namecheap's Website Builder or WordPress, we walk through the essential steps to get your online presence up and running.
+Discover the key differences between website builders and web hosting, how to navigate Namecheap's user-friendly tools like cPanel and Softaculous, and crucial post-setup tasks such as SSL security, professional email setup, and SEO optimization. We also cover cost-saving strategies, security best practices, and expert tips to streamline the process. Whether you're a beginner looking for a simple drag-and-drop solution or an advanced user preferring manual HTML and FTP uploads, Namecheap offers a range of flexible options to fit your needs.
+
+Help support the podcast by using our affiliate links:
+Eleven Labs: https://try.elevenlabs.io/ibl30sgkibkv
+
+Disclaimer:
+This podcast is an independent production and is not affiliated with, endorsed by, or sponsored by Namecheap or any other entities mentioned unless explicitly mentioned. This episode was generated using AI tools for entertainment purposes only."
+
+Topic to generate Title and Description based:
