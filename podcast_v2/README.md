@@ -13,6 +13,7 @@ action and its Google Sheet are unchanged but are now manual only.
 | `models.json` | Known models by name, with web-search support and availability. |
 | `run_podcast.py` | The runner (`--check` validates only, `--no-email` skips the email). |
 | `update_models.py` | Refreshes `models.json` from the OpenAI, Anthropic and Google APIs. |
+| `audio_polish.py` | ffmpeg finishing: soxr resampling when joining intro/narration/outro, and -16 LUFS loudness for Google narration. |
 
 Google credentials (`GOOGLE_CREDS_JSON`) are still used for Cloud Storage and
 Google text-to-speech, but nothing reads or writes the sheet.

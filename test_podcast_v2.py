@@ -1,4 +1,8 @@
 import copy
+import json
+import re
+import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -77,6 +81,20 @@ class FakeLegacy:
         return output
 
 
+class FakeAudio:
+    def __init__(self):
+        self.polished = []
+        self.merged = None
+
+    def polish_speech(self, audio_path, master_path=None):
+        self.polished.append(Path(audio_path).name)
+        return audio_path
+
+    def merge(self, paths, output):
+        self.merged = list(paths)
+        return output
+
+
 class PodcastV2ConfigTests(unittest.TestCase):
     def test_repo_workflow_is_valid_and_uses_opus_5_5(self):
         workflow = run_podcast.load_json(run_podcast.WORKFLOW_PATH)
@@ -116,7 +134,8 @@ class PodcastV2RunnerTests(unittest.TestCase):
                 (prompts / f"P{pid}.txt").write_text(f"P{pid} text\n")
             (prompts / "script_tuning.txt").write_text(TUNING)
             legacy = FakeLegacy(directory)
-            runner = run_podcast.Runner(workflow, legacy, prompts_dir=prompts)
+            audio = FakeAudio()
+            runner = run_podcast.Runner(workflow, legacy, prompts_dir=prompts, audio=audio)
             with mock.patch("requests.get") as get:
                 get.return_value = SimpleNamespace(content=RSS, raise_for_status=lambda: None)
                 runner.run()
@@ -133,7 +152,9 @@ class PodcastV2RunnerTests(unittest.TestCase):
         folders = [blob.split("/")[0] for blob in legacy.uploads]
         self.assertEqual(folders, ["descriptions", "scripts", "eleven-labs", "podcasts"])
         self.assertTrue(all("Opus_55_Arrives" in blob for blob in legacy.uploads))
-        self.assertEqual([Path(p).name for p in legacy.merged], ["Intro.mp3", "latest.wav", "Outro.mp3"])
+        self.assertEqual([Path(p).name for p in audio.merged], ["Intro.mp3", "latest.wav", "Outro.mp3"])
+        # Only the Google fallback narration is loudness-normalized.
+        self.assertEqual(audio.polished, ["v2_narration_google.mp3"])
         self.assertIn("Description:", runner.final_description_text)
         self.assertTrue(runner.final_audio_filename.endswith("_Opus_55_Arrives.mp3"))
 
@@ -220,6 +241,52 @@ class SyncFromSheetTests(unittest.TestCase):
     def test_sync_requires_an_active_workflow(self):
         with self.assertRaises(RuntimeError):
             sync_from_sheet.build_sync({"Workflows": [], "Prompts": []}, {"steps": []})
+
+
+
+class AudioFallbackTests(unittest.TestCase):
+    def test_merge_falls_back_to_standard_merge(self):
+        legacy = FakeLegacy(tempfile.gettempdir())
+        broken = SimpleNamespace(merge=mock.Mock(side_effect=RuntimeError("no ffmpeg")))
+        runner = run_podcast.Runner({"steps": []}, legacy, audio=broken)
+        runner.run_merge_audio({"id": "episode", "parts": ["gcs_file:Intro.mp3"], "folder": "podcasts/"})
+        self.assertEqual([Path(p).name for p in legacy.merged], ["Intro.mp3"])
+
+
+@unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "ffmpeg is not installed")
+class AudioPolishTests(unittest.TestCase):
+    def setUp(self):
+        from pydub.generators import Sine
+        from podcast_v2 import audio_polish
+        self.polish = audio_polish
+        self.dir = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.dir)
+        # Google-style 24 kHz mono tone, quiet, and a 44.1 kHz stereo intro.
+        Sine(9000, sample_rate=24000).to_audio_segment(duration=1500).apply_gain(-30).export(
+            self.dir / "speech.wav", format="wav")
+        Sine(440, sample_rate=44100).to_audio_segment(duration=300).set_channels(2).export(
+            self.dir / "intro.wav", format="wav")
+
+    def test_join_uses_clean_resampling(self):
+        import numpy as np
+        combined = self.polish.join([self.dir / "intro.wav", self.dir / "speech.wav"], self.dir)
+        self.assertEqual((combined.frame_rate, combined.channels), (44100, 2))
+        samples = np.array(combined.get_array_of_samples(), dtype=float)[::2][int(0.5 * 44100):]
+        spectrum = np.abs(np.fft.rfft(samples * np.hanning(len(samples))))
+        freqs = np.fft.rfftfreq(len(samples), 1 / 44100)
+        tone = spectrum[np.abs(freqs - 9000) < 50].max()
+        image = spectrum[np.abs(freqs - 15000) < 50].max()
+        # Linear interpolation leaves an image about 9 dB down; soxr removes it.
+        self.assertLess(20 * np.log10(image / tone), -60)
+
+    def test_speech_is_normalized_to_podcast_loudness(self):
+        out = self.polish.normalize_loudness(self.dir / "speech.wav", self.dir / "loud.wav")
+        self.assertEqual(self.polish.probe(out), (24000, 1))
+        report = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-nostdin", "-i", str(out), "-af", "loudnorm=print_format=json",
+             "-f", "null", "-"], capture_output=True, text=True, check=True).stderr
+        measured = float(json.loads(re.findall(r"\{[^{}]*\}", report)[-1])["input_i"])
+        self.assertAlmostEqual(measured, self.polish.TARGET_LUFS, delta=1.5)
 
 
 if __name__ == "__main__":

@@ -110,16 +110,25 @@ def clean_filename(title):
 
 
 class Runner:
-    def __init__(self, workflow, legacy, prompts_dir=PROMPTS_DIR):
+    def __init__(self, workflow, legacy, prompts_dir=PROMPTS_DIR, audio=None):
         self.workflow = workflow
         self.legacy = legacy
         self.prompts_dir = prompts_dir
+        self._audio = audio
         self.outputs = {}
         self.records = []
         self.final_audio_path = None
         self.final_audio_filename = None
         self.final_description_text = None
         self.final_description_filename = None
+
+    @property
+    def audio(self):
+        if self._audio is None:
+            from podcast_v2.audio_polish import AudioFinisher
+
+            self._audio = AudioFinisher(self.legacy.export_audio, self.legacy.DEFAULT_MP3_EXPORT_BITRATE)
+        return self._audio
 
     def filename(self, step, extension, fallback):
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -202,6 +211,12 @@ class Runner:
             print(f"  ElevenLabs credit/quota error; using Google voice {voice_name}.")
             output = legacy.MP3_OUTPUT_DIR / f"v2_{step['id']}_google.mp3"
             audio_path = legacy.generate_google_voice_audio(text, voice_name, output)
+            if audio_path:
+                try:
+                    self.audio.polish_speech(audio_path, Path(audio_path).with_suffix(".wav"))
+                    print("  Google narration normalized to podcast loudness.")
+                except Exception as error:
+                    print(f"  Loudness normalization skipped ({error}); keeping the original narration.")
         if not audio_path:
             raise RuntimeError(f"Voice generation failed for {step['id']}.")
         filename = self.filename(step, "mp3", f"v2_{step['id']}_{voice_name}")
@@ -213,8 +228,12 @@ class Runner:
         paths = [self.resolve(part) for part in step["parts"]]
         if not all(paths):
             raise RuntimeError(f"Missing audio for {step['id']}: {paths}")
-        merged = self.legacy.merge_multiple_audio_files(
-            paths, self.legacy.MP3_OUTPUT_DIR / f"v2_{step['id']}.mp3")
+        output = self.legacy.MP3_OUTPUT_DIR / f"v2_{step['id']}.mp3"
+        try:
+            merged = self.audio.merge(paths, output)
+        except Exception as error:
+            print(f"  High-quality merge unavailable ({error}); using the standard merge.")
+            merged = self.legacy.merge_multiple_audio_files(paths, output)
         if not merged:
             raise RuntimeError(f"Audio merge failed for {step['id']}.")
         filename = self.filename(step, "mp3", f"v2_{step['id']}")
