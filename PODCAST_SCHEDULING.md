@@ -1,5 +1,10 @@
 # Podcast scheduling
 
+The daily automatic episode runs from **Run AI Podcast V2**
+(`.github/workflows/ai_podcast_pipeline_v2.yml`), which builds the episode from
+`podcast_v2/` with no Google Sheet. The original **Run AI Podcast Pipeline**
+(V1) is now manual only.
+
 The target is **4:00 p.m. Eastern local time, Sunday through Thursday**,
 including daylight-saving changes. Manual **Run workflow** requests remain
 immediate and can be used on any day.
@@ -21,10 +26,11 @@ The workflow now gives GitHub multiple chances to allocate a runner before
 - Automatic runs share a concurrency group. A later wake-up cannot cancel
   the active runner or start a second automatic pipeline concurrently.
   GitHub can replace pending backups; cancelled pending runs are expected.
-- Any same-day manual trigger of this workflow suppresses automation,
+- Any same-day manual trigger of the V2 workflow suppresses automation,
   including failed or cancelled manual runs. History is checked before and
-  after waiting, and again immediately before generation.
-- Once an automatic run has started the `Run AI Podcast Pipeline` generation
+  after waiting, and again immediately before generation. A manual V1 run
+  does not count, so running V1 by hand on a scheduled day adds a second episode.
+- Once an automatic run has started the `Run AI Podcast V2` generation
   step, backups skip, even if that generation later fails. This avoids paying
   for or publishing a second episode. Recovery after that point is manual.
   A failed preflight or skipped generation does not consume the day's run.

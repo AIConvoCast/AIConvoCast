@@ -22,6 +22,9 @@ on:
       - '.github/workflows/audio-quality-checks.yml'
       - '.github/workflows/ai_podcast_pipeline.yml'
       - '.github/workflows/manual_ai_podcast_pipeline.yml'
+      - '.github/workflows/ai_podcast_pipeline_v2.yml'
+      - 'podcast_v2/**'
+      - 'test_podcast_v2.py'
   pull_request:
     paths:
       - 'audio_mastering.py'
@@ -42,6 +45,9 @@ on:
       - '.github/workflows/audio-quality-checks.yml'
       - '.github/workflows/ai_podcast_pipeline.yml'
       - '.github/workflows/manual_ai_podcast_pipeline.yml'
+      - '.github/workflows/ai_podcast_pipeline_v2.yml'
+      - 'podcast_v2/**'
+      - 'test_podcast_v2.py'
   workflow_dispatch:
 
 permissions:
@@ -81,7 +87,7 @@ jobs:
           python -c "import audio_mastering; from google.cloud import storage, texttospeech; import pandas, gspread, openai, anthropic"
 
       - name: Verify audio processing
-        run: python -m unittest test_google_audio_quality test_google_pronunciations test_podcast_email test_pipeline_recovery test_news_research -v
+        run: python -m unittest test_google_audio_quality test_google_pronunciations test_podcast_email test_pipeline_recovery test_news_research test_podcast_v2 -v
 
       - name: Verify scheduled run decisions
         run: python -m unittest test_scheduled_podcast -v
@@ -94,7 +100,7 @@ jobs:
           import os
           from check_scheduled_podcast import github_api_get
           repository = os.environ['GITHUB_REPOSITORY']
-          history = github_api_get(f'/repos/{repository}/actions/workflows/ai_podcast_pipeline.yml/runs', {'event': 'workflow_dispatch', 'per_page': 1})
+          history = github_api_get(f'/repos/{repository}/actions/workflows/ai_podcast_pipeline_v2.yml/runs', {'event': 'workflow_dispatch', 'per_page': 1})
           assert 'workflow_runs' in history
           print('GitHub workflow history is readable with the Actions token.')
           PY

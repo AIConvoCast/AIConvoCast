@@ -3,12 +3,9 @@ name: Run AI Podcast Pipeline
 permissions:
   contents: read
 
+# Manual only: the daily 4 p.m. Eastern episode now comes from
+# "Run AI Podcast V2" (ai_podcast_pipeline_v2.yml).
 on:
-  schedule:
-    # Multiple early wake-ups and backups, away from the busy top of the hour.
-    # UTC covers both EST and EDT. Python uses America/New_York to wait until
-    # 4 p.m. Sun-Thu, suppress duplicates, and skip after a manual trigger.
-    - cron: '17 15-22 * * 0-4'
   workflow_dispatch:
     inputs:
       custom_topic:

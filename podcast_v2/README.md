@@ -1,8 +1,9 @@
 # AI Podcast V2 (no Google Sheet)
 
-V2 runs the daily episode from files in this folder. The original
-`Run AI Podcast Pipeline` action and its Google Sheet are unchanged and still
-own the schedule; V2 is manual-only for now.
+V2 runs the daily episode from files in this folder. The **Run AI Podcast V2**
+action runs it automatically at 4 p.m. Eastern, Sunday through Thursday (see
+`PODCAST_SCHEDULING.md`), and on demand. The original `Run AI Podcast Pipeline`
+action and its Google Sheet are unchanged but are now manual only.
 
 | File | What it holds |
 | --- | --- |
