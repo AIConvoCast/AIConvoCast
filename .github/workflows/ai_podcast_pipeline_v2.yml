@@ -1,13 +1,19 @@
 name: Run AI Podcast V2
 
 # Runs the episode workflow defined in podcast_v2/ (workflow.json, prompts/,
-# models.json) without reading or writing the Google Sheet. Manual only while
-# the original "Run AI Podcast Pipeline" keeps the schedule.
+# models.json) without reading or writing the Google Sheet. This is the daily
+# automatic episode: 4 p.m. Eastern, Sunday through Thursday. See
+# PODCAST_SCHEDULING.md.
 
 permissions:
   contents: read
 
 on:
+  schedule:
+    # Multiple early wake-ups and backups, away from the busy top of the hour.
+    # UTC covers both EST and EDT. Python uses America/New_York to wait until
+    # 4 p.m. Sun-Thu, suppress duplicates, and skip after a manual trigger.
+    - cron: '17 15-22 * * 0-4'
   workflow_dispatch:
     inputs:
       send_email:
@@ -16,16 +22,51 @@ on:
         type: boolean
         default: true
 
+# Keep one automatic runner alive while it waits; newer wake-ups may replace
+# pending backups but must never cancel the active wait or podcast generation.
+# Manual triggers remain immediate and independent.
 concurrency:
-  group: podcast-v2-${{ github.run_id }}
+  group: ${{ github.event_name == 'schedule' && 'podcast-v2-automatic' || format('podcast-v2-manual-{0}', github.run_id) }}
   cancel-in-progress: false
 
 jobs:
+  check-schedule:
+    name: Wait for 4 p.m. Eastern and check today's runs
+    runs-on: ubuntu-latest
+    timeout-minutes: 250  # Up to four hours from noon Eastern, plus setup/API time.
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      should_run: ${{ steps.history.outputs.should_run }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Wait for target time and check run history
+        id: history
+        run: python check_scheduled_podcast.py --wait-until-target
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
   run-pipeline:
+    needs: check-schedule
+    if: needs.check-schedule.outputs.should_run == 'true'
     name: Run AI Podcast V2
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
     environment: production
+    env:
+      # Scheduled runs have no inputs; they always email the episode.
+      SEND_EMAIL: ${{ github.event_name != 'workflow_dispatch' || inputs.send_email }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -52,7 +93,7 @@ jobs:
         run: python -m unittest test_google_audio_quality test_podcast_v2 -v
 
       - name: Verify email authorization before paid generation
-        if: inputs.send_email
+        if: env.SEND_EMAIL == 'true'
         run: python podcast_email.py --check-auth
         env:
           PODCAST_EMAIL_BACKEND: gmail_api
@@ -65,8 +106,16 @@ jobs:
         run: |
           echo '${{ secrets.GOOGLE_CREDS_JSON }}' > jmio-google-api.json
 
+      - name: Recheck today's runs immediately before generation
+        id: final-check
+        run: python check_scheduled_podcast.py
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      # This step name is what check_scheduled_podcast.py looks for.
       - name: Run AI Podcast V2
-        run: python podcast_v2/run_podcast.py ${{ !inputs.send_email && '--no-email' || '' }}
+        if: steps.final-check.outputs.should_run == 'true'
+        run: python podcast_v2/run_podcast.py ${{ env.SEND_EMAIL != 'true' && '--no-email' || '' }}
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}

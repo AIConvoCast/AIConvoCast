@@ -13,7 +13,8 @@ from zoneinfo import ZoneInfo
 
 
 EASTERN = ZoneInfo("America/New_York")
-GENERATION_STEP = "Run AI Podcast Pipeline"
+# Generation step names in the V1 and V2 workflows.
+GENERATION_STEPS = {"Run AI Podcast Pipeline", "Run AI Podcast V2"}
 WARMUP_HOUR = 12
 TARGET_HOUR = 16
 
@@ -25,7 +26,7 @@ def generation_started(repository, run, api_get):
         jobs = api_get(path, {"filter": "all", "per_page": 100, "page": page})["jobs"]
         for job in jobs:
             for step in job.get("steps", []):
-                if step["name"] == GENERATION_STEP and (
+                if step["name"] in GENERATION_STEPS and (
                     step["status"] == "in_progress"
                     or (step["status"] == "completed" and step.get("conclusion") != "skipped")
                 ):

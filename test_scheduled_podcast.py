@@ -11,6 +11,8 @@ from unittest.mock import Mock, patch
 
 import check_scheduled_podcast as schedule
 
+V2_STEP = "Run AI Podcast V2"
+
 
 def manual_run(created_at, **changes):
     return {
@@ -128,20 +130,23 @@ class ScheduledPodcastTests(unittest.TestCase):
                                              api_get=api, now=schedule.parse_timestamp("2026-09-19T13:00:00Z"))[0])
 
     def test_backup_skips_after_automatic_generation_even_if_it_failed(self):
-        for state, conclusion in [("in_progress", None), ("completed", "success"),
-                                  ("completed", "failure"), ("completed", "cancelled")]:
-            with self.subTest(state=state, conclusion=conclusion):
+        for name, state, conclusion in [
+            (V2_STEP, "in_progress", None), (V2_STEP, "completed", "success"),
+            (V2_STEP, "completed", "failure"), (V2_STEP, "completed", "cancelled"),
+            ("Run AI Podcast Pipeline", "completed", "success"),
+        ]:
+            with self.subTest(name=name, state=state, conclusion=conclusion):
                 prior = manual_run("2026-09-13T20:00:00Z", event="schedule")
-                jobs = [{"steps": [{"name": schedule.GENERATION_STEP, "status": state,
+                jobs = [{"steps": [{"name": name, "status": state,
                                      "conclusion": conclusion}]}]
                 (allowed, explanation), _ = self.evaluate([prior], jobs=jobs)
                 self.assertFalse(allowed)
                 self.assertIn("already started generation", explanation)
 
     def test_backup_can_run_after_skipped_guard_or_failed_preflight(self):
-        for steps in [[], [{"name": schedule.GENERATION_STEP, "status": "completed", "conclusion": "skipped"}],
+        for steps in [[], [{"name": V2_STEP, "status": "completed", "conclusion": "skipped"}],
                       [{"name": "Verify email authorization before paid generation", "status": "completed", "conclusion": "failure"}],
-                      [{"name": schedule.GENERATION_STEP, "status": "queued", "conclusion": None}]]:
+                      [{"name": V2_STEP, "status": "queued", "conclusion": None}]]:
             with self.subTest(steps=steps):
                 prior = manual_run("2026-09-13T20:00:00Z", event="schedule")
                 self.assertTrue(self.evaluate([prior], jobs=[{"steps": steps}])[0][0])
@@ -154,7 +159,7 @@ class ScheduledPodcastTests(unittest.TestCase):
 
     def test_generation_from_earlier_attempt_or_job_page_counts(self):
         api = Mock(side_effect=[{"jobs": [{"steps": []}] * 100}, {"jobs": [{"steps": [
-            {"name": schedule.GENERATION_STEP, "status": "completed", "conclusion": "success"}
+            {"name": V2_STEP, "status": "completed", "conclusion": "success"}
         ]}]}])
         self.assertTrue(schedule.generation_started("example/podcast", {"id": 123}, api))
         self.assertEqual(api.call_args.args[1], {"filter": "all", "per_page": 100, "page": 2})
