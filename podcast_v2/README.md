@@ -9,6 +9,7 @@ action and its Google Sheet are unchanged but are now manual only.
 | --- | --- |
 | `workflow.json` | The steps, in order. Based on sheet Workflow 47. |
 | `prompts/P*.txt` | Prompt text, one file per prompt ID. |
+| `prompts/script_tuning.txt` | Claude script requirements (length, quotes, structure) added by the `script_tuning` part. |
 | `models.json` | Known models by name, with web-search support and availability. |
 | `run_podcast.py` | The runner (`--check` validates only, `--no-email` skips the email). |
 | `update_models.py` | Refreshes `models.json` from the OpenAI, Anthropic and Google APIs. |
@@ -33,8 +34,8 @@ involved. `python podcast_v2/run_podcast.py --check` confirms the name is in
 | `voice` | ElevenLabs narration, Google voice fallback on quota errors | `L8E1SL4T5` |
 | `merge_audio` | Joins intro, narration and outro | `L1&L9&L2SL3T5` |
 
-Parts: `prompt:<id>`, `step:<step id>`, `script_tuning` (the Claude script
-appendix V1 adds to P4/P12), `gcs_file:<path>`, `gcs_latest_text:<folder>`,
+Parts: `prompt:<id>`, `step:<step id>`, `script_tuning` (the contents of
+`prompts/script_tuning.txt`), `gcs_file:<path>`, `gcs_latest_text:<folder>`,
 `gcs_latest_mp3:<folder>`. `title_from` names the step whose `Title:` line
 names the saved files.
 

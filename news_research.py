@@ -37,7 +37,10 @@ Pick stories this audience would click on and learn from. Rank in this order:
    Anthropic, Google DeepMind, Meta, xAI, Microsoft, Amazon, NVIDIA, Mistral,
    DeepSeek, Qwen and peers), including API, pricing or availability changes.
 2. New tools, agents, coding tools, SDKs and product features people can try now.
-3. Research, benchmarks or independent evaluations that change what practitioners
+3. Major statements, roadmaps or strategy shifts from frontier-lab and technology
+   leaders, and community reception of major model releases: hands-on results and
+   notable praise or criticism from respected developers and researchers.
+4. Research, benchmarks or independent evaluations that change what practitioners
    believe or build, and consequential compute, safety or policy developments.
 A smaller company or open-source project belongs above a major lab only when its
 capability or evidence is clearly more significant. Deprioritize funding,
@@ -48,8 +51,9 @@ to hear this today?
 
 Prior coverage: do not return a story whose main event appears in the supplied prior
 coverage. A follow-up qualifies only with substantial new evidence (hands-on testing,
-independent evaluations, new availability, limitations or pricing) and only one
-sentence of recap. Group multiple reports about the same event into one candidate.
+independent evaluations, community reception of a major model release, new
+availability, limitations or pricing) and only one sentence of recap. When a major
+model release is still the most important story, its reception can lead again. Group multiple reports about the same event into one candidate.
 
 Use primary announcements, release notes, model/system cards, papers and repositories
 to establish what changed. Check vendor performance claims against independent
@@ -62,21 +66,25 @@ that person said; they do not establish broad consensus. Never invent a quote or
 reaction pattern. Attribute benchmarks, distinguish claims from independently shown
 results, and separate availability, previews, demos and production releases.
 
-Use at most six search/open tool calls in one pass. Spend the first one or two on
+Use at most eight search/open tool calls in one pass. Spend the first one or two on
 discovery: today's model releases and launches from the labs above, then a broad
-sweep of today's AI news. Use the rest to verify the best candidates. Usually 5-8
-source pages are enough; seek a second independent source for surprising or
-contested claims. Stop when supported candidates are ready. Omit unsupported
-details and weak stories instead of filling five slots. Do not spend extra calls
-hunting quotes.
+sweep of today's AI news. Spend up to two on what the people involved (founders,
+lab leaders, researchers) and respected, well-known voices in AI said about the top
+stories. Use the rest to verify the best candidates. Usually 6-10 source pages are
+enough; seek a second independent source for surprising or contested claims. Stop
+when supported candidates are ready. Omit unsupported details and weak stories
+instead of filling five slots. Do not spend further calls hunting quotes.
 
-Return a compact 600-850 word brief in numbered sections, no summary table or
+Return a compact 700-1,000 word brief in numbered sections, no summary table or
 process narration. Begin with the absolute coverage window and current ET date.
 For each story give: headline; event and publication dates (unknown when unverified);
 what actually changed with 2-3 specific facts; why a tech-focused listener should
 care; one meaningful caveat/tradeoff; what is new versus prior coverage; and direct
-source links next to supported claims. Include a short attributed quote only if
-verified, at most 20 quoted words per source across the whole brief. Recommend the
+source links next to supported claims. For each story include one or two verified
+quotes from participants or respected voices in AI, each naming the speaker, their
+role and the source link. Keep each quote under 25 words and at most 40 quoted words
+per source across the whole brief; paraphrase and attribute when a quote can't be
+verified. Recommend the
 best 3-4 stories and their running order, leading with the story this audience is
 most likely to click on. Never answer current news from memory.
 """
@@ -93,9 +101,10 @@ click on first. Drop routine big-company PR as readily as niche items, and drop 
 repetitive, promotional or weakly supported candidates, including anything the brief
 marks as already covered without substantial new evidence. Preserve event
 versus publication dates, product names, limitations, attribution and exact source
-URLs. Do not add facts, quotes, sentiment, consensus, dates, or URLs from memory.
+URLs, and keep the brief's verified quotes with their speaker, role and source.
+Do not add facts, quotes, sentiment, consensus, dates, or URLs from memory.
 Do not claim you searched or independently verified a page. Label vendor claims and
-unknowns. Give the script writer a concise numbered brief, 550-800 words maximum,
+unknowns. Give the script writer a concise numbered brief, 650-950 words maximum,
 with the evidence, listener impact, caveat and inline direct source links for every
 story. No table, preamble, follow-up questions, or discussion of these instructions.
 """
@@ -171,7 +180,7 @@ def research_news(client, prompt, *, use_astra, output_directory=None):
                "text": {"verbosity": "low"}, "max_output_tokens": 3200,
                "tools": [{"type": "web_search", "search_context_size": "low",
                           "user_location": {"type": "approximate", "country": "US", "timezone": "America/New_York"}}],
-               "tool_choice": "required", "extra_body": {"max_tool_calls": 6},
+               "tool_choice": "required", "extra_body": {"max_tool_calls": 8},
                "service_tier": "default", "store": False, "timeout": 150}
     # Client-level retries must also be disabled, including on old SDKs.
     client = client.with_options(max_retries=0)

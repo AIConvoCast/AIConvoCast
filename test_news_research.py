@@ -44,7 +44,7 @@ class ResearchBudgetTests(unittest.TestCase):
         calls = self.client.responses.create.call_args_list
         self.assertEqual(len(calls), 2)
         self.assertEqual(calls[0].kwargs["model"], SOL)
-        self.assertEqual(calls[0].kwargs["extra_body"], {"max_tool_calls": 6})
+        self.assertEqual(calls[0].kwargs["extra_body"], {"max_tool_calls": 8})
         self.assertEqual(calls[1].kwargs["model"], ASTRA)
         self.assertNotIn("tools", calls[1].kwargs)
         self.assertNotIn("previous_response_id", calls[1].kwargs)
