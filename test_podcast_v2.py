@@ -14,8 +14,10 @@ RSS = b"""<rss><channel>
 </channel></rss>"""
 
 
+TUNING = "Additional script requirements for this run:\n- keep it tight\n"
+
+
 class FakeLegacy:
-    OPUS47_SCRIPT_TUNING_APPENDIX = "Additional script requirements for this run:\n- keep it tight\n"
 
     def __init__(self, directory):
         self.MP3_OUTPUT_DIR = Path(directory)
@@ -112,6 +114,7 @@ class PodcastV2RunnerTests(unittest.TestCase):
             prompts.mkdir()
             for pid in ("4", "8", "10", "12"):
                 (prompts / f"P{pid}.txt").write_text(f"P{pid} text\n")
+            (prompts / "script_tuning.txt").write_text(TUNING)
             legacy = FakeLegacy(directory)
             runner = run_podcast.Runner(workflow, legacy, prompts_dir=prompts)
             with mock.patch("requests.get") as get:
@@ -172,8 +175,9 @@ class PodcastV2GuardTests(unittest.TestCase):
         runner = run_podcast.Runner({"steps": []}, legacy)
         runner.outputs["research"] = "brief"
         with tempfile.TemporaryDirectory() as directory:
-            appendix = legacy.OPUS47_SCRIPT_TUNING_APPENDIX.strip()
+            appendix = TUNING.strip()
             Path(directory, "P4.txt").write_text(f"P4 text\n\n{appendix}\n")
+            Path(directory, "script_tuning.txt").write_text(TUNING)
             runner.prompts_dir = Path(directory)
             runner.run_model({"id": "script", "model": "claude-opus-5-5", "web_search": True,
                               "parts": ["prompt:4", "script_tuning", "step:research"]})

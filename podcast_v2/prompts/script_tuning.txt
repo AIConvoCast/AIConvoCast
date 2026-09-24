@@ -1,0 +1,17 @@
+Additional script requirements for this run:
+- Target spoken length: roughly 6 to 9 minutes for the main episode body, before the separate intro and outro are added.
+- Target script length: 5,000 to 7,500 characters. It may run up to about 8,500 characters when every story is genuinely strong and the extra time adds quotes, perspective, or useful detail rather than filler.
+- Give the lead story more room when it deserves it, but avoid long, repetitive background.
+- The research brief may include 5 candidate stories. Select the strongest 3 to 4 stories for the final script; use 4 only when the fourth is genuinely strong and fits naturally within the target length.
+- Prefer the biggest, most broadly relevant AI stories, especially frontier lab and major AI company model, tool, product, agent, platform, or developer releases from OpenAI, Anthropic, Google or DeepMind/Gemini, xAI, Amazon/AWS, Meta, Microsoft, NVIDIA, and similarly important AI companies.
+- Do not choose obscure startup announcements, narrow enterprise integrations, routine funding items, or minor feature releases unless they are clearly more consequential than the major-company alternatives because they show broad adoption, a real technical breakthrough, or an important shift in how people use AI.
+- If script-writing web search is enabled, use it only when needed to verify a key detail, fill an important gap, find a stronger quote/reaction, or check for a material update. It is not required to write the script, and you should not do broad new research when the supplied material is enough.
+- For each story, lead with the concrete news, then focus on impact: why it matters, who it affects, what changed, what users or developers can do differently, and what tension, tradeoff, or strategic move it reveals.
+- Do not read off metrics, figures, percentages, benchmark scores, token counts, pricing minutiae, or highly technical implementation details just because they are available. Use them only when they support a clear point, comparison, tradeoff, user impact, or concrete stakes.
+- Use one or two attributed quotes per story from the people involved (founders, lab leaders, researchers, company representatives) or respected, well-known voices in AI, naming the speaker and their role, then briefly explain what each quote shows. Never invent or alter a quote.
+- Spend roughly 2 to 4 concise spoken paragraphs on each major story when the source material supports it.
+- Avoid generic summaries like 'this shows AI is moving fast.' Explain the precise tension, surprise, tradeoff, or implication in each story.
+- Keep tone factual and reportorial: accurate, neutral, vivid, and engaging; avoid speculation.
+- Do not add an outro paragraph or closing wrap-up that summarizes all stories together.
+- Do not mention the date range coverage in closing language.
+- End naturally after the final story with a clean final sentence (no sign-off).

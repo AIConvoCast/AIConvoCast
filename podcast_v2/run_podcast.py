@@ -34,6 +34,11 @@ def load_prompt(prompt_id, prompts_dir=PROMPTS_DIR):
     return (Path(prompts_dir) / f"P{prompt_id}.txt").read_text(encoding="utf-8").rstrip("\n")
 
 
+def load_script_tuning(prompts_dir=PROMPTS_DIR):
+    """Claude script requirements appended to the script and title steps."""
+    return (Path(prompts_dir) / "script_tuning.txt").read_text(encoding="utf-8").strip()
+
+
 def validate_workflow(workflow, models, prompts_dir=PROMPTS_DIR):
     """Return a list of configuration problems; empty means the workflow can run."""
     problems = []
@@ -50,6 +55,8 @@ def validate_workflow(workflow, models, prompts_dir=PROMPTS_DIR):
             refs.append(step["source"])
         for ref in refs:
             if ref == "script_tuning":
+                if not (Path(prompts_dir) / "script_tuning.txt").is_file():
+                    problems.append(f"Step {step_id}: prompts/script_tuning.txt does not exist.")
                 continue
             match = PART_PATTERN.match(ref)
             if not match:
@@ -121,7 +128,7 @@ class Runner:
 
     def resolve(self, ref):
         if ref == "script_tuning":
-            return self.legacy.OPUS47_SCRIPT_TUNING_APPENDIX.strip()
+            return load_script_tuning(self.prompts_dir)
         kind, value = PART_PATTERN.match(ref).groups()
         if kind == "prompt":
             return load_prompt(value, self.prompts_dir)

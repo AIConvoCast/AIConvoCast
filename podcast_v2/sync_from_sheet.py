@@ -20,8 +20,9 @@ WORKFLOW_PATH = V2_DIR / "workflow.json"
 SNAPSHOT_PATH = V2_DIR / "sheet_snapshot.json"
 CREDS_FILE = V2_DIR.parent / "jmio-google-api.json"
 SHEET_NAME = "AI Workflow"
-# V1 appends this block to P4 in the sheet at run time; V2 adds it with the
-# workflow's "script_tuning" part, so the synced prompt leaves it out.
+# V1 appends this block to P4 in the sheet at run time; V2 adds its own copy
+# (prompts/script_tuning.txt) with the workflow's "script_tuning" part, so the
+# synced prompt leaves it out.
 SCRIPT_TUNING_BLOCK = re.compile(r"\n*Additional script requirements for this run:\n(?:- .*(?:\n|$))*", re.MULTILINE)
 ELEVEN_FIELDS = ("Voice", "Model", "Stability", "Similarity Boost", "Style", "Speed")
 
