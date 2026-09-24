@@ -51,6 +51,10 @@ read-only and copies, for the workflow marked Active = Y:
 Model choices in `workflow.json` are never overwritten. Changes land on a
 `sheet-sync/<run id>` branch to review as a pull request.
 
+The prompts in `prompts/` have since been tuned in the repo (P4, P8, P10, P12),
+so a sync will propose replacing those edits with the sheet text. Review the
+prompt diffs in the sync pull request before merging it.
+
 ## Prior-episode check
 
 The first step reads the newest 15 episodes from the RSS feed and passes them,
