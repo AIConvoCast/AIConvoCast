@@ -66,7 +66,7 @@ Enter a **Custom topic** when starting **Run AI Podcast V2** (or pass `--topic` 
 and adoption". It replaces the daily multi-story format with `topic_workflow.json`:
 research focused on the topic's latest news, adoption, feedback and perspectives
 (with verified quotes), a 3-5 segment single-topic script of the same length
-(5,000-7,500 characters, up to about 8,500), then the usual title/description,
+(about 7 minutes: 5,800-6,800 characters, under 7,300), then the usual title/description,
 narration, intro/outro and email. Recent episodes are still passed to research so
 it focuses on what is new. Like any manual V2 run, it counts as that day's episode,
 so the 4 p.m. automatic run skips.

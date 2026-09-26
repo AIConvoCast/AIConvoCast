@@ -1,6 +1,6 @@
 Additional script requirements for this run:
-- Target spoken length: roughly 6 to 9 minutes for the main episode body, before the separate intro and outro are added.
-- Target script length: 5,000 to 7,500 characters. It may run up to about 8,500 characters when every story is genuinely strong and the extra time adds quotes, perspective, or useful detail rather than filler.
+- Target spoken length: about 7 minutes for the main episode body, before the separate intro and outro are added.
+- Target script length: 5,800 to 6,800 characters, and always under 7,300. Tighten wording or drop weaker details rather than running long.
 - Give the lead story more room when it deserves it, but avoid long, repetitive background.
 - The research brief may include 5 candidate stories. Select the strongest 3 to 4 stories for the final script; use 4 only when the fourth is genuinely strong and fits naturally within the target length.
 - Prefer the biggest, most broadly relevant AI stories, especially frontier lab and major AI company model, tool, product, agent, platform, or developer releases from OpenAI, Anthropic, Google or DeepMind/Gemini, xAI, Amazon/AWS, Meta, Microsoft, NVIDIA, and similarly important AI companies.
