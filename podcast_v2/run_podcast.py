@@ -291,6 +291,34 @@ class Runner:
             preview = str(self.outputs[step["id"]])[:100]
             print(f"  Output (first 100): {preview}")
         self.legacy.LOCAL_ARTIFACTS.write_json("v2_steps.json", self.records)
+        self.write_summary()
+
+    def write_summary(self, path=None):
+        """Put the episode text on the GitHub run page so it can be reviewed there."""
+        path = path or os.getenv("GITHUB_STEP_SUMMARY")
+        if not path:
+            return
+        lines = self.summary_lines()
+        with open(path, "a", encoding="utf-8") as summary:
+            summary.write("\n".join(lines) + "\n")
+        # Also in the job log (collapsed), which the Actions API can read.
+        print("::group::Episode text")
+        print("\n".join(lines))
+        print("::endgroup::")
+
+    def summary_lines(self):
+        lines = ["## Episode", ""]
+        if self.topic:
+            lines += [f"**Custom topic:** {self.topic}", ""]
+        if self.final_description_text:
+            lines += ["```text", self.final_description_text.strip(), "```", ""]
+        for step in self.workflow["steps"]:
+            text = self.outputs.get(step["id"])
+            if step["type"] != "model" or not text:
+                continue
+            lines += [f"<details><summary>{step['id']} ({step['model']}): {len(text):,} characters</summary>",
+                      "", "```text", str(text).strip(), "```", "", "</details>", ""]
+        return lines
 
 
 def load_legacy():
