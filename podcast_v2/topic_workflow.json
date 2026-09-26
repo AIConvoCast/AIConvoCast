@@ -43,6 +43,9 @@
       "web_search": false,
       "parts": [
         "prompt:12",
+        "text:This is a single-topic episode. The requested topic was:",
+        "topic",
+        "text:Make the title reflect the angles in that topic and lead with the most compelling new development in the script, not an event the script describes as previously covered. Name the product or company. The description should mention each main angle the episode covers.",
         "step:script"
       ]
     },
