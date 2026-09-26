@@ -43,6 +43,7 @@ Thumbs.db
 *.json
 !manifest.json
 !podcast_v2/workflow.json
+!podcast_v2/topic_workflow.json
 !podcast_v2/models.json
 !podcast_v2/sheet_snapshot.json
 jmio-google-api.json

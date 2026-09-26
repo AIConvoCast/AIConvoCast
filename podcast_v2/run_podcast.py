@@ -8,6 +8,7 @@ existing pipeline's helpers, so audio and text handling match V1.
 import argparse
 import html
 import json
+import os
 import re
 import sys
 import xml.etree.ElementTree as ET
@@ -17,11 +18,14 @@ from pathlib import Path
 V2_DIR = Path(__file__).resolve().parent
 REPO_ROOT = V2_DIR.parent
 WORKFLOW_PATH = V2_DIR / "workflow.json"
+TOPIC_WORKFLOW_PATH = V2_DIR / "topic_workflow.json"
 MODELS_PATH = V2_DIR / "models.json"
 PROMPTS_DIR = V2_DIR / "prompts"
 
 STEP_TYPES = {"recent_episodes", "model", "save_text", "voice", "merge_audio"}
-PART_PATTERN = re.compile(r"^(prompt|step|gcs_file|gcs_latest_text|gcs_latest_mp3):(.+)$")
+PART_PATTERN = re.compile(r"^(prompt|step|text|gcs_file|gcs_latest_text|gcs_latest_mp3):(.+)$", re.DOTALL)
+# Models that run through news_research (one Sol search, optional Astra edit).
+RESEARCH_MODELS = ("gpt-6-astra", "gpt-5.6-sol")
 TITLE_LINE = re.compile(r"(?im)^#*\s*Title\s*:")
 DESCRIPTION_LINE = re.compile(r"(?im)^#*\s*Description\s*:")
 
@@ -58,6 +62,8 @@ def validate_workflow(workflow, models, prompts_dir=PROMPTS_DIR):
                 if not (Path(prompts_dir) / "script_tuning.txt").is_file():
                     problems.append(f"Step {step_id}: prompts/script_tuning.txt does not exist.")
                 continue
+            if ref == "topic":
+                continue
             match = PART_PATTERN.match(ref)
             if not match:
                 problems.append(f"Step {step_id}: cannot read part {ref!r}.")
@@ -79,6 +85,13 @@ def validate_workflow(workflow, models, prompts_dir=PROMPTS_DIR):
                 problems.append(f"Step {step_id}: model {model['name']!r} is no longer offered by its provider.")
             elif step.get("web_search") and not model.get("web_search"):
                 problems.append(f"Step {step_id}: model {model['name']!r} does not support web search.")
+            for key in ("research_instructions", "editor_instructions"):
+                if key in step and not (Path(prompts_dir) / step[key]).is_file():
+                    problems.append(f"Step {step_id}: prompts/{step[key]} does not exist.")
+            if "research_instructions" in step and not (
+                    str(step.get("model")).startswith(RESEARCH_MODELS) and step.get("web_search")):
+                problems.append(f"Step {step_id}: research_instructions need a web-search "
+                                f"{' or '.join(RESEARCH_MODELS)} model.")
         seen.add(step.get("id"))
     return problems
 
@@ -110,17 +123,27 @@ def clean_filename(title):
 
 
 class Runner:
-    def __init__(self, workflow, legacy, prompts_dir=PROMPTS_DIR, audio=None):
+    def __init__(self, workflow, legacy, prompts_dir=PROMPTS_DIR, audio=None, topic=None, research=None):
         self.workflow = workflow
         self.legacy = legacy
         self.prompts_dir = prompts_dir
         self._audio = audio
+        self.topic = (topic or "").strip()
+        self._research = research
         self.outputs = {}
         self.records = []
         self.final_audio_path = None
         self.final_audio_filename = None
         self.final_description_text = None
         self.final_description_filename = None
+
+    @property
+    def research(self):
+        if self._research is None:
+            from news_research import research_news
+
+            self._research = research_news
+        return self._research
 
     @property
     def audio(self):
@@ -138,7 +161,13 @@ class Runner:
     def resolve(self, ref):
         if ref == "script_tuning":
             return load_script_tuning(self.prompts_dir)
+        if ref == "topic":
+            if not self.topic:
+                raise RuntimeError("This workflow needs a custom topic.")
+            return self.topic
         kind, value = PART_PATTERN.match(ref).groups()
+        if kind == "text":
+            return value
         if kind == "prompt":
             return load_prompt(value, self.prompts_dir)
         if kind == "step":
@@ -174,7 +203,15 @@ class Runner:
         temperature = 0.8 if web_search else 0.85
         if self.legacy.anthropic_model_uses_opus_adaptive_effort(model):
             temperature = 0.7
-        response = self.legacy.call_model(prompt, model, temperature=temperature, web_search=web_search)
+        if step.get("research_instructions"):
+            response = self.research(
+                self.legacy.client, prompt, use_astra=model.startswith("gpt-6-astra"),
+                output_directory=self.legacy.LOCAL_ARTIFACTS.directory / "research",
+                instructions=(Path(self.prompts_dir) / step["research_instructions"]).read_text(encoding="utf-8"),
+                editor_instructions=(Path(self.prompts_dir) / step["editor_instructions"]).read_text(encoding="utf-8")
+                if step.get("editor_instructions") else None)
+        else:
+            response = self.legacy.call_model(prompt, model, temperature=temperature, web_search=web_search)
         if isinstance(response, bytes):
             response = response.decode("utf-8")
         self.records.append({"step": step["id"], "model": model, "web_search": web_search,
@@ -270,23 +307,37 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="Validate the configuration and exit.")
     parser.add_argument("--no-email", action="store_true", help="Skip the final email.")
+    parser.add_argument("--topic", default=os.getenv("CUSTOM_TOPIC", ""),
+                        help="Make a single-topic episode instead of the daily news (default: $CUSTOM_TOPIC).")
     args = parser.parse_args(argv)
+    topic = args.topic.strip()
 
-    workflow = load_json(WORKFLOW_PATH)
-    problems = validate_workflow(workflow, load_json(MODELS_PATH))
+    models = load_json(MODELS_PATH)
+    # --check validates both workflows so a broken topic setup is caught before it is needed.
+    selected = TOPIC_WORKFLOW_PATH if topic else WORKFLOW_PATH
+    to_check = [WORKFLOW_PATH, TOPIC_WORKFLOW_PATH] if args.check else [selected]
+    problems = []
+    for path in to_check:
+        workflow = load_json(path)
+        found = validate_workflow(workflow, models)
+        problems += [f"{path.name}: {problem}" for problem in found]
+        if not found:
+            print(f"✅ Workflow '{workflow['name']}' is valid ({len(workflow['steps'])} steps).")
+            for step in workflow["steps"]:
+                if step["type"] == "model":
+                    print(f"   {step['id']}: {step['model']} (web search {'on' if step.get('web_search') else 'off'})")
     for problem in problems:
         print(f"❌ {problem}")
     if problems:
         return 1
-    print(f"✅ Workflow '{workflow['name']}' is valid ({len(workflow['steps'])} steps).")
-    for step in workflow["steps"]:
-        if step["type"] == "model":
-            print(f"   {step['id']}: {step['model']} (web search {'on' if step.get('web_search') else 'off'})")
     if args.check:
         return 0
 
+    workflow = load_json(selected)
+    if topic:
+        print(f"🎯 Custom topic episode: {topic}")
     legacy = load_legacy()
-    runner = Runner(workflow, legacy)
+    runner = Runner(workflow, legacy, topic=topic)
     runner.run()
     if not runner.final_audio_path:
         print("No final episode audio was produced; nothing to email.")
@@ -299,7 +350,7 @@ def main(argv=None):
     legacy.send_podcast_email(
         runner.final_audio_path,
         runner.final_description_text,
-        workflow_id="V2",
+        workflow_id="V2 custom topic" if topic else "V2",
         audio_filename=runner.final_audio_filename,
         description_filename=runner.final_description_filename,
     )
