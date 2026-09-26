@@ -17,7 +17,7 @@ on:
   workflow_dispatch:
     inputs:
       custom_topic:
-        description: 'Custom topic (optional): makes a full single-topic episode instead of the daily news, e.g. "Meta Muse new AI tool and adoption"'
+        description: 'Custom topic (optional): makes a full single-topic episode instead of the daily news'
         required: false
         type: string
         default: ''

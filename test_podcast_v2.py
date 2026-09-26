@@ -299,6 +299,21 @@ class TopicEpisodeTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             runner.resolve("topic")
 
+    def test_run_summary_lists_description_and_model_outputs(self):
+        workflow = {"steps": [{"id": "script", "type": "model", "model": "claude-opus-5-5"},
+                              {"id": "save", "type": "save_text"}]}
+        runner = run_podcast.Runner(workflow, FakeLegacy(tempfile.gettempdir()), topic="Meta Muse")
+        runner.outputs = {"script": "Today we will be...", "save": "ignored"}
+        runner.final_description_text = "Title:\nMuse\n\nDescription:\nAbout Muse"
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "summary.md"
+            runner.write_summary(path)
+            summary = path.read_text()
+        self.assertIn("**Custom topic:** Meta Muse", summary)
+        self.assertIn("Description:\nAbout Muse", summary)
+        self.assertIn("script (claude-opus-5-5): 19 characters", summary)
+        self.assertNotIn("ignored", summary)
+
     def test_text_parts_are_literal(self):
         runner = run_podcast.Runner({"steps": []}, FakeLegacy(tempfile.gettempdir()))
         self.assertEqual(runner.resolve("text:Topic for this episode:"), "Topic for this episode:")

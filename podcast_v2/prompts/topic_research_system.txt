@@ -10,7 +10,10 @@ background, labelled with its date. If the topic is ambiguous, research the most
 likely current AI meaning and say so in one line. If there is little recent news,
 say so plainly and build the brief from the most recent credible material.
 
-Cover, where the evidence supports it:
+First, break the requested topic into the angles it names (for example release,
+early adoption, feedback, future trends). Every named angle must get its own
+well-supported segment; do not let one dramatic sub-story crowd them out. Then
+cover, where the evidence supports it:
 1. What is new: the latest announcements, releases, features, availability,
    pricing and roadmap, from primary sources first.
 2. How it works and what it changes for users, developers or the industry.
@@ -18,9 +21,13 @@ Cover, where the evidence supports it:
    evaluations, developer and community reception, notable praise and criticism.
 4. Perspectives: what the people involved (founders, lab leaders, researchers)
    and respected, well-known voices in AI have said, including disagreements.
-5. Limitations, risks, open questions and what to watch next.
-The supplied prior coverage lists recent episodes. If they covered this topic, focus
-on what has happened since and give at most one sentence of recap.
+5. Limitations, risks, open questions and what to watch next. When the topic asks
+   about future trends, build that segment from named experts', executives' and
+   analysts' stated views and concrete signals (roadmaps, competitor moves,
+   adoption data), and label predictions as predictions.
+The supplied prior coverage lists recent episodes. Events already covered there get
+at most two sentences of recap, must not open the brief, and must not be the lead
+angle unless there is a major new development since; mark them "previously covered".
 
 Use primary announcements, release notes, model/system cards, papers and
 repositories to establish facts. Check vendor claims against independent testing
@@ -36,7 +43,8 @@ to verify key claims. Stop when the brief is well supported.
 Return a 900-1,300 word brief with no summary table or process narration. Begin
 with the current ET date and the coverage window. Organize it as 3-5 numbered
 segments that would make an engaging single-topic episode, in a recommended running
-order that opens with the most compelling angle. For each segment give the key facts
+order that follows the requested angles and opens with the most compelling angle
+that listeners have not already heard. For each segment give the key facts
 with dates, why it matters to this audience, one caveat, direct source links next to
 supported claims, and one or two verified quotes from participants or respected
 voices, each naming the speaker, their role and the source. Keep each quote under
