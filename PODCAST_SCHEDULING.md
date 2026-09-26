@@ -26,7 +26,8 @@ The workflow now gives GitHub multiple chances to allocate a runner before
 - Automatic runs share a concurrency group. A later wake-up cannot cancel
   the active runner or start a second automatic pipeline concurrently.
   GitHub can replace pending backups; cancelled pending runs are expected.
-- Any same-day manual trigger of the V2 workflow suppresses automation,
+- Any same-day manual trigger of the V2 workflow, including a custom-topic
+  episode, suppresses automation,
   including failed or cancelled manual runs. History is checked before and
   after waiting, and again immediately before generation. A manual V1 run
   does not count, so running V1 by hand on a scheduled day adds a second episode.

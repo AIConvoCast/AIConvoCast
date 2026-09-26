@@ -16,6 +16,11 @@ on:
     - cron: '17 15-22 * * 0-4'
   workflow_dispatch:
     inputs:
+      custom_topic:
+        description: 'Custom topic (optional): makes a full single-topic episode instead of the daily news, e.g. "Meta Muse new AI tool and adoption"'
+        required: false
+        type: string
+        default: ''
       send_email:
         description: 'Email the finished episode'
         required: false
@@ -128,6 +133,8 @@ jobs:
           PODCAST_SMTP_USERNAME: ${{ secrets.PODCAST_SMTP_USERNAME }}
           PODCAST_SMTP_PASSWORD: ${{ secrets.PODCAST_SMTP_PASSWORD }}
           RESEARCH_SOL_BASELINE_USD: ${{ vars.RESEARCH_SOL_BASELINE_USD }}
+          # Passed through the environment, never pasted into the shell command.
+          CUSTOM_TOPIC: ${{ github.event.inputs.custom_topic || '' }}
 
       - name: Upload generated files
         if: always()

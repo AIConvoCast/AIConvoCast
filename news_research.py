@@ -160,8 +160,13 @@ def _usable(response):
     return field(response, "status") == "completed" and bool(str(field(response, "output_text", "")).strip())
 
 
-def research_news(client, prompt, *, use_astra, output_directory=None):
-    """One Sol search; at most one Astra call. Never retry uncertain paid calls."""
+def research_news(client, prompt, *, use_astra, output_directory=None,
+                  instructions=None, editor_instructions=None):
+    """One Sol search; at most one Astra call. Never retry uncertain paid calls.
+
+    instructions/editor_instructions replace the daily-news defaults, e.g. for a
+    single-topic episode; budgets and safeguards are the same either way.
+    """
     directory = Path(output_directory or "generated_mp3/research") / uuid.uuid4().hex[:12]
     report = {"price_checked": PRICE_CHECKED, "comparison": "same-request Sol search",
               "requested_editor": ASTRA if use_astra else SOL}
@@ -176,7 +181,7 @@ def research_news(client, prompt, *, use_astra, output_directory=None):
             raise ValueError("RESEARCH_SOL_BASELINE_USD must be a positive dollar amount")
     now = datetime.now(ZoneInfo("America/New_York"))
     request = {"model": SOL, "input": f"Current date/time: {now.isoformat()}\n\nWorkflow request and prior coverage:\n{prompt}",
-               "instructions": RESEARCH_INSTRUCTIONS, "reasoning": {"effort": "low"},
+               "instructions": instructions or RESEARCH_INSTRUCTIONS, "reasoning": {"effort": "low"},
                "text": {"verbosity": "low"}, "max_output_tokens": 3200,
                "tools": [{"type": "web_search", "search_context_size": "low",
                           "user_location": {"type": "approximate", "country": "US", "timezone": "America/New_York"}}],
@@ -218,7 +223,7 @@ def research_news(client, prompt, *, use_astra, output_directory=None):
             report["budget_note"] = "Sol discovery alone exceeded the historical comparison; no Astra spend allowed."
     # Keep an additional 10% margin below the calculable allowance.
     allowance *= Decimal("0.9")
-    editorial = {"model": ASTRA, "instructions": EDITOR_INSTRUCTIONS,
+    editorial = {"model": ASTRA, "instructions": editor_instructions or EDITOR_INSTRUCTIONS,
                  "input": f"Source-grounded brief from this run:\n{brief}"}
     try:
         counter = getattr(client.responses, "input_tokens", None)

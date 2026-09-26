@@ -8,6 +8,8 @@ action and its Google Sheet are unchanged but are now manual only.
 | File | What it holds |
 | --- | --- |
 | `workflow.json` | The steps, in order. Based on sheet Workflow 47. |
+| `topic_workflow.json` | The single-topic episode used when a custom topic is given. |
+| `prompts/P20.txt`, `P21.txt`, `topic_*_system.txt` | Topic-episode research request, script prompt, and research/editor instructions. |
 | `prompts/P*.txt` | Prompt text, one file per prompt ID. |
 | `prompts/script_tuning.txt` | Claude script requirements (length, quotes, structure) added by the `script_tuning` part. |
 | `models.json` | Known models by name, with web-search support and availability. |
@@ -56,6 +58,18 @@ Model choices in `workflow.json` are never overwritten. Changes land on a
 The prompts in `prompts/` have since been tuned in the repo (P4, P8, P10, P12),
 so a sync will propose replacing those edits with the sheet text. Review the
 prompt diffs in the sync pull request before merging it.
+
+## Custom-topic episodes
+
+Enter a **Custom topic** when starting **Run AI Podcast V2** (or pass `--topic` /
+`CUSTOM_TOPIC`) to make a full episode on that one topic, e.g. "Meta Muse new AI tool
+and adoption". It replaces the daily multi-story format with `topic_workflow.json`:
+research focused on the topic's latest news, adoption, feedback and perspectives
+(with verified quotes), a 3-5 segment single-topic script of the same length
+(5,000-7,500 characters, up to about 8,500), then the usual title/description,
+narration, intro/outro and email. Recent episodes are still passed to research so
+it focuses on what is new. Like any manual V2 run, it counts as that day's episode,
+so the 4 p.m. automatic run skips.
 
 ## Prior-episode check
 

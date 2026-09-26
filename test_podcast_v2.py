@@ -244,6 +244,66 @@ class SyncFromSheetTests(unittest.TestCase):
 
 
 
+
+class TopicEpisodeTests(unittest.TestCase):
+    def test_repo_topic_workflow_is_valid(self):
+        workflow = run_podcast.load_json(run_podcast.TOPIC_WORKFLOW_PATH)
+        models = run_podcast.load_json(run_podcast.MODELS_PATH)
+        self.assertEqual(run_podcast.validate_workflow(workflow, models), [])
+        by_id = {s["id"]: s for s in workflow["steps"]}
+        self.assertEqual(by_id["script"]["model"], "claude-opus-5-5")
+        self.assertIn("topic", by_id["research"]["parts"])
+        self.assertNotIn("prompt:10", by_id["research"]["parts"])
+
+    def test_topic_episode_uses_topic_research_and_single_topic_script(self):
+        workflow = copy.deepcopy(run_podcast.load_json(run_podcast.TOPIC_WORKFLOW_PATH))
+        research_calls = []
+
+        def fake_research(client, prompt, *, use_astra, output_directory, instructions, editor_instructions):
+            research_calls.append((prompt, use_astra, instructions, editor_instructions))
+            return "topic brief"
+
+        with tempfile.TemporaryDirectory() as directory:
+            prompts = Path(directory) / "prompts"
+            prompts.mkdir()
+            for name in ("P12", "P20", "P21"):
+                (prompts / f"{name}.txt").write_text(f"{name} text\n")
+            (prompts / "topic_research_system.txt").write_text("TOPIC RESEARCH")
+            (prompts / "topic_editor_system.txt").write_text("TOPIC EDITOR")
+            legacy = FakeLegacy(directory)
+            legacy.client = object()
+            legacy.LOCAL_ARTIFACTS.directory = Path(directory)
+            audio = FakeAudio()
+            runner = run_podcast.Runner(workflow, legacy, prompts_dir=prompts, audio=audio,
+                                        topic="Meta Muse new AI tool and adoption", research=fake_research)
+            with mock.patch("requests.get") as get:
+                get.return_value = SimpleNamespace(content=RSS, raise_for_status=lambda: None)
+                runner.run()
+
+        (prompt, use_astra, instructions, editor), = research_calls
+        self.assertTrue(use_astra)
+        self.assertEqual((instructions, editor), ("TOPIC RESEARCH", "TOPIC EDITOR"))
+        self.assertIn("Topic for this episode:\n\nMeta Muse new AI tool and adoption", prompt)
+        self.assertIn("Title: Newest & best", prompt)  # prior episodes still inform the research
+        (script, *script_settings), (title, *_) = legacy.calls
+        self.assertEqual(script_settings, ["claude-opus-5-5", 0.7, True])
+        self.assertTrue(script.startswith("P21 text\n\nTopic for this episode:\n\nMeta Muse"))
+        self.assertTrue(script.endswith("topic brief"))
+        self.assertNotIn("Additional script requirements", script + title)
+        self.assertEqual([b.split("/")[0] for b in legacy.uploads],
+                         ["descriptions", "scripts", "eleven-labs", "podcasts"])
+        self.assertIn("Description:", runner.final_description_text)
+
+    def test_topic_workflow_without_topic_stops(self):
+        runner = run_podcast.Runner({"steps": []}, FakeLegacy(tempfile.gettempdir()))
+        with self.assertRaises(RuntimeError):
+            runner.resolve("topic")
+
+    def test_text_parts_are_literal(self):
+        runner = run_podcast.Runner({"steps": []}, FakeLegacy(tempfile.gettempdir()))
+        self.assertEqual(runner.resolve("text:Topic for this episode:"), "Topic for this episode:")
+
+
 class AudioFallbackTests(unittest.TestCase):
     def test_merge_falls_back_to_standard_merge(self):
         legacy = FakeLegacy(tempfile.gettempdir())
