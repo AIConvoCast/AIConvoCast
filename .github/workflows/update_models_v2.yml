@@ -8,6 +8,12 @@ permissions:
 
 on:
   workflow_dispatch:
+    inputs:
+      probe_model:
+        description: 'Optional OpenAI model to test with a tiny API call (confirms your key can use it)'
+        required: false
+        type: string
+        default: ''
 
 concurrency:
   group: update-models-v2-${{ github.ref }}
@@ -41,6 +47,9 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          # The shared pipeline module checks for this key when it loads.
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          PROBE_MODEL: ${{ github.event.inputs.probe_model || '' }}
 
       - name: Commit updated model list
         run: |

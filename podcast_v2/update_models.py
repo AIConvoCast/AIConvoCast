@@ -5,6 +5,7 @@ numeric IDs), known models are never removed, and a model a provider stops
 listing is marked "available": false.
 """
 
+import argparse
 import json
 import os
 import sys
@@ -42,7 +43,21 @@ def merge_models(existing, fetched, now):
     return registry, sorted(added), sorted(removed)
 
 
-def main():
+def probe_openai_model(client, model):
+    """Make a tiny real call; return (ok, message). Listing a model does not prove it can be called."""
+    try:
+        response = client.responses.create(model=model, input="Reply with OK.", max_output_tokens=16,
+                                           store=False, timeout=60)
+        return True, f"`{model}` accepted a test call (status: {getattr(response, 'status', 'unknown')})."
+    except Exception as error:  # the API error text says why (not found, not verified, tier...)
+        return False, f"`{model}` refused a test call: {type(error).__name__}: {error}"
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--probe", default=os.getenv("PROBE_MODEL", ""),
+                        help="Also make a tiny test call to this OpenAI model to confirm API access.")
+    args = parser.parse_args(argv)
     sys.path.insert(0, str(V2_DIR.parent))
     import ai_podcast_pipeline_for_cursor as legacy
 
@@ -60,6 +75,11 @@ def main():
              f"{len(added)} new, {len(removed)} no longer offered."]
     lines += [f"- New: `{name}`" for name in added]
     lines += [f"- No longer offered: `{name}`" for name in removed]
+    probe = args.probe.strip()
+    if probe:
+        listed = any(m["name"] == probe and m["available"] for m in registry["models"])
+        _, message = probe_openai_model(legacy.client, probe)
+        lines += ["", f"Access check: `{probe}` is {'listed' if listed else 'NOT listed'} for this API key. {message}"]
     print("\n".join(lines))
     summary = os.getenv("GITHUB_STEP_SUMMARY")
     if summary:
