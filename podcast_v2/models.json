@@ -1,90 +1,90 @@
 {
-  "updated_at": null,
-  "source": "Seeded from the pipeline model overrides and fallback lists; run Update Models V2 to refresh from provider APIs.",
+  "updated_at": "2026-09-30T11:39:44Z",
+  "source": "Update Models V2 (provider model APIs)",
   "models": [
     {
       "name": "claude-2.0",
       "provider": "anthropic",
       "web_search": false,
-      "available": true
+      "available": false
     },
     {
       "name": "claude-2.1",
       "provider": "anthropic",
       "web_search": false,
-      "available": true
+      "available": false
     },
     {
       "name": "claude-3-5-haiku",
       "provider": "anthropic",
       "web_search": true,
-      "available": true
+      "available": false
     },
     {
       "name": "claude-3-5-haiku-20241022",
       "provider": "anthropic",
       "web_search": true,
-      "available": true
+      "available": false
     },
     {
       "name": "claude-3-5-sonnet",
       "provider": "anthropic",
       "web_search": true,
-      "available": true
+      "available": false
     },
     {
       "name": "claude-3-5-sonnet-20240620",
       "provider": "anthropic",
       "web_search": true,
-      "available": true
+      "available": false
     },
     {
       "name": "claude-3-5-sonnet-20241022",
       "provider": "anthropic",
       "web_search": true,
-      "available": true
+      "available": false
     },
     {
       "name": "claude-3-7-sonnet-20250219",
       "provider": "anthropic",
       "web_search": true,
-      "available": true
+      "available": false
     },
     {
       "name": "claude-3-haiku",
       "provider": "anthropic",
       "web_search": false,
-      "available": true
+      "available": false
     },
     {
       "name": "claude-3-haiku-20240307",
       "provider": "anthropic",
       "web_search": false,
-      "available": true
+      "available": false
     },
     {
       "name": "claude-3-opus",
       "provider": "anthropic",
       "web_search": false,
-      "available": true
+      "available": false
     },
     {
       "name": "claude-3-opus-20240229",
       "provider": "anthropic",
       "web_search": false,
-      "available": true
+      "available": false
     },
     {
       "name": "claude-3-sonnet",
       "provider": "anthropic",
       "web_search": false,
-      "available": true
+      "available": false
     },
     {
       "name": "claude-3-sonnet-20240229",
       "provider": "anthropic",
       "web_search": false,
-      "available": true
+      "available": false
     },
     {
       "name": "claude-fable-5",
@@ -108,19 +108,19 @@
       "name": "claude-instant-1.2",
       "provider": "anthropic",
       "web_search": false,
-      "available": true
+      "available": false
     },
     {
       "name": "claude-opus-4-1-20250805",
       "provider": "anthropic",
       "web_search": true,
-      "available": true
+      "available": false
     },
     {
       "name": "claude-opus-4-20250514",
       "provider": "anthropic",
       "web_search": true,
-      "available": true
+      "available": false
     },
     {
       "name": "claude-opus-4-5-20251101",
@@ -162,7 +162,7 @@
       "name": "claude-sonnet-4-20250514",
       "provider": "anthropic",
       "web_search": true,
-      "available": true
+      "available": false
     },
     {
       "name": "claude-sonnet-4-5-20250929",
@@ -178,6 +178,12 @@
     },
     {
       "name": "claude-sonnet-5",
+      "provider": "anthropic",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "claude-sonnet-5-5",
       "provider": "anthropic",
       "web_search": false,
       "available": true
@@ -213,9 +219,297 @@
       "available": true
     },
     {
+      "name": "babbage-002",
+      "provider": "openai",
+      "web_search": false,
+      "available": true
+    },
+    {
       "name": "chat-latest",
       "provider": "openai",
       "web_search": false,
+      "available": true
+    },
+    {
+      "name": "davinci-002",
+      "provider": "openai",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "gpt-3.5-turbo",
+      "provider": "openai",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "gpt-3.5-turbo-0125",
+      "provider": "openai",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "gpt-3.5-turbo-1106",
+      "provider": "openai",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "gpt-3.5-turbo-16k",
+      "provider": "openai",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "gpt-3.5-turbo-instruct",
+      "provider": "openai",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "gpt-3.5-turbo-instruct-0914",
+      "provider": "openai",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "gpt-4",
+      "provider": "openai",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "gpt-4-0613",
+      "provider": "openai",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "gpt-4-turbo",
+      "provider": "openai",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "gpt-4-turbo-2024-04-09",
+      "provider": "openai",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "gpt-4.1",
+      "provider": "openai",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "gpt-4.1-2025-04-14",
+      "provider": "openai",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "gpt-4.1-mini",
+      "provider": "openai",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "gpt-4.1-mini-2025-04-14",
+      "provider": "openai",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "gpt-4.1-nano",
+      "provider": "openai",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "gpt-4.1-nano-2025-04-14",
+      "provider": "openai",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "gpt-4o",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-4o-2024-05-13",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-4o-2024-08-06",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-4o-2024-11-20",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-4o-mini",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-4o-mini-2024-07-18",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-4o-mini-search-preview",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-4o-mini-search-preview-2025-03-11",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-4o-search-preview",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-4o-search-preview-2025-03-11",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-5",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-5-2025-08-07",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-5-chat-latest",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-5-mini",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-5-mini-2025-08-07",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-5-nano",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-5-nano-2025-08-07",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-5-pro",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-5-pro-2025-10-06",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-5-search-api",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-5-search-api-2025-10-14",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-5.1",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-5.1-2025-11-13",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-5.1-chat-latest",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-5.2",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-5.2-2025-12-11",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-5.2-chat-latest",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-5.2-pro",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-5.2-pro-2025-12-11",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-5.3-chat-latest",
+      "provider": "openai",
+      "web_search": true,
       "available": true
     },
     {
@@ -226,6 +520,24 @@
     },
     {
       "name": "gpt-5.4-2026-03-05",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-5.4-mini",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-5.4-mini-2026-03-17",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-5.4-nano",
       "provider": "openai",
       "web_search": true,
       "available": true
@@ -297,6 +609,18 @@
       "available": true
     },
     {
+      "name": "gpt-realtime",
+      "provider": "openai",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "gpt-realtime-1.5",
+      "provider": "openai",
+      "web_search": false,
+      "available": true
+    },
+    {
       "name": "gpt-realtime-2",
       "provider": "openai",
       "web_search": false,
@@ -315,7 +639,109 @@
       "available": true
     },
     {
+      "name": "gpt-realtime-2025-08-28",
+      "provider": "openai",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "gpt-realtime-mini",
+      "provider": "openai",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "gpt-realtime-mini-2025-12-15",
+      "provider": "openai",
+      "web_search": false,
+      "available": true
+    },
+    {
       "name": "gpt-realtime-translate",
+      "provider": "openai",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "o1",
+      "provider": "openai",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "o1-2024-12-17",
+      "provider": "openai",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "o1-pro",
+      "provider": "openai",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "o1-pro-2025-03-19",
+      "provider": "openai",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "o3",
+      "provider": "openai",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "o3-2025-04-16",
+      "provider": "openai",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "o3-mini",
+      "provider": "openai",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "o3-mini-2025-01-31",
+      "provider": "openai",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "o4-mini",
+      "provider": "openai",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "o4-mini-2025-04-16",
+      "provider": "openai",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "o4-mini-deep-research",
+      "provider": "openai",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "o4-mini-deep-research-2025-06-26",
+      "provider": "openai",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "sora-2",
+      "provider": "openai",
+      "web_search": false,
+      "available": true
+    },
+    {
+      "name": "sora-2-pro",
       "provider": "openai",
       "web_search": false,
       "available": true
