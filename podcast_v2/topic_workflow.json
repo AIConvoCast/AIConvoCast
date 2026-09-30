@@ -11,7 +11,7 @@
     {
       "id": "research",
       "type": "model",
-      "model": "gpt-6-astra",
+      "model": "gpt-6-sol",
       "web_search": true,
       "research_instructions": "topic_research_system.txt",
       "editor_instructions": "topic_editor_system.txt",
