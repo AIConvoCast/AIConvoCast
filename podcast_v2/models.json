@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-09-30T11:39:44Z",
+  "updated_at": "2026-09-30T22:08:32Z",
   "source": "Update Models V2 (provider model APIs)",
   "models": [
     {
@@ -606,6 +606,30 @@
       "name": "gpt-6-astra",
       "provider": "openai",
       "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-6-luna",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-6-sol",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-6.1-sol",
+      "provider": "openai",
+      "web_search": true,
+      "available": true
+    },
+    {
+      "name": "gpt-live-1",
+      "provider": "openai",
+      "web_search": false,
       "available": true
     },
     {
