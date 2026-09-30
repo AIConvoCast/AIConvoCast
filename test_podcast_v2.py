@@ -135,17 +135,27 @@ class PodcastV2RunnerTests(unittest.TestCase):
             (prompts / "script_tuning.txt").write_text(TUNING)
             legacy = FakeLegacy(directory)
             audio = FakeAudio()
-            runner = run_podcast.Runner(workflow, legacy, prompts_dir=prompts, audio=audio)
+            research_calls = []
+
+            def fake_research(client, prompt, **options):
+                research_calls.append((prompt, options))
+                return "gpt-6-sol output"
+
+            legacy.client = object()
+            legacy.LOCAL_ARTIFACTS.directory = Path(directory)
+            runner = run_podcast.Runner(workflow, legacy, prompts_dir=prompts, audio=audio, research=fake_research)
             with mock.patch("requests.get") as get:
                 get.return_value = SimpleNamespace(content=RSS, raise_for_status=lambda: None)
                 runner.run()
 
-        research, script, title = legacy.calls
-        self.assertEqual(research[1:], ("gpt-6-astra", 0.8, True))
-        self.assertTrue(research[0].startswith("P10 text\n\nP8 text\n\nTitle: Newest & best"))
+        (research_prompt, options), = research_calls
+        self.assertEqual((options["search_model"], options["use_astra"]), ("gpt-6-sol", False))
+        self.assertIsNone(options["instructions"])  # daily research keeps the default instructions
+        self.assertTrue(research_prompt.startswith("P10 text\n\nP8 text\n\nTitle: Newest & best"))
+        script, title = legacy.calls
         self.assertEqual(script[1:], ("claude-opus-5-5", 0.7, True))
         self.assertEqual(script[0], "P4 text\n\nAdditional script requirements for this run:\n"
-                                    "- keep it tight\n\ngpt-6-astra output")
+                                    "- keep it tight\n\ngpt-6-sol output")
         self.assertEqual(title[1:], ("claude-opus-5-5", 0.7, False))
         self.assertTrue(title[0].startswith("P12 text\n\nclaude-opus-5-5 output\n\nAdditional"))
 
@@ -259,8 +269,9 @@ class TopicEpisodeTests(unittest.TestCase):
         workflow = copy.deepcopy(run_podcast.load_json(run_podcast.TOPIC_WORKFLOW_PATH))
         research_calls = []
 
-        def fake_research(client, prompt, *, use_astra, output_directory, instructions, editor_instructions):
-            research_calls.append((prompt, use_astra, instructions, editor_instructions))
+        def fake_research(client, prompt, *, use_astra, output_directory, instructions,
+                          editor_instructions, search_model):
+            research_calls.append((prompt, use_astra, instructions, editor_instructions, search_model))
             return "topic brief"
 
         with tempfile.TemporaryDirectory() as directory:
@@ -280,8 +291,8 @@ class TopicEpisodeTests(unittest.TestCase):
                 get.return_value = SimpleNamespace(content=RSS, raise_for_status=lambda: None)
                 runner.run()
 
-        (prompt, use_astra, instructions, editor), = research_calls
-        self.assertTrue(use_astra)
+        (prompt, use_astra, instructions, editor, search_model), = research_calls
+        self.assertEqual((use_astra, search_model), (False, "gpt-6-sol"))
         self.assertEqual((instructions, editor), ("TOPIC RESEARCH", "TOPIC EDITOR"))
         self.assertIn("Topic for this episode:\n\nMeta Muse new AI tool and adoption", prompt)
         self.assertIn("Title: Newest & best", prompt)  # prior episodes still inform the research

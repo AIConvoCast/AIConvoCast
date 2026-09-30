@@ -25,7 +25,7 @@ PROMPTS_DIR = V2_DIR / "prompts"
 STEP_TYPES = {"recent_episodes", "model", "save_text", "voice", "merge_audio"}
 PART_PATTERN = re.compile(r"^(prompt|step|text|gcs_file|gcs_latest_text|gcs_latest_mp3):(.+)$", re.DOTALL)
 # Models that run through news_research (one Sol search, optional Astra edit).
-RESEARCH_MODELS = ("gpt-6-astra", "gpt-5.6-sol")
+RESEARCH_MODELS = ("gpt-6-astra", "gpt-6-sol", "gpt-5.6-sol")
 TITLE_LINE = re.compile(r"(?im)^#*\s*Title\s*:")
 DESCRIPTION_LINE = re.compile(r"(?im)^#*\s*Description\s*:")
 
@@ -203,13 +203,16 @@ class Runner:
         temperature = 0.8 if web_search else 0.85
         if self.legacy.anthropic_model_uses_opus_adaptive_effort(model):
             temperature = 0.7
-        if step.get("research_instructions"):
+        if web_search and model.startswith(RESEARCH_MODELS):
+            # Sol searches; gpt-6-astra means "5.6 Sol search, then an Astra edit" (V1's setup).
+            astra = model.startswith("gpt-6-astra")
+            text = lambda key: (Path(self.prompts_dir) / step[key]).read_text(encoding="utf-8") if step.get(key) else None
             response = self.research(
-                self.legacy.client, prompt, use_astra=model.startswith("gpt-6-astra"),
+                self.legacy.client, prompt, use_astra=astra,
                 output_directory=self.legacy.LOCAL_ARTIFACTS.directory / "research",
-                instructions=(Path(self.prompts_dir) / step["research_instructions"]).read_text(encoding="utf-8"),
-                editor_instructions=(Path(self.prompts_dir) / step["editor_instructions"]).read_text(encoding="utf-8")
-                if step.get("editor_instructions") else None)
+                instructions=text("research_instructions"),
+                editor_instructions=text("editor_instructions"),
+                search_model="gpt-5.6-sol" if astra else model)
         else:
             response = self.legacy.call_model(prompt, model, temperature=temperature, web_search=web_search)
         if isinstance(response, bytes):

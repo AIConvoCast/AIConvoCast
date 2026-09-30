@@ -15,11 +15,13 @@ from zoneinfo import ZoneInfo
 from typing import Any
 
 SOL = "gpt-5.6-sol"
+SOL_6 = "gpt-6-sol"
 ASTRA = "gpt-6-astra"
-PRICE_CHECKED = "2026-09-16"
+PRICE_CHECKED = "2026-09-30"
 PRICE_VALID_THROUGH = date(2026, 11, 21)
 # Standard-tier USD per million tokens: ordinary, cached, cache write, output.
 RATES = {SOL: tuple(map(Decimal, ("4", "0.4", "5", "20"))),
+         SOL_6: tuple(map(Decimal, ("2", "0.2", "2.5", "10"))),
          ASTRA: tuple(map(Decimal, ("10", "1", "12.5", "50")))}
 
 RESEARCH_INSTRUCTIONS = """You are the research editor of AI Convo Cast, a daily AI news podcast for people
@@ -161,15 +163,18 @@ def _usable(response):
 
 
 def research_news(client, prompt, *, use_astra, output_directory=None,
-                  instructions=None, editor_instructions=None):
+                  instructions=None, editor_instructions=None, search_model=SOL):
     """One Sol search; at most one Astra call. Never retry uncertain paid calls.
 
     instructions/editor_instructions replace the daily-news defaults, e.g. for a
     single-topic episode; budgets and safeguards are the same either way.
+    search_model picks the Sol model that runs the web search (it must be in RATES).
     """
+    if search_model not in RATES or search_model == ASTRA:
+        raise ValueError(f"No search pricing for {search_model}; add it to RATES.")
     directory = Path(output_directory or "generated_mp3/research") / uuid.uuid4().hex[:12]
     report = {"price_checked": PRICE_CHECKED, "comparison": "same-request Sol search",
-              "requested_editor": ASTRA if use_astra else SOL}
+              "search_model": search_model, "requested_editor": ASTRA if use_astra else search_model}
     _save(directory, report)
     prompt = str(prompt)
     if len(prompt) > 32_000:
@@ -180,7 +185,7 @@ def research_news(client, prompt, *, use_astra, output_directory=None,
         if not historical.is_finite() or historical <= 0:
             raise ValueError("RESEARCH_SOL_BASELINE_USD must be a positive dollar amount")
     now = datetime.now(ZoneInfo("America/New_York"))
-    request = {"model": SOL, "input": f"Current date/time: {now.isoformat()}\n\nWorkflow request and prior coverage:\n{prompt}",
+    request = {"model": search_model, "input": f"Current date/time: {now.isoformat()}\n\nWorkflow request and prior coverage:\n{prompt}",
                "instructions": instructions or RESEARCH_INSTRUCTIONS, "reasoning": {"effort": "low"},
                "text": {"verbosity": "low"}, "max_output_tokens": 3200,
                "tools": [{"type": "web_search", "search_context_size": "low",
@@ -200,7 +205,7 @@ def research_news(client, prompt, *, use_astra, output_directory=None,
     brief = str(field(response, "output_text", "")).strip()
     (directory / "sol-brief.txt").write_text(brief, encoding="utf-8")
     try:
-        baseline_lower, baseline_upper, report["sol"] = usage_cost_bounds(response, SOL)
+        baseline_lower, baseline_upper, report["sol"] = usage_cost_bounds(response, search_model)
     except ValueError:
         baseline_lower = baseline_upper = None
         report["budget_note"] = "Usage accounting unavailable; Astra skipped."
