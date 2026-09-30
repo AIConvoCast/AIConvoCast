@@ -27,6 +27,18 @@ model's API name, e.g. `"model": "claude-opus-5-5"`. No numeric model IDs are
 involved. `python podcast_v2/run_podcast.py --check` confirms the name is in
 `models.json` and supports web search if the step asks for it.
 
+Research steps with web search go through `news_research.py`, which caps spend
+using per-token prices in its `RATES` table, so a new research model needs its
+prices added there. Research currently uses `gpt-6.1-sol`, which searches and
+writes the brief in one pass. `gpt-6-astra` instead means a 5.6 Sol search plus
+an Astra editing pass.
+
+To confirm the API key can use a model, run **Update Models V2** with
+`probe_model` set. To see what research would pick today without making an
+episode, run **Preview V2 Research**: it runs only the prior-episode check and
+research, shows the brief on the run page, uploads and emails nothing, and does
+not count as the day's episode.
+
 ## Steps
 
 | Type | Does | V1 code |

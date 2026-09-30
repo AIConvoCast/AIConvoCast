@@ -1,0 +1,47 @@
+name: Preview V2 Research
+
+# Runs only the prior-episode check and research step of Run AI Podcast V2 and
+# shows the research brief on the run page, e.g. to check a model or prompt
+# change against today's news. No script, audio, uploads or email, and it does
+# not count as the day's episode. Costs one research call (a few cents).
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      custom_topic:
+        description: 'Custom topic (optional): preview single-topic research instead of the daily news'
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  preview:
+    name: Preview V2 research
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Preview research
+        run: python podcast_v2/run_podcast.py --research-only
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          # The shared pipeline module checks for this key when it loads.
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          CUSTOM_TOPIC: ${{ github.event.inputs.custom_topic || '' }}
+          RESEARCH_SOL_BASELINE_USD: ${{ vars.RESEARCH_SOL_BASELINE_USD }}

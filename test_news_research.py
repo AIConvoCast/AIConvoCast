@@ -7,12 +7,12 @@ from pathlib import Path
 from types import SimpleNamespace as Obj
 from unittest.mock import Mock, patch
 
-from news_research import research_news, usage_cost_bounds, astra_output_allowance, SOL, ASTRA
+from news_research import research_news, usage_cost_bounds, astra_output_allowance, SOL, SOL_61, ASTRA
 
 
 def response(model=SOL, text="1. A useful launch. Source: https://example.com/launch", *, incoming=4000, outgoing=2500):
     return Obj(model=model, service_tier="default", status="completed", output_text=text,
-               output=[Obj(type="web_search_call")] if model == SOL else [],
+               output=[Obj(type="web_search_call")] if model != ASTRA else [],
                usage=Obj(input_tokens=incoming, output_tokens=outgoing,
                          input_tokens_details=Obj(cached_tokens=0, cache_write_tokens=0)))
 
@@ -50,6 +50,24 @@ class ResearchBudgetTests(unittest.TestCase):
         self.assertNotIn("previous_response_id", calls[1].kwargs)
         self.assertEqual(calls[1].kwargs["service_tier"], "default")
         self.assertEqual(report["status"], "astra_complete")
+
+    def test_gpt_61_sol_searches_alone_and_is_priced_at_its_own_rates(self):
+        self.client.responses.create.side_effect = [response(SOL_61)]
+        brief = research_news(self.client, "Current AI news", use_astra=False,
+                              output_directory=self.temp.name, search_model=SOL_61)
+        self.assertIn("useful launch", brief)
+        self.client.responses.create.assert_called_once()
+        self.assertEqual(self.client.responses.create.call_args.kwargs["model"], SOL_61)
+        report = self.report()
+        self.assertEqual(report["search_model"], SOL_61)
+        # 4,000 input at $2/M + 2,500 output at $10/M + one $0.01 search, with no cache.
+        self.assertEqual(Decimal(report["sol"]["cost_lower_usd"]), Decimal("0.043"))
+
+    def test_unpriced_search_model_is_refused_before_any_paid_call(self):
+        with self.assertRaises(ValueError):
+            research_news(self.client, "Current AI news", use_astra=False,
+                          output_directory=self.temp.name, search_model="gpt-7-unknown")
+        self.client.responses.create.assert_not_called()
 
     def test_tiny_historical_budget_skips_astra(self):
         os.environ["RESEARCH_SOL_BASELINE_USD"] = "0.03"

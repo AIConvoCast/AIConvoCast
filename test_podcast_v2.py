@@ -1,5 +1,8 @@
+import contextlib
 import copy
+import io
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -10,6 +13,17 @@ from types import SimpleNamespace
 from unittest import mock
 
 from podcast_v2 import run_podcast, sync_from_sheet, update_models
+
+_SUMMARY_ENV = mock.patch.dict(os.environ, {"GITHUB_STEP_SUMMARY": ""})
+
+
+def setUpModule():
+    # These tests run inside the real V2 Action; keep their fake episodes off its run page.
+    _SUMMARY_ENV.start()
+
+
+def tearDownModule():
+    _SUMMARY_ENV.stop()
 
 RSS = b"""<rss><channel>
 <item><title>Newest &amp; best</title><description>&lt;p&gt;Short one.&lt;/p&gt; Help support us</description></item>
@@ -135,17 +149,27 @@ class PodcastV2RunnerTests(unittest.TestCase):
             (prompts / "script_tuning.txt").write_text(TUNING)
             legacy = FakeLegacy(directory)
             audio = FakeAudio()
-            runner = run_podcast.Runner(workflow, legacy, prompts_dir=prompts, audio=audio)
+            research_calls = []
+
+            def fake_research(client, prompt, **options):
+                research_calls.append((prompt, options))
+                return "gpt-6.1-sol output"
+
+            legacy.client = object()
+            legacy.LOCAL_ARTIFACTS.directory = Path(directory)
+            runner = run_podcast.Runner(workflow, legacy, prompts_dir=prompts, audio=audio, research=fake_research)
             with mock.patch("requests.get") as get:
                 get.return_value = SimpleNamespace(content=RSS, raise_for_status=lambda: None)
                 runner.run()
 
-        research, script, title = legacy.calls
-        self.assertEqual(research[1:], ("gpt-6-astra", 0.8, True))
-        self.assertTrue(research[0].startswith("P10 text\n\nP8 text\n\nTitle: Newest & best"))
+        (research_prompt, options), = research_calls
+        self.assertEqual((options["search_model"], options["use_astra"]), ("gpt-6.1-sol", False))
+        self.assertIsNone(options["instructions"])  # daily research keeps the default instructions
+        self.assertTrue(research_prompt.startswith("P10 text\n\nP8 text\n\nTitle: Newest & best"))
+        script, title = legacy.calls
         self.assertEqual(script[1:], ("claude-opus-5-5", 0.7, True))
         self.assertEqual(script[0], "P4 text\n\nAdditional script requirements for this run:\n"
-                                    "- keep it tight\n\ngpt-6-astra output")
+                                    "- keep it tight\n\ngpt-6.1-sol output")
         self.assertEqual(title[1:], ("claude-opus-5-5", 0.7, False))
         self.assertTrue(title[0].startswith("P12 text\n\nclaude-opus-5-5 output\n\nAdditional"))
 
@@ -259,8 +283,9 @@ class TopicEpisodeTests(unittest.TestCase):
         workflow = copy.deepcopy(run_podcast.load_json(run_podcast.TOPIC_WORKFLOW_PATH))
         research_calls = []
 
-        def fake_research(client, prompt, *, use_astra, output_directory, instructions, editor_instructions):
-            research_calls.append((prompt, use_astra, instructions, editor_instructions))
+        def fake_research(client, prompt, *, use_astra, output_directory, instructions,
+                          editor_instructions, search_model):
+            research_calls.append((prompt, use_astra, instructions, editor_instructions, search_model))
             return "topic brief"
 
         with tempfile.TemporaryDirectory() as directory:
@@ -280,8 +305,8 @@ class TopicEpisodeTests(unittest.TestCase):
                 get.return_value = SimpleNamespace(content=RSS, raise_for_status=lambda: None)
                 runner.run()
 
-        (prompt, use_astra, instructions, editor), = research_calls
-        self.assertTrue(use_astra)
+        (prompt, use_astra, instructions, editor, search_model), = research_calls
+        self.assertEqual((use_astra, search_model), (False, "gpt-6.1-sol"))
         self.assertEqual((instructions, editor), ("TOPIC RESEARCH", "TOPIC EDITOR"))
         self.assertIn("Topic for this episode:\n\nMeta Muse new AI tool and adoption", prompt)
         self.assertIn("Title: Newest & best", prompt)  # prior episodes still inform the research
@@ -307,12 +332,33 @@ class TopicEpisodeTests(unittest.TestCase):
         runner.final_description_text = "Title:\nMuse\n\nDescription:\nAbout Muse"
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "summary.md"
-            runner.write_summary(path)
+            with contextlib.redirect_stdout(io.StringIO()) as log:
+                runner.write_summary(path)
             summary = path.read_text()
+        self.assertIn("::group::Episode text", log.getvalue())
         self.assertIn("**Custom topic:** Meta Muse", summary)
         self.assertIn("Description:\nAbout Muse", summary)
         self.assertIn("script (claude-opus-5-5): 19 characters", summary)
         self.assertNotIn("ignored", summary)
+
+    def test_research_only_run_stops_after_research(self):
+        workflow = copy.deepcopy(run_podcast.load_json(run_podcast.WORKFLOW_PATH))
+        with tempfile.TemporaryDirectory() as directory:
+            prompts = Path(directory) / "prompts"
+            prompts.mkdir()
+            for pid in ("4", "8", "10", "12"):
+                (prompts / f"P{pid}.txt").write_text(f"P{pid} text\n")
+            legacy = FakeLegacy(directory)
+            legacy.client = object()
+            legacy.LOCAL_ARTIFACTS.directory = Path(directory)
+            audio = FakeAudio()
+            runner = run_podcast.Runner(workflow, legacy, prompts_dir=prompts, audio=audio,
+                                        research=lambda client, prompt, **options: "brief")
+            with mock.patch("requests.get") as get:
+                get.return_value = SimpleNamespace(content=RSS, raise_for_status=lambda: None)
+                runner.run(stop_after="research")
+        self.assertEqual(list(runner.outputs), ["recent_episodes", "research"])
+        self.assertEqual((legacy.calls, legacy.uploads, audio.merged), ([], [], None))
 
     def test_text_parts_are_literal(self):
         runner = run_podcast.Runner({"steps": []}, FakeLegacy(tempfile.gettempdir()))
