@@ -25,7 +25,7 @@ PROMPTS_DIR = V2_DIR / "prompts"
 STEP_TYPES = {"recent_episodes", "model", "save_text", "voice", "merge_audio"}
 PART_PATTERN = re.compile(r"^(prompt|step|text|gcs_file|gcs_latest_text|gcs_latest_mp3):(.+)$", re.DOTALL)
 # Models that run through news_research (one Sol search, optional Astra edit).
-RESEARCH_MODELS = ("gpt-6-astra", "gpt-6-sol", "gpt-5.6-sol")
+RESEARCH_MODELS = ("gpt-6-astra", "gpt-6.1-sol", "gpt-6-sol", "gpt-5.6-sol")
 TITLE_LINE = re.compile(r"(?im)^#*\s*Title\s*:")
 DESCRIPTION_LINE = re.compile(r"(?im)^#*\s*Description\s*:")
 
@@ -206,7 +206,10 @@ class Runner:
         if web_search and model.startswith(RESEARCH_MODELS):
             # Sol searches; gpt-6-astra means "5.6 Sol search, then an Astra edit" (V1's setup).
             astra = model.startswith("gpt-6-astra")
-            text = lambda key: (Path(self.prompts_dir) / step[key]).read_text(encoding="utf-8") if step.get(key) else None
+
+            def text(key):
+                return (Path(self.prompts_dir) / step[key]).read_text(encoding="utf-8") if step.get(key) else None
+
             response = self.research(
                 self.legacy.client, prompt, use_astra=astra,
                 output_directory=self.legacy.LOCAL_ARTIFACTS.directory / "research",
@@ -286,13 +289,16 @@ class Runner:
             self.final_description_text = title_text
         return str(merged)
 
-    def run(self):
+    def run(self, stop_after=None):
+        """Run the steps in order; stop_after ends the run after that step id."""
         steps = self.workflow["steps"]
         for index, step in enumerate(steps, start=1):
             print(f"[V2] Step {index}/{len(steps)}: {step['id']} ({step['type']})")
             self.outputs[step["id"]] = getattr(self, f"run_{step['type']}")(step)
             preview = str(self.outputs[step["id"]])[:100]
             print(f"  Output (first 100): {preview}")
+            if step["id"] == stop_after:
+                break
         self.legacy.LOCAL_ARTIFACTS.write_json("v2_steps.json", self.records)
         self.write_summary()
 
@@ -338,6 +344,9 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="Validate the configuration and exit.")
     parser.add_argument("--no-email", action="store_true", help="Skip the final email.")
+    parser.add_argument("--research-only", action="store_true",
+                        help="Run only the prior-episode and research steps and show the brief "
+                             "(no script, audio, uploads or email).")
     parser.add_argument("--topic", default=os.getenv("CUSTOM_TOPIC", ""),
                         help="Make a single-topic episode instead of the daily news (default: $CUSTOM_TOPIC).")
     args = parser.parse_args(argv)
@@ -369,7 +378,10 @@ def main(argv=None):
         print(f"🎯 Custom topic episode: {topic}")
     legacy = load_legacy()
     runner = Runner(workflow, legacy, topic=topic)
-    runner.run()
+    runner.run(stop_after="research" if args.research_only else None)
+    if args.research_only:
+        print("Research preview complete; nothing was generated, uploaded or emailed.")
+        return 0
     if not runner.final_audio_path:
         print("No final episode audio was produced; nothing to email.")
         return 0
