@@ -215,6 +215,52 @@ class PodcastV2GuardTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 runner.run_recent_episodes(step)
 
+    def test_feed_is_sorted_by_publish_date_and_cache_busted(self):
+        feed = b"""<rss><channel>
+<item><title>Older</title><description>Two.</description><pubDate>Tue, 29 Sep 2026 09:00:00 GMT</pubDate></item>
+<item><title>Newest</title><description>One.</description><pubDate>Thu, 01 Oct 2026 09:00:00 GMT</pubDate></item>
+</channel></rss>"""
+        stale = b"""<rss><channel>
+<item><title>Older</title><description>Two.</description><pubDate>Tue, 29 Sep 2026 09:00:00 GMT</pubDate></item>
+</channel></rss>"""
+        runner = run_podcast.Runner({"steps": []}, FakeLegacy(tempfile.gettempdir()))
+        with mock.patch("requests.get") as get:
+            get.side_effect = [SimpleNamespace(content=stale, raise_for_status=lambda: None),
+                               SimpleNamespace(content=feed, raise_for_status=lambda: None)]
+            text = runner.run_recent_episodes({"count": 15, "feed_url": "https://feed"})
+        self.assertTrue(text.startswith("Title: Newest\n"))
+        self.assertIn("nocache=", get.call_args.args[0])
+        self.assertEqual(get.call_args.kwargs["headers"]["Cache-Control"], "no-cache")
+
+    def test_generated_episode_missing_from_feed_counts_as_covered(self):
+        with tempfile.TemporaryDirectory() as directory:
+            legacy = FakeLegacy(directory)
+            files = {
+                "descriptions/20260930_200500_FTC_Probes_OpenAI.txt":
+                    "Title:\nFTC Probes OpenAI\n\nDescription:\nThe FTC story. Help support us",
+                "descriptions/20260929_200500_Already_In_Feed.txt":
+                    "Title:\nAlready In Feed\n\nDescription:\nOld.",
+                "descriptions/20261001_150000_Made_An_Hour_Ago.txt":
+                    "Title:\nMade An Hour Ago\n\nDescription:\nToo new.",
+            }
+            legacy.list_files_in_gcs_folder = lambda folder: list(files)
+
+            def download(name, local):
+                Path(local).write_text(files[name], encoding="utf-8")
+                return local
+            legacy.download_file_from_gcs = download
+            runner = run_podcast.Runner({"steps": []}, legacy)
+            feed = [{"title": "Already in feed", "short": "", "published": None}]
+            now = run_podcast.datetime(2026, 10, 1, 16, tzinfo=run_podcast.timezone.utc)
+            missing = runner.generated_missing_from_feed(feed, now=now)
+        self.assertEqual([(e["title"], e["short"]) for e in missing], [("FTC Probes OpenAI", "The FTC story.")])
+
+    def test_gcs_failure_does_not_stop_the_run(self):
+        legacy = FakeLegacy(tempfile.gettempdir())
+        legacy.list_files_in_gcs_folder = mock.Mock(side_effect=RuntimeError("no creds"))
+        runner = run_podcast.Runner({"steps": []}, legacy)
+        self.assertEqual(runner.generated_missing_from_feed([]), [])
+
     def test_script_tuning_is_not_added_twice(self):
         legacy = FakeLegacy(tempfile.gettempdir())
         runner = run_podcast.Runner({"steps": []}, legacy)

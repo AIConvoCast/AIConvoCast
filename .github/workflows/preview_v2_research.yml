@@ -37,6 +37,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      # Read-only use: checks Cloud Storage for generated episodes the feed lacks.
+      - name: Create Google credentials file
+        run: |
+          echo '${{ secrets.GOOGLE_CREDS_JSON }}' > jmio-google-api.json
+
       - name: Preview research
         run: python podcast_v2/run_podcast.py --research-only
         env:
@@ -45,3 +50,7 @@ jobs:
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
           CUSTOM_TOPIC: ${{ github.event.inputs.custom_topic || '' }}
           RESEARCH_SOL_BASELINE_USD: ${{ vars.RESEARCH_SOL_BASELINE_USD }}
+
+      - name: Cleanup
+        if: always()
+        run: rm -f jmio-google-api.json
