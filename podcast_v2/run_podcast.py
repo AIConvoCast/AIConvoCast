@@ -11,8 +11,10 @@ import json
 import os
 import re
 import sys
+import time
 import xml.etree.ElementTree as ET
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 
 V2_DIR = Path(__file__).resolve().parent
@@ -26,6 +28,12 @@ STEP_TYPES = {"recent_episodes", "model", "save_text", "voice", "merge_audio"}
 PART_PATTERN = re.compile(r"^(prompt|step|text|gcs_file|gcs_latest_text|gcs_latest_mp3):(.+)$", re.DOTALL)
 # Models that run through news_research (one Sol search, optional Astra edit).
 RESEARCH_MODELS = ("gpt-6-astra", "gpt-6.1-sol", "gpt-6-sol", "gpt-5.6-sol")
+# Generated episodes are published the next morning; one this old that the feed
+# lacks means the feed copy is stale, so it still counts as prior coverage.
+PUBLISH_GRACE = timedelta(hours=8)
+GENERATED_LOOKBACK = timedelta(days=4)
+GENERATED_NAME = re.compile(r"(\d{8}_\d{6})_")
+OLDEST = datetime.min.replace(tzinfo=timezone.utc)
 TITLE_LINE = re.compile(r"(?im)^#*\s*Title\s*:")
 DESCRIPTION_LINE = re.compile(r"(?im)^#*\s*Description\s*:")
 
@@ -96,17 +104,44 @@ def validate_workflow(workflow, models, prompts_dir=PROMPTS_DIR):
     return problems
 
 
-def format_recent_episodes(rss_xml, count):
-    """Match V1's PPU + PPL# output: newest first, title and short description."""
+def _published(item):
+    try:
+        published = parsedate_to_datetime(item.findtext("pubDate", default=""))
+    except (TypeError, ValueError):
+        return None
+    return published if published.tzinfo else published.replace(tzinfo=timezone.utc)
+
+
+def feed_episodes(rss_xml):
+    """Feed items newest first by pubDate, whatever order the feed lists them in."""
     channel = ET.fromstring(rss_xml).find("channel")
     items = channel.findall("item") if channel is not None else []
-    lines = []
-    for item in items[:count]:
+    episodes = []
+    for item in items:
         title = html.unescape(item.findtext("title", default=""))
         description = re.sub(r"<.*?>", "", html.unescape(item.findtext("description", default="")))
-        short = description.split("Help support")[0].strip()
-        lines.append(f"Title: {title}\nDescription Short: {short}")
-    return "\n\n".join(lines)
+        episodes.append({"title": title, "short": description.split("Help support")[0].strip(),
+                         "published": _published(item)})
+    return sorted(episodes, key=lambda e: e["published"] or OLDEST, reverse=True)
+
+
+def format_episodes(episodes):
+    return "\n\n".join(f"Title: {e['title']}\nDescription Short: {e['short']}" for e in episodes)
+
+
+def format_recent_episodes(rss_xml, count):
+    """Match V1's PPU + PPL# output: newest first, title and short description."""
+    return format_episodes(feed_episodes(rss_xml)[:count])
+
+
+def same_title(a, b):
+    def key(text):
+        return re.sub(r"[^a-z0-9]", "", (text or "").lower())
+    return key(a) == key(b)
+
+
+def newest_published(episodes):
+    return max((e["published"] for e in episodes if e["published"]), default=None)
 
 
 def extract_title(text):
@@ -178,16 +213,63 @@ class Runner:
             return self.legacy.download_mp3_file_from_gcs(value)
         return self.legacy.download_latest_mp3_from_gcs(value)
 
-    def run_recent_episodes(self, step):
+    def fetch_feed(self, feed_url, attempts=2):
+        """Read the feed past any cache; keep the copy with the newest episode."""
         import requests
 
-        response = requests.get(step["feed_url"], timeout=30)
-        response.raise_for_status()
-        episodes = format_recent_episodes(response.content, int(step["count"]))
+        best = None
+        for attempt in range(attempts):
+            separator = "&" if "?" in feed_url else "?"
+            response = requests.get(f"{feed_url}{separator}nocache={int(time.time())}{attempt}",
+                                    headers={"Cache-Control": "no-cache", "Pragma": "no-cache"},
+                                    timeout=30)
+            response.raise_for_status()
+            episodes = feed_episodes(response.content)
+            if best is None or (newest_published(episodes) or OLDEST) > (newest_published(best) or OLDEST):
+                best = episodes
+        return best
+
+    def generated_missing_from_feed(self, episodes, folder="descriptions/", now=None):
+        """Episodes this pipeline generated that should be published but the feed lacks."""
+        list_files = getattr(self.legacy, "list_files_in_gcs_folder", None)
+        if list_files is None:
+            return []
+        now = now or datetime.now(timezone.utc)
+        missing = []
+        try:
+            for name in sorted(list_files(folder) or [], reverse=True):
+                match = GENERATED_NAME.search(Path(name).name)
+                if not match:
+                    continue
+                made = datetime.strptime(match.group(1), "%Y%m%d_%H%M%S").replace(tzinfo=timezone.utc)
+                if not (now - GENERATED_LOOKBACK <= made <= now - PUBLISH_GRACE):
+                    continue
+                local = Path(self.legacy.MP3_OUTPUT_DIR) / f"prior_{Path(name).name}"
+                if not self.legacy.download_file_from_gcs(name, local):
+                    continue
+                text = Path(local).read_text(encoding="utf-8", errors="replace")
+                title = extract_title(text)
+                if not title or any(same_title(title, e["title"]) for e in episodes + missing):
+                    continue
+                description = DESCRIPTION_LINE.split(text, maxsplit=1)[-1]
+                short = description.split("Help support")[0].strip()
+                print(f"  Feed lacks generated episode {title!r} ({made:%Y-%m-%d}); counting it as covered.")
+                missing.append({"title": title, "short": short, "published": made})
+        except Exception as error:  # GCS is a backstop; the feed alone still gates the run.
+            print(f"  ⚠️ Could not check generated episodes in GCS: {error}")
+        return missing
+
+    def run_recent_episodes(self, step):
+        episodes = self.fetch_feed(step["feed_url"])
         # Research must see prior coverage; never continue without it.
         if not episodes:
             raise RuntimeError(f"No episodes found in {step['feed_url']}; stopping before any paid calls.")
-        return episodes
+        newest = newest_published(episodes)
+        print(f"  Feed: {len(episodes)} episodes, newest {episodes[0]['title']!r} "
+              f"published {newest:%Y-%m-%d %H:%M UTC}" if newest else f"  Feed: {len(episodes)} episodes")
+        missing = self.generated_missing_from_feed(episodes)
+        combined = sorted(missing + episodes, key=lambda e: e["published"] or OLDEST, reverse=True)
+        return format_episodes(combined[:int(step["count"]) + len(missing)])
 
     def run_model(self, step):
         texts = [self.resolve(part) for part in step["parts"]]

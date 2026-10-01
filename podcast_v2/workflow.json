@@ -27,7 +27,9 @@
       "parts": [
         "prompt:4",
         "script_tuning",
-        "step:research"
+        "step:research",
+        "text:Recent episodes (already covered; do not repeat their stories or details):",
+        "step:recent_episodes"
       ]
     },
     {

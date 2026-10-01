@@ -88,3 +88,10 @@ so the 4 p.m. automatic run skips.
 The first step reads the newest 15 episodes from the RSS feed and passes them,
 with P8, to the research step, as V1 did through the Posted Podcasts tab. If
 the feed can't be read or lists no episodes, the run stops before any paid calls.
+
+The feed is read past any cache (twice, keeping the copy with the newest
+episode) and sorted by publish date. As a backstop, any episode this pipeline
+saved to `descriptions/` in Cloud Storage between 8 hours and 4 days ago that
+the feed doesn't list yet is added to prior coverage, so a stale feed can't let
+a published story repeat. Each run logs the feed's newest episode and any
+episode added this way.
