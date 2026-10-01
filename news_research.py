@@ -81,8 +81,9 @@ legislation, or an investigation, lawsuit or ruling against a frontier lab. Do n
 drop either kind for a smaller story.
 
 Prior coverage: do not return a story whose main event appears in the supplied prior
-coverage. A follow-up qualifies only with substantial new evidence and only one
-sentence of recap. Major frontier model releases and government actions involving frontier labs
+coverage. A follow-up qualifies only with substantial new evidence reported after
+that episode, normally in the last 24 hours, and only one sentence of recap; label it
+"Follow-up to: <episode title>" and give only details the earlier episode did not. Major frontier model releases and government actions involving frontier labs
 deserve follow-ups for about a week
 when there is new information this audience would find interesting: hands-on
 testing, independent benchmarks or evaluations, developer and community reception,

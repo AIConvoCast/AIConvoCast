@@ -168,8 +168,10 @@ class PodcastV2RunnerTests(unittest.TestCase):
         self.assertTrue(research_prompt.startswith("P10 text\n\nP8 text\n\nTitle: Newest & best"))
         script, title = legacy.calls
         self.assertEqual(script[1:], ("claude-opus-5-5", 0.7, True))
-        self.assertEqual(script[0], "P4 text\n\nAdditional script requirements for this run:\n"
-                                    "- keep it tight\n\ngpt-6.1-sol output")
+        self.assertTrue(script[0].startswith("P4 text\n\nAdditional script requirements for this run:\n"
+                                             "- keep it tight\n\ngpt-6.1-sol output\n\nRecent episodes"))
+        # The script writer sees prior coverage so follow-ups add only new details.
+        self.assertTrue(script[0].endswith("Title: Oldest\nDescription Short: Short three."))
         self.assertEqual(title[1:], ("claude-opus-5-5", 0.7, False))
         self.assertTrue(title[0].startswith("P12 text\n\nclaude-opus-5-5 output\n\nAdditional"))
 
