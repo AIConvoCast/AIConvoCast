@@ -35,7 +35,7 @@ Find the five strongest distinct AI developments, preferring the last 24 hours.
 Widen to 48 hours only when the last 24 hours lack strong stories, and to 72 hours
 only when necessary, labelling older items. An older item must be clearly stronger
 than same-day alternatives, and nothing older than 48 hours may lead, except a major
-frontier model release that prior coverage has not included (see below). Check the
+frontier development that prior coverage has not included (see below). Check the
 underlying event date separately from the publication/update date; refreshed old
 pages are not news.
 
@@ -69,16 +69,21 @@ listicles. Use a click test: would an AI engineer or product lead find this
 intriguing enough to click on today? Prefer stories with surprise, tension or real
 stakes.
 
-Never miss a major frontier model release. A new or upgraded flagship model from a
-frontier or leading open-weight lab (for example a new GPT, Claude, Gemini, Llama,
-Grok, DeepSeek or Qwen model or version) announced in the last 48 hours, or since
-the most recent episode in the prior coverage, must be a candidate unless prior
-coverage already includes it, and it normally leads. This holds for limited
-previews, early-access or restricted releases too; say who can use it.
+Never miss a major frontier development. Two kinds of story from the last 48 hours,
+or since the most recent episode in the prior coverage, must be candidates unless
+prior coverage already includes them, and one of them normally leads: (1) a new or
+upgraded flagship model from a frontier or leading open-weight lab (for example a
+new GPT, Claude, Gemini, Llama, Grok, DeepSeek or Qwen model or version), including
+limited previews and early-access releases, saying who can use it; and (2) a major
+government action involving frontier labs or their leaders, such as a White House or
+government agreement or accord signed by lab CEOs, an executive order, major
+legislation, or an investigation, lawsuit or ruling against a frontier lab. Do not
+drop either kind for a smaller story.
 
 Prior coverage: do not return a story whose main event appears in the supplied prior
 coverage. A follow-up qualifies only with substantial new evidence and only one
-sentence of recap. Major frontier model releases deserve follow-ups for about a week
+sentence of recap. Major frontier model releases and government actions involving frontier labs
+deserve follow-ups for about a week
 when there is new information this audience would find interesting: hands-on
 testing, independent benchmarks or evaluations, developer and community reception,
 notable praise or criticism from respected voices, surprising strengths or
@@ -99,8 +104,8 @@ results, and separate availability, previews, demos and production releases.
 
 Use at most eight search/open tool calls in one pass. Make the first call a
 dedicated check for new AI model releases and announcements in the last 48 hours
-from the companies above, and use the second for a broad sweep of today's AI news,
-government actions and open-source releases. Spend up to two on what the people
+from the companies above, and use the second for government and policy actions involving AI companies plus a
+broad sweep of today's AI news and open-source releases. Spend up to two on what the people
 involved (founders, lab leaders, researchers) and respected, well-known voices in AI
 said about the top stories. Use the rest to verify the best candidates. Usually 6-10
 source pages are enough; seek a second independent source for surprising or
@@ -132,7 +137,8 @@ leading open-weight labs first, then significant government actions, leader
 statements and reception of major releases, notable open-source developments, and
 research or evaluations that change practice. Keep a lesser-known company's story
 only when the brief shows substantial traction beyond its own claims, and place it
-last. Never drop a major frontier model release the brief flags as new, and keep
+last. Never drop a major frontier model release or government action involving frontier
+labs that the brief flags as new, and keep
 well-supported follow-ups on major releases that add new findings.
 Within that, favor concrete capability changes, useful developer implications, strong
 evidence, and a clear tension or tradeoff. Put the story listeners are most likely to
