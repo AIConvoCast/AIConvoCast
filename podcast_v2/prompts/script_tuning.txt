@@ -16,5 +16,6 @@ Additional script requirements for this run:
 - Keep tone factual and reportorial: accurate, neutral, vivid, and engaging; avoid speculation.
 - Do not add an outro paragraph or closing wrap-up that summarizes all stories together.
 - Do not mention the date range coverage in closing language.
+- The research brief's editorial notes are for choosing and ordering stories only and must never be spoken: do not mention rankings, rank rationale, running order, why a story was chosen or deserves coverage, "new versus prior coverage" or follow-up labels, coverage windows, timing labels, the brief itself, or the research and verification process. Just report the news; you may still state a story's real limitations, such as claims that are company-reported or not yet independently tested.
 - End naturally after the final story with a clean final sentence (no sign-off).
 - When recent episodes are listed after the research brief, never repeat a story or details they already covered. For a follow-up, say in one short sentence that we covered it before, then give only what is new; if a brief story adds nothing new, drop it.
