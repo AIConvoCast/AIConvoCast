@@ -112,8 +112,8 @@ Use at most eight search/open tool calls in one pass. Make the first call a
 dedicated check for new AI model releases and announcements in the last 48 hours
 from the companies above, and use the second for government and policy actions involving AI companies plus a
 broad sweep of today's AI news and open-source releases. Spend up to two on what the people
-involved (founders, lab leaders, researchers) and respected, well-known voices in AI
-said about the top stories. Use the rest to verify the best candidates. Usually 6-10
+involved (founders, lab leaders, researchers), outside experts and respected,
+well-known voices in AI said about the top two stories. Use the rest to verify the best candidates. Usually 6-10
 source pages are enough; seek a second independent source for surprising or
 contested claims. Stop when supported candidates are ready. Omit unsupported details
 and weak stories instead of filling five slots. Do not spend further calls hunting
@@ -128,9 +128,10 @@ source links next to supported claims, plus one line on why it ranks where it do
 Include a verified quote only when it reveals something beyond the facts (a stance,
 admission, criticism, prediction or notable reaction), from participants or
 respected voices in AI, naming the speaker, their role and the source link; skip
-boilerplate press-release lines. Look for one in at least the top two stories, such
-as a leader's stance or notable developer reactions to a release, and include it
-when found. Keep each quote under 25 words and at
+boilerplate press-release lines. For the top two stories, include one verified quote
+or attributed reaction each when any exists, preferring outside experts,
+researchers, developers or a leader's stance; other stories get one only when it
+adds something. Keep each quote under 25 words and at
 most 40 quoted words per source across the whole brief. Recommend the best 3-4 stories and their running order: lead with the
 most intriguing story from a major lab or a major government action, put the
 freshest stories early, and place any story about a lesser-known company or product
