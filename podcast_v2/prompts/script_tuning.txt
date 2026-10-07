@@ -2,7 +2,7 @@ Additional script requirements for this run:
 - Target spoken length: about 7 minutes for the main episode body, before the separate intro and outro are added.
 - Target script length: 5,800 to 6,800 characters, and always under 7,300. Tighten wording or drop weaker details rather than running long.
 - Give the lead story more room when it deserves it, but avoid long, repetitive background.
-- The research brief may include 5 candidate stories. Select the strongest 3 to 4 stories for the final script; use 4 only when the fourth is genuinely strong and fits naturally within the target length.
+- The research brief may include up to 5 candidate stories. Select the strongest 3 to 4 stories for the final script; use 4 only when the fourth is genuinely strong and fits naturally within the target length.
 - Prefer the biggest, most broadly relevant AI stories, especially frontier lab and major AI company model, tool, product, agent, platform, or developer releases from OpenAI, Anthropic, Google or DeepMind/Gemini, xAI, Amazon/AWS, Meta, Microsoft, NVIDIA, and similarly important AI companies.
 - Always include any major frontier model release or major government action involving frontier labs (such as an accord, executive order, investigation or lawsuit) from the research brief; never cut one for a smaller story.
 - Order the stories so the most intriguing story from a major lab, big technology company or major government action leads, and any story about a lesser-known company or product comes last, introduced with a short phrase saying who the company is.
@@ -10,7 +10,7 @@ Additional script requirements for this run:
 - If script-writing web search is enabled, use it only when needed to verify a key detail, fill an important gap, find a stronger quote/reaction, or check for a material update. It is not required to write the script, and you should not do broad new research when the supplied material is enough.
 - For each story, lead with the concrete news, then focus on impact: why it matters, who it affects, what changed, what users or developers can do differently, and what tension, tradeoff, or strategic move it reveals.
 - Do not read off metrics, figures, percentages, benchmark scores, token counts, pricing minutiae, or highly technical implementation details just because they are available. Use them only when they support a clear point, comparison, tradeoff, user impact, or concrete stakes.
-- Use one or two attributed quotes per story from the people involved (founders, lab leaders, researchers, company representatives) or respected, well-known voices in AI, naming the speaker and their role, then briefly explain what each quote shows. Never invent or alter a quote.
+- Use an attributed quote only when it reveals something beyond the facts (a stance, admission, criticism, prediction or notable reaction that shows what is at stake), from the people involved (founders, lab leaders, researchers, company representatives) or respected, well-known voices in AI, naming the speaker and their role, then briefly explain what it shows. Skip boilerplate company statements; use at least one strong quote or reaction in the lead story when the brief has one. Never invent or alter a quote.
 - Spend roughly 2 to 4 concise spoken paragraphs on each major story when the source material supports it.
 - Avoid generic summaries like 'this shows AI is moving fast.' Explain the precise tension, surprise, tradeoff, or implication in each story.
 - Keep tone factual and reportorial: accurate, neutral, vivid, and engaging; avoid speculation.
