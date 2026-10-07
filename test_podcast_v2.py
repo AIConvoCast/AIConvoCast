@@ -207,6 +207,17 @@ class UpdateModelsV2Tests(unittest.TestCase):
         self.assertTrue(by_name["gemini-x"]["available"])
 
 
+class OpenAIKeyTypeTests(unittest.TestCase):
+    def test_key_types_come_from_the_prefix_only(self):
+        from podcast_v2.update_models import openai_key_type
+
+        self.assertTrue(openai_key_type("sk-proj-abc").startswith("project key"))
+        self.assertTrue(openai_key_type("sk-svcacct-abc").startswith("service account key"))
+        self.assertTrue(openai_key_type("sk-abc123").startswith("legacy user key"))
+        self.assertEqual(openai_key_type(""), "missing or unrecognized")
+        self.assertNotIn("abc", openai_key_type("sk-proj-abc"))
+
+
 class PodcastV2GuardTests(unittest.TestCase):
     def test_empty_feed_stops_the_run(self):
         runner = run_podcast.Runner({"steps": []}, FakeLegacy(tempfile.gettempdir()))

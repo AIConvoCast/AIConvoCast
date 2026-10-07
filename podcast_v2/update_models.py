@@ -53,6 +53,18 @@ def probe_openai_model(client, model):
         return False, f"`{model}` refused a test call: {type(error).__name__}: {error}"
 
 
+def openai_key_type(key):
+    """Name the kind of OpenAI key from its prefix only; never print the key itself."""
+    key = (key or "").strip()
+    for prefix, kind in (("sk-proj-", "project key"), ("sk-svcacct-", "service account key"),
+                         ("sk-admin-", "admin key")):
+        if key.startswith(prefix):
+            return f"{kind} (`{prefix}`), not affected by the legacy user key shutdown"
+    if key.startswith("sk-"):
+        return "legacy user key (`sk-` only); replace it before October 22, 2026"
+    return "missing or unrecognized"
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--probe", default=os.getenv("PROBE_MODEL", ""),
@@ -75,6 +87,7 @@ def main(argv=None):
              f"{len(added)} new, {len(removed)} no longer offered."]
     lines += [f"- New: `{name}`" for name in added]
     lines += [f"- No longer offered: `{name}`" for name in removed]
+    lines += ["", f"OpenAI API key type: {openai_key_type(os.getenv('OPENAI_API_KEY'))}."]
     probe = args.probe.strip()
     if probe:
         listed = any(m["name"] == probe and m["available"] for m in registry["models"])
