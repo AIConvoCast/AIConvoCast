@@ -3,9 +3,12 @@ name: Preview V2 Research
 # Runs only the prior-episode check and research step of Run AI Podcast V2 and
 # shows the research brief on the run page, e.g. to check a model or prompt
 # change against today's news. With include_script it also writes the script and
-# title/description. No audio, uploads or email, and it does not count as the
-# day's episode. Costs one research call (a few cents), plus the script and
-# title calls when include_script is on.
+# title/description. With voice_sample it instead narrates
+# podcast_v2/voice_sample.txt with the workflow's ElevenLabs voice and attaches
+# the MP3 to the run (no research). No uploads or email, and it does not count
+# as the day's episode. Costs one research call (a few cents), plus the script
+# and title calls when include_script is on, or about 2,200 ElevenLabs
+# characters for a voice sample.
 
 permissions:
   contents: read
@@ -20,6 +23,11 @@ on:
         default: ''
       include_script:
         description: 'Also write the script and title/description (no audio, uploads or email)'
+        required: false
+        type: boolean
+        default: false
+      voice_sample:
+        description: 'Instead, narrate a short sample with the episode voice and attach the MP3 (no research)'
         required: false
         type: boolean
         default: false
@@ -44,12 +52,20 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      # Joining the sample's audio chunks needs ffmpeg.
+      - name: Install ffmpeg
+        if: ${{ inputs.voice_sample }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
       # Read-only use: checks Cloud Storage for generated episodes the feed lacks.
       - name: Create Google credentials file
         run: |
           echo '${{ secrets.GOOGLE_CREDS_JSON }}' > jmio-google-api.json
 
       - name: Preview research
+        if: ${{ !inputs.voice_sample }}
         run: python podcast_v2/run_podcast.py ${{ inputs.include_script && '--preview-script' || '--research-only' }}
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -59,6 +75,24 @@ jobs:
           CUSTOM_TOPIC: ${{ github.event.inputs.custom_topic || '' }}
           RESEARCH_SOL_BASELINE_USD: ${{ vars.RESEARCH_SOL_BASELINE_USD }}
 
+      - name: Narrate voice sample
+        if: ${{ inputs.voice_sample }}
+        run: python podcast_v2/run_podcast.py --voice-sample
+        env:
+          # The shared pipeline module checks for both keys when it loads.
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          CUSTOM_TOPIC: ${{ github.event.inputs.custom_topic || '' }}
+
+      - name: Attach voice sample
+        if: ${{ inputs.voice_sample }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: voice-sample-${{ github.run_id }}
+          path: generated_mp3/voice_sample_*.mp3
+          retention-days: 7
+          if-no-files-found: error
+
       - name: Cleanup
         if: always()
-        run: rm -f jmio-google-api.json
+        run: rm -rf generated_mp3/ jmio-google-api.json

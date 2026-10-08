@@ -23,6 +23,7 @@ WORKFLOW_PATH = V2_DIR / "workflow.json"
 TOPIC_WORKFLOW_PATH = V2_DIR / "topic_workflow.json"
 MODELS_PATH = V2_DIR / "models.json"
 PROMPTS_DIR = V2_DIR / "prompts"
+VOICE_SAMPLE_PATH = V2_DIR / "voice_sample.txt"
 
 STEP_TYPES = {"recent_episodes", "model", "save_text", "voice", "merge_audio"}
 PART_PATTERN = re.compile(r"^(prompt|step|text|gcs_file|gcs_latest_text|gcs_latest_mp3):(.+)$", re.DOTALL)
@@ -157,6 +158,100 @@ def clean_filename(title):
     return cleaned[:100] or None
 
 
+def is_quota_error(legacy, error):
+    return legacy.is_elevenlabs_credit_quota_error(str(error), None) or "credit/quota" in str(error).lower()
+
+
+def narrate(legacy, text, eleven, output, fallback=True):
+    """ElevenLabs narration with the configured model; returns (path, model used).
+
+    Eleven v4 runs through the Text to Dialogue API. If it fails for any reason
+    other than credits/quota, the same voice is retried on Eleven v3 so the
+    episode still ships; quota errors propagate to the Google fallback.
+    """
+    model = eleven.get("Model")
+    if model != "eleven_v4":
+        return legacy.generate_voice_audio(text, eleven["voice_id"], output, eleven), model
+    from podcast_v2.eleven_v4 import generate_voice_audio
+
+    try:
+        return generate_voice_audio(text, eleven["voice_id"], output, eleven, legacy), model
+    except Exception as error:
+        if not fallback or is_quota_error(legacy, error):
+            raise
+        print(f"  ⚠️ Eleven v4 narration failed ({type(error).__name__}: {error}); "
+              "retrying with Eleven v3 and the same voice.")
+        fallback = dict(eleven, Model="eleven_v3")
+        return (legacy.generate_voice_audio(text, eleven["voice_id"], output, fallback),
+                f"eleven_v3 (fallback after Eleven v4 failed: {type(error).__name__})")
+
+
+def voice_sample(workflow, legacy, text_path=VOICE_SAMPLE_PATH):
+    """Narrate the sample text with the workflow's ElevenLabs settings, with no
+    fallback, upload or email, normalize it as an episode would, and report its
+    pace and loudness next to the intro, outro and latest saved audio."""
+    text = Path(text_path).read_text(encoding="utf-8").strip()
+    eleven = next(step["elevenlabs"] for step in workflow["steps"] if step["type"] == "voice")
+    output = Path(legacy.MP3_OUTPUT_DIR) / f"voice_sample_{eleven.get('Model', 'elevenlabs')}.mp3"
+    path, model = narrate(legacy, text, eleven, output, fallback=False)
+    if not path or not Path(path).is_file():
+        raise RuntimeError("The voice sample produced no audio.")
+    from podcast_v2.audio_polish import measure_loudness, normalize_loudness
+
+    loudness = []
+
+    def level(name, fetch):
+        try:
+            clip = fetch()
+            if clip:
+                stats = measure_loudness(clip)
+                loudness.append(f"{name}: {float(stats['input_i']):.1f} LUFS, true peak "
+                                f"{float(stats['input_tp']):.1f} dBTP.")
+        except Exception as error:  # reference levels are informational
+            loudness.append(f"{name}: unavailable ({error}).")
+
+    intro = {}
+
+    def fetch_intro():
+        intro["path"] = legacy.download_mp3_file_from_gcs("Intro.mp3")
+        return intro["path"]
+
+    def leveled():
+        # Mirror the episode merge: the narration is leveled to the intro's loudness.
+        from pydub import AudioSegment
+
+        target = float(measure_loudness(intro["path"])["input_i"])
+        wav = normalize_loudness(path, Path(path).with_suffix(".leveled.wav"), target)
+        legacy.export_audio(AudioSegment.from_wav(wav), path, bitrate=legacy.DEFAULT_MP3_EXPORT_BITRATE)
+        return path
+
+    level("Sample as generated", lambda: path)
+    level("Intro", fetch_intro)
+    level("Sample leveled to the intro (as in an episode)", leveled)
+    level("Outro", lambda: legacy.download_mp3_file_from_gcs("Outro.mp3"))
+    level("Latest saved narration", lambda: legacy.download_latest_mp3_from_gcs("eleven-labs/"))
+    level("Latest saved episode", lambda: legacy.download_latest_mp3_from_gcs("podcasts/"))
+    lines = ["## Voice sample", "",
+             f"{model}, voice {eleven['voice_id']}: {len(text):,} characters. "
+             "Download the voice-sample artifact below to listen."]
+    try:
+        from pydub import AudioSegment
+
+        seconds = AudioSegment.from_file(path).duration_seconds
+        pace = len(text) / seconds
+        lines.append(f"Length {seconds:.0f} seconds, {pace:.1f} characters per second; at this pace a "
+                     f"6,300-character script runs about {6300 / pace / 60:.1f} minutes.")
+    except Exception as error:  # the sample itself is what matters
+        lines.append(f"Length unavailable ({error}).")
+    lines += ["", "Loudness:", *[f"- {line}" for line in loudness]]
+    print("\n".join(lines))
+    summary = os.getenv("GITHUB_STEP_SUMMARY")
+    if summary:
+        with open(summary, "a", encoding="utf-8") as handle:
+            handle.write("\n".join(lines) + "\n")
+    return path
+
+
 class Runner:
     def __init__(self, workflow, legacy, prompts_dir=PROMPTS_DIR, audio=None, topic=None, research=None):
         self.workflow = workflow
@@ -171,6 +266,7 @@ class Runner:
         self.final_audio_filename = None
         self.final_description_text = None
         self.final_description_filename = None
+        self.narration = None
 
     @property
     def research(self):
@@ -328,26 +424,19 @@ class Runner:
         output = legacy.MP3_OUTPUT_DIR / f"v2_{step['id']}.mp3"
         voice_name = eleven.get("Voice", "ElevenLabs")
         try:
-            if eleven.get("Model") == "eleven_v4":
-                from podcast_v2.eleven_v4 import generate_voice_audio
-                audio_path = generate_voice_audio(text, eleven["voice_id"], output, eleven, legacy)
-            else:
-                audio_path = legacy.generate_voice_audio(text, eleven["voice_id"], output, eleven)
+            audio_path, model = narrate(legacy, text, eleven, output)
+            self.narration = f"ElevenLabs {model}, voice {eleven['voice_id']}"
         except Exception as error:
-            if not legacy.is_elevenlabs_credit_quota_error(str(error), None) and "credit/quota" not in str(error).lower():
+            if not is_quota_error(legacy, error):
                 raise
             voice_name = legacy.get_google_chirp3_voice_name_by_id(step.get("google_fallback_voice_id", "1"))
             print(f"  ElevenLabs credit/quota error; using Google voice {voice_name}.")
+            self.narration = f"Google {voice_name} (ElevenLabs credit/quota error)"
             output = legacy.MP3_OUTPUT_DIR / f"v2_{step['id']}_google.mp3"
             audio_path = legacy.generate_google_voice_audio(text, voice_name, output)
-            if audio_path:
-                try:
-                    self.audio.polish_speech(audio_path, Path(audio_path).with_suffix(".wav"))
-                    print("  Google narration normalized to podcast loudness.")
-                except Exception as error:
-                    print(f"  Loudness normalization skipped ({error}); keeping the original narration.")
         if not audio_path:
             raise RuntimeError(f"Voice generation failed for {step['id']}.")
+        # Loudness is matched to the intro when the episode is merged (audio_polish.join).
         filename = self.filename(step, "mp3", f"v2_{step['id']}_{voice_name}")
         link = legacy.upload_audio_to_gcs(audio_path, f"{step['folder'].rstrip('/')}/{filename}")
         print(f"  Audio saved: {link}")
@@ -407,6 +496,8 @@ class Runner:
             lines += [f"**Custom topic:** {self.topic}", ""]
         if self.final_description_text:
             lines += ["```text", self.final_description_text.strip(), "```", ""]
+        if self.narration:
+            lines += [f"**Narration:** {self.narration}", ""]
         for step in self.workflow["steps"]:
             text = self.outputs.get(step["id"])
             if step["type"] != "model" or not text:
@@ -433,6 +524,9 @@ def main(argv=None):
     parser.add_argument("--research-only", action="store_true",
                         help="Run only the prior-episode and research steps and show the brief "
                              "(no script, audio, uploads or email).")
+    parser.add_argument("--voice-sample", action="store_true",
+                        help="Narrate podcast_v2/voice_sample.txt with the workflow's ElevenLabs settings "
+                             "(no fallback, upload or email).")
     parser.add_argument("--preview-script", action="store_true",
                         help="Run through the script and title/description and show them "
                              "(no audio, uploads or email).")
@@ -466,6 +560,9 @@ def main(argv=None):
     if topic:
         print(f"🎯 Custom topic episode: {topic}")
     legacy = load_legacy()
+    if args.voice_sample:
+        voice_sample(workflow, legacy)
+        return 0
     stop_after = "title" if args.preview_script else "research" if args.research_only else None
     # A preview must never reach the upload, audio or email steps.
     if stop_after and stop_after not in [step["id"] for step in workflow["steps"]]:
