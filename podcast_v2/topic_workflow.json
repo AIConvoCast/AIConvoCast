@@ -72,11 +72,9 @@
       "elevenlabs": {
         "voice_id": "TX3LPaxmHKxFdv7VOQHJ",
         "Voice": "21m00Tcm4TlvDq8ikWAM",
-        "Model": "eleven_multilingual_v2",
+        "Model": "eleven_v4",
         "Stability": 0.39,
-        "Similarity Boost": 0.7,
-        "Style": 0.5,
-        "Speed": 1.06
+        "Similarity Boost": 0.7
       },
       "google_fallback_voice_id": "1"
     },

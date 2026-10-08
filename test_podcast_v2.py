@@ -1,4 +1,5 @@
 import contextlib
+import ast
 import copy
 import io
 import json
@@ -12,7 +13,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from podcast_v2 import run_podcast, sync_from_sheet, update_models
+from podcast_v2 import eleven_v4, run_podcast, sync_from_sheet, update_models
 
 _SUMMARY_ENV = mock.patch.dict(os.environ, {"GITHUB_STEP_SUMMARY": ""})
 
@@ -43,6 +44,13 @@ class FakeLegacy:
         self.calls = []
         self.uploads = []
         self.saved_text = {}
+        self.ELEVENLABS_API_KEY = "test-key"
+        self.split_text_into_chunks = mock.Mock(side_effect=lambda text, **kwargs: [text])
+        self.retry_transient = lambda operation, **kwargs: operation()
+        self.requests = SimpleNamespace(post=mock.Mock(return_value=SimpleNamespace(
+            status_code=402, text="quota_exceeded", content=b"", close=lambda: None,
+            raise_for_status=lambda: None,
+        )))
 
     def anthropic_model_uses_opus_adaptive_effort(self, model):
         return model.startswith("claude-opus-5")
@@ -441,6 +449,152 @@ class AudioFallbackTests(unittest.TestCase):
         runner = run_podcast.Runner({"steps": []}, legacy, audio=broken)
         runner.run_merge_audio({"id": "episode", "parts": ["gcs_file:Intro.mp3"], "folder": "podcasts/"})
         self.assertEqual([Path(p).name for p in legacy.merged], ["Intro.mp3"])
+
+
+class ElevenV4Tests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.legacy = FakeLegacy(self.temp.name)
+        # Exercise the real sentence/word-aware splitter without initializing
+        # the legacy publishing clients or reading credentials.
+        source = Path(__file__).with_name("ai_podcast_pipeline_for_cursor.py")
+        node = next(n for n in ast.parse(source.read_text()).body
+                    if isinstance(n, ast.FunctionDef) and n.name == "split_text_into_chunks")
+        namespace = {"ELEVENLABS_CHUNK_MAX_CHARS": 2900}
+        exec(compile(ast.Module(body=[node], type_ignores=[]), str(source), "exec"), namespace)
+        self.legacy.split_text_into_chunks = namespace["split_text_into_chunks"]
+        self.config = next(s["elevenlabs"] for s in run_podcast.load_json(run_podcast.WORKFLOW_PATH)["steps"]
+                           if s["type"] == "voice")
+        self.output = Path(self.temp.name) / "narration.mp3"
+        self.responses = []
+
+        def respond(*args, **kwargs):
+            response = mock.Mock(status_code=200, text="", content=b"audio")
+            self.responses.append(response)
+            return response
+
+        self.legacy.requests.post.side_effect = respond
+        self.legacy.merge_multiple_audio_files = mock.Mock(side_effect=self.merge)
+        self.quiet = contextlib.redirect_stdout(io.StringIO())
+        self.quiet.__enter__()
+        self.addCleanup(self.quiet.__exit__, None, None, None)
+
+    def merge(self, paths, output):
+        Path(output).write_bytes(b"".join(Path(p).read_bytes() for p in paths))
+        return output
+
+    def generate(self, text="A short script.", config=None):
+        return eleven_v4.generate_voice_audio(text, self.config["voice_id"], self.output,
+                                              config or self.config, self.legacy)
+
+    def test_both_workflows_use_v4_and_the_existing_voice(self):
+        for path in (run_podcast.WORKFLOW_PATH, run_podcast.TOPIC_WORKFLOW_PATH):
+            config = next(s["elevenlabs"] for s in run_podcast.load_json(path)["steps"] if s["type"] == "voice")
+            self.assertEqual(config["Model"], "eleven_v4")
+            self.assertEqual(config["voice_id"], "TX3LPaxmHKxFdv7VOQHJ")
+            self.assertNotIn("Speed", config)
+            self.assertNotIn("Style", config)
+
+    def test_dialogue_request_keeps_voice_and_supported_settings_only(self):
+        config = dict(self.config, Speed=1.06, Style=0.5)
+        self.assertEqual(self.generate(config=config), self.output)
+        call = self.legacy.requests.post.call_args
+        self.assertEqual(call.args, ("https://api.elevenlabs.io/v1/text-to-dialogue",))
+        self.assertEqual(call.kwargs["json"], {
+            "model_id": "eleven_v4", "inputs": [{"text": "A short script.", "voice_id": self.config["voice_id"]}],
+            "settings": {"stability": 0.39, "similarity": 0.7},
+        })
+        self.assertEqual(call.kwargs["params"], {"output_format": "mp3_44100_128"})
+        self.assertEqual(call.kwargs["headers"]["xi-api-key"], "test-key")
+        self.assertEqual(self.output.read_bytes(), b"audio")
+        self.legacy.merge_multiple_audio_files.assert_not_called()
+        self.responses[0].close.assert_called_once()
+
+    def test_long_script_keeps_words_order_and_bounded_continuity(self):
+        text = " ".join(f"Story {i} brings a new development." for i in range(230))
+        self.generate(text)
+        payloads = [c.kwargs["json"] for c in self.legacy.requests.post.call_args_list]
+        chunks = [p["inputs"][0]["text"] for p in payloads]
+        self.assertGreater(len(chunks), 3)
+        self.assertEqual(" ".join(chunks), text)
+        self.assertTrue(all(len(c) <= 2000 for c in chunks))
+        for index, payload in enumerate(payloads):
+            if index:
+                self.assertEqual(payload["previous_text"], chunks[index - 1][-100:])
+            else:
+                self.assertNotIn("previous_text", payload)
+            if index + 1 < len(chunks):
+                self.assertEqual(payload["future_text"], chunks[index + 1][:100])
+            else:
+                self.assertNotIn("future_text", payload)
+            self.assertEqual(payload["inputs"][0]["voice_id"], self.config["voice_id"])
+        self.assertEqual(self.output.read_bytes(), b"audio" * len(chunks))
+        self.assertFalse(list(Path(self.temp.name).glob("eleven_v4_*")))
+
+    def test_sentence_longer_than_limit_splits_at_words(self):
+        text = "word " * 1000
+        self.generate(text)
+        chunks = [c.kwargs["json"]["inputs"][0]["text"] for c in self.legacy.requests.post.call_args_list]
+        self.assertEqual(" ".join(chunks).split(), text.split())
+        self.assertTrue(all(len(c) <= 2000 for c in chunks))
+
+    def test_failed_later_chunk_leaves_no_partial_output(self):
+        ok = mock.Mock(status_code=200, text="", content=b"audio")
+        failed = mock.Mock(status_code=422, text="voice unavailable", content=b"")
+        failed.raise_for_status.side_effect = RuntimeError("voice unavailable")
+        self.legacy.requests.post.side_effect = [ok, failed]
+        with self.assertRaisesRegex(RuntimeError, "voice unavailable"):
+            self.generate("A full sentence. " * 400)
+        self.assertFalse(self.output.exists())
+        self.assertFalse(list(Path(self.temp.name).glob("eleven_v4_*")))
+        self.legacy.merge_multiple_audio_files.assert_not_called()
+        failed.close.assert_called_once()
+
+    def test_empty_audio_is_rejected_before_upload(self):
+        self.legacy.requests.post.side_effect = None
+        self.legacy.requests.post.return_value = mock.Mock(status_code=200, content=b"")
+        with self.assertRaisesRegex(RuntimeError, "empty audio"):
+            self.generate()
+        self.assertFalse(self.output.exists())
+
+    def test_invalid_setting_stops_before_paid_request(self):
+        with self.assertRaises(ValueError):
+            self.generate(config=dict(self.config, Stability=float("nan")))
+        self.legacy.requests.post.assert_not_called()
+
+    def test_v4_quota_error_still_uses_google_fallback(self):
+        self.legacy.requests.post.side_effect = None
+        self.legacy.requests.post.return_value = mock.Mock(status_code=402, text="quota_exceeded")
+        audio = FakeAudio()
+        runner = run_podcast.Runner({"steps": []}, self.legacy, audio=audio)
+        step = next(s for s in run_podcast.load_json(run_podcast.WORKFLOW_PATH)["steps"] if s["type"] == "voice")
+        with mock.patch.object(runner, "resolve", return_value="A short script."):
+            result = runner.run_voice(step)
+        self.assertTrue(result.endswith("v2_narration_google.mp3"))
+        self.assertEqual(audio.polished, ["v2_narration_google.mp3"])
+        self.assertEqual(len(self.legacy.uploads), 1)
+
+    def test_v4_success_is_uploaded_without_changing_voice(self):
+        runner = run_podcast.Runner({"steps": []}, self.legacy, audio=FakeAudio())
+        step = next(s for s in run_podcast.load_json(run_podcast.WORKFLOW_PATH)["steps"] if s["type"] == "voice")
+        with mock.patch.object(runner, "resolve", return_value="A short script."), \
+                mock.patch.object(self.legacy, "generate_voice_audio") as old_tts:
+            result = runner.run_voice(step)
+        old_tts.assert_not_called()
+        self.assertTrue(result.endswith("v2_narration.mp3"))
+        self.assertEqual(len(self.legacy.uploads), 1)
+
+    def test_explicit_v3_keeps_existing_tts_path(self):
+        runner = run_podcast.Runner({"steps": []}, self.legacy, audio=FakeAudio())
+        step = copy.deepcopy(next(s for s in run_podcast.load_json(run_podcast.WORKFLOW_PATH)["steps"]
+                                  if s["type"] == "voice"))
+        step["elevenlabs"]["Model"] = "eleven_v3"
+        with mock.patch.object(runner, "resolve", return_value="A short script."), \
+                mock.patch.object(self.legacy, "generate_voice_audio", return_value=self.output) as old_tts:
+            runner.run_voice(step)
+        old_tts.assert_called_once()
+        self.legacy.requests.post.assert_not_called()
 
 
 @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "ffmpeg is not installed")
