@@ -37,7 +37,8 @@ To confirm the API key can use a model, run **Update Models V2** with
 `probe_model` set. To see what research would pick today without making an
 episode, run **Preview V2 Research**: it runs only the prior-episode check and
 research, shows the brief on the run page, uploads and emails nothing, and does
-not count as the day's episode.
+not count as the day's episode. Turn on `include_script` to also see the script
+and title/description it would write (still no audio, uploads or email).
 
 ## Steps
 
@@ -88,6 +89,9 @@ so the 4 p.m. automatic run skips.
 The first step reads the newest 15 episodes from the RSS feed and passes them,
 with P8, to the research step, as V1 did through the Posted Podcasts tab. If
 the feed can't be read or lists no episodes, the run stops before any paid calls.
+The script step also sees the list so it can skip repeats. An update on an earlier
+story is told as today's news, and the script and description are told never to
+mention past episodes or earlier coverage.
 
 The feed is read past any cache (twice, keeping the copy with the newest
 episode) and sorted by publish date. As a backstop, any episode this pipeline
