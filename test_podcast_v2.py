@@ -596,6 +596,56 @@ class ElevenV4Tests(unittest.TestCase):
         old_tts.assert_called_once()
         self.legacy.requests.post.assert_not_called()
 
+    def test_v4_api_error_retries_the_same_voice_on_v3(self):
+        failed = mock.Mock(status_code=422, text="unsupported parameter", content=b"")
+        failed.raise_for_status.side_effect = RuntimeError("422 unsupported parameter")
+        self.legacy.requests.post.side_effect = None
+        self.legacy.requests.post.return_value = failed
+        runner = run_podcast.Runner({"steps": []}, self.legacy, audio=FakeAudio())
+        step = next(s for s in run_podcast.load_json(run_podcast.WORKFLOW_PATH)["steps"] if s["type"] == "voice")
+        with mock.patch.object(runner, "resolve", return_value="A short script."), \
+                mock.patch.object(self.legacy, "generate_voice_audio", return_value=self.output, create=True) as v3:
+            result = runner.run_voice(step)
+        self.assertEqual(result, str(self.output))
+        config = v3.call_args.args[3]
+        self.assertEqual((config["Model"], config["voice_id"], config["Stability"]),
+                         ("eleven_v3", "TX3LPaxmHKxFdv7VOQHJ", 0.39))
+        self.assertIn("eleven_v3 (fallback", runner.narration)
+        self.assertEqual(len(self.legacy.uploads), 1)
+
+    def test_v4_quota_error_skips_v3_and_uses_google(self):
+        self.legacy.requests.post.side_effect = None
+        self.legacy.requests.post.return_value = mock.Mock(status_code=402, text="quota_exceeded")
+        runner = run_podcast.Runner({"steps": []}, self.legacy, audio=FakeAudio())
+        step = next(s for s in run_podcast.load_json(run_podcast.WORKFLOW_PATH)["steps"] if s["type"] == "voice")
+        with mock.patch.object(runner, "resolve", return_value="A short script."), \
+                mock.patch.object(self.legacy, "generate_voice_audio", create=True) as v3:
+            runner.run_voice(step)
+        v3.assert_not_called()
+        self.assertTrue(runner.narration.startswith("Google Alnilam"))
+
+    def test_voice_sample_uses_v4_without_fallback_or_upload(self):
+        sample = Path(self.temp.name) / "sample.txt"
+        sample.write_text("A short sample.")
+        workflow = run_podcast.load_json(run_podcast.WORKFLOW_PATH)
+        path = run_podcast.voice_sample(workflow, self.legacy, text_path=sample)
+        self.assertEqual(Path(path).name, "voice_sample_eleven_v4.mp3")
+        self.assertEqual(self.legacy.requests.post.call_args.kwargs["json"]["model_id"], "eleven_v4")
+        self.assertEqual(self.legacy.uploads, [])
+        failed = mock.Mock(status_code=500, text="boom", content=b"")
+        failed.raise_for_status.side_effect = RuntimeError("500 boom")
+        self.legacy.requests.post.side_effect = None
+        self.legacy.requests.post.return_value = failed
+        with mock.patch.object(self.legacy, "generate_voice_audio", create=True) as v3:
+            with self.assertRaisesRegex(RuntimeError, "boom"):
+                run_podcast.voice_sample(workflow, self.legacy, text_path=sample)
+        v3.assert_not_called()
+
+    def test_shipped_voice_sample_needs_two_requests(self):
+        text = run_podcast.VOICE_SAMPLE_PATH.read_text(encoding="utf-8").strip()
+        self.assertGreater(len(text), eleven_v4.CHUNK_MAX_CHARS)
+        self.assertLess(len(text), 2 * eleven_v4.CHUNK_MAX_CHARS)
+
 
 @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "ffmpeg is not installed")
 class AudioPolishTests(unittest.TestCase):

@@ -15,6 +15,7 @@ action and its Google Sheet are unchanged but are now manual only.
 | `models.json` | Known models by name, with web-search support and availability. |
 | `run_podcast.py` | The runner (`--check` validates only, `--no-email` skips the email). |
 | `eleven_v4.py` | Single-voice V4 narration through the Text to Dialogue REST API. |
+| `voice_sample.txt` | Sample narration text for the `voice_sample` preview. |
 | `update_models.py` | Refreshes `models.json` from the OpenAI, Anthropic and Google APIs. |
 | `audio_polish.py` | ffmpeg finishing: soxr resampling when joining intro/narration/outro, and -16 LUFS loudness for Google narration. |
 
@@ -33,8 +34,15 @@ requirements; existing chunk assembly and final episode finishing still apply.
 V4 does not support Speed or Style, so those fields are omitted. V3 also did not
 support the former Speed setting; no audio speed adjustment is added. The same
 voice ID can sound different on V4. Google fallback still uses Alnilam at 1.08
-on ElevenLabs credit/quota errors. Other API errors stop generation rather than
-silently changing the narrator or model.
+on ElevenLabs credit/quota errors. If V4 fails for any other reason, the same
+voice is retried once on Eleven v3 so the episode still ships; the log and the
+run page's **Narration** line say which model and voice were used.
+
+To hear the voice before an episode uses it, run **Preview V2 Research** with
+`voice_sample` on. It narrates `voice_sample.txt` (two V4 requests, about 2,200
+characters, with no fallback so a V4 problem shows as a failure), attaches the
+MP3 to the run as the `voice-sample` artifact, reports its pace, and uploads or
+emails nothing.
 
 To roll back narration, set `elevenlabs.Model` to `eleven_v3` in both workflow
 files. V2 still supports the existing Text to Speech helper for that model.
