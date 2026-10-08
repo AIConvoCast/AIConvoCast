@@ -2,8 +2,10 @@ name: Preview V2 Research
 
 # Runs only the prior-episode check and research step of Run AI Podcast V2 and
 # shows the research brief on the run page, e.g. to check a model or prompt
-# change against today's news. No script, audio, uploads or email, and it does
-# not count as the day's episode. Costs one research call (a few cents).
+# change against today's news. With include_script it also writes the script and
+# title/description. No audio, uploads or email, and it does not count as the
+# day's episode. Costs one research call (a few cents), plus the script and
+# title calls when include_script is on.
 
 permissions:
   contents: read
@@ -16,6 +18,11 @@ on:
         required: false
         type: string
         default: ''
+      include_script:
+        description: 'Also write the script and title/description (no audio, uploads or email)'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   preview:
@@ -43,9 +50,10 @@ jobs:
           echo '${{ secrets.GOOGLE_CREDS_JSON }}' > jmio-google-api.json
 
       - name: Preview research
-        run: python podcast_v2/run_podcast.py --research-only
+        run: python podcast_v2/run_podcast.py ${{ inputs.include_script && '--preview-script' || '--research-only' }}
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           # The shared pipeline module checks for this key when it loads.
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
           CUSTOM_TOPIC: ${{ github.event.inputs.custom_topic || '' }}

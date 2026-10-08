@@ -433,6 +433,9 @@ def main(argv=None):
     parser.add_argument("--research-only", action="store_true",
                         help="Run only the prior-episode and research steps and show the brief "
                              "(no script, audio, uploads or email).")
+    parser.add_argument("--preview-script", action="store_true",
+                        help="Run through the script and title/description and show them "
+                             "(no audio, uploads or email).")
     parser.add_argument("--topic", default=os.getenv("CUSTOM_TOPIC", ""),
                         help="Make a single-topic episode instead of the daily news (default: $CUSTOM_TOPIC).")
     args = parser.parse_args(argv)
@@ -463,8 +466,15 @@ def main(argv=None):
     if topic:
         print(f"🎯 Custom topic episode: {topic}")
     legacy = load_legacy()
+    stop_after = "title" if args.preview_script else "research" if args.research_only else None
+    # A preview must never reach the upload, audio or email steps.
+    if stop_after and stop_after not in [step["id"] for step in workflow["steps"]]:
+        raise RuntimeError(f"Workflow has no {stop_after!r} step to stop a preview after.")
     runner = Runner(workflow, legacy, topic=topic)
-    runner.run(stop_after="research" if args.research_only else None)
+    runner.run(stop_after=stop_after)
+    if args.preview_script:
+        print("Script preview complete; no audio was made and nothing was uploaded or emailed.")
+        return 0
     if args.research_only:
         print("Research preview complete; nothing was generated, uploaded or emailed.")
         return 0
