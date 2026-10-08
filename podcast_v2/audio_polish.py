@@ -42,6 +42,16 @@ def resample(source, destination, rate, channels):
     return Path(destination)
 
 
+def measure_loudness(path):
+    """Return EBU R128 stats (input_i LUFS, input_tp dBTP, input_lra LU) for a clip."""
+    measured = subprocess.run(
+        ["ffmpeg", "-hide_banner", "-nostdin", "-i", str(path),
+         "-af", f"loudnorm=I={TARGET_LUFS}:TP={TRUE_PEAK_DB}:LRA={LOUDNESS_RANGE}:print_format=json",
+         "-f", "null", "-"],
+        check=True, capture_output=True, text=True).stderr
+    return json.loads(re.findall(r"\{[^{}]*\}", measured)[-1])
+
+
 def normalize_loudness(source, destination):
     """Two-pass EBU R128 normalization to podcast loudness, keeping the sample rate."""
     rate, channels = probe(source)

@@ -207,6 +207,19 @@ def voice_sample(workflow, legacy, text_path=VOICE_SAMPLE_PATH):
                      f"6,300-character script runs about {6300 / pace / 60:.1f} minutes.")
     except Exception as error:  # the sample itself is what matters
         lines.append(f"Length unavailable ({error}).")
+    try:
+        from podcast_v2.audio_polish import TARGET_LUFS, measure_loudness
+
+        clips = [("Sample", path)]
+        intro = legacy.download_mp3_file_from_gcs("Intro.mp3")
+        if intro:
+            clips.append(("Intro", intro))
+        for name, clip in clips:
+            stats = measure_loudness(clip)
+            lines.append(f"{name} loudness {float(stats['input_i']):.1f} LUFS, true peak "
+                         f"{float(stats['input_tp']):.1f} dBTP (podcast target {TARGET_LUFS:.0f} LUFS).")
+    except Exception as error:
+        lines.append(f"Loudness unavailable ({error}).")
     print("\n".join(lines))
     summary = os.getenv("GITHUB_STEP_SUMMARY")
     if summary:

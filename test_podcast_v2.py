@@ -641,6 +641,18 @@ class ElevenV4Tests(unittest.TestCase):
                 run_podcast.voice_sample(workflow, self.legacy, text_path=sample)
         v3.assert_not_called()
 
+    @unittest.skipUnless(shutil.which("ffmpeg"), "ffmpeg is not installed")
+    def test_measure_loudness_reports_lufs_and_peak(self):
+        from podcast_v2 import audio_polish
+
+        tone = Path(self.temp.name) / "tone.wav"
+        subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", "-y", "-f", "lavfi", "-i",
+                        "sine=frequency=440:duration=2", "-af", "volume=-20dB", str(tone)],
+                       check=True, capture_output=True)
+        stats = audio_polish.measure_loudness(tone)
+        self.assertLess(float(stats["input_i"]), -20)
+        self.assertLess(float(stats["input_tp"]), -15)
+
     def test_shipped_voice_sample_needs_two_requests(self):
         text = run_podcast.VOICE_SAMPLE_PATH.read_text(encoding="utf-8").strip()
         self.assertGreater(len(text), eleven_v4.CHUNK_MAX_CHARS)
