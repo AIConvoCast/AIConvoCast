@@ -328,7 +328,11 @@ class Runner:
         output = legacy.MP3_OUTPUT_DIR / f"v2_{step['id']}.mp3"
         voice_name = eleven.get("Voice", "ElevenLabs")
         try:
-            audio_path = legacy.generate_voice_audio(text, eleven["voice_id"], output, eleven)
+            if eleven.get("Model") == "eleven_v4":
+                from podcast_v2.eleven_v4 import generate_voice_audio
+                audio_path = generate_voice_audio(text, eleven["voice_id"], output, eleven, legacy)
+            else:
+                audio_path = legacy.generate_voice_audio(text, eleven["voice_id"], output, eleven)
         except Exception as error:
             if not legacy.is_elevenlabs_credit_quota_error(str(error), None) and "credit/quota" not in str(error).lower():
                 raise
