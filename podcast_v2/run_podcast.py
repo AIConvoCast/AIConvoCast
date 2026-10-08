@@ -196,7 +196,7 @@ def voice_sample(workflow, legacy, text_path=VOICE_SAMPLE_PATH):
     path, model = narrate(legacy, text, eleven, output, fallback=False)
     if not path or not Path(path).is_file():
         raise RuntimeError("The voice sample produced no audio.")
-    from podcast_v2.audio_polish import TARGET_LUFS, AudioFinisher, measure_loudness
+    from podcast_v2.audio_polish import measure_loudness, normalize_loudness
 
     loudness = []
 
@@ -210,15 +210,24 @@ def voice_sample(workflow, legacy, text_path=VOICE_SAMPLE_PATH):
         except Exception as error:  # reference levels are informational
             loudness.append(f"{name}: unavailable ({error}).")
 
-    def polish():
-        # Mirror the episode: narration is normalized before it is joined with the intro.
-        AudioFinisher(legacy.export_audio, legacy.DEFAULT_MP3_EXPORT_BITRATE).polish_speech(
-            path, Path(path).with_suffix(".wav"))
+    intro = {}
+
+    def fetch_intro():
+        intro["path"] = legacy.download_mp3_file_from_gcs("Intro.mp3")
+        return intro["path"]
+
+    def leveled():
+        # Mirror the episode merge: the narration is leveled to the intro's loudness.
+        from pydub import AudioSegment
+
+        target = float(measure_loudness(intro["path"])["input_i"])
+        wav = normalize_loudness(path, Path(path).with_suffix(".leveled.wav"), target)
+        legacy.export_audio(AudioSegment.from_wav(wav), path, bitrate=legacy.DEFAULT_MP3_EXPORT_BITRATE)
         return path
 
     level("Sample as generated", lambda: path)
-    level(f"Sample after normalization (target {TARGET_LUFS:.0f} LUFS)", polish)
-    level("Intro", lambda: legacy.download_mp3_file_from_gcs("Intro.mp3"))
+    level("Intro", fetch_intro)
+    level("Sample leveled to the intro (as in an episode)", leveled)
     level("Outro", lambda: legacy.download_mp3_file_from_gcs("Outro.mp3"))
     level("Latest saved narration", lambda: legacy.download_latest_mp3_from_gcs("eleven-labs/"))
     level("Latest saved episode", lambda: legacy.download_latest_mp3_from_gcs("podcasts/"))
@@ -427,13 +436,7 @@ class Runner:
             audio_path = legacy.generate_google_voice_audio(text, voice_name, output)
         if not audio_path:
             raise RuntimeError(f"Voice generation failed for {step['id']}.")
-        # Eleven v4 arrives about 10 LU below podcast loudness and Google narration
-        # also runs quiet, so every narration is normalized the same way.
-        try:
-            self.audio.polish_speech(audio_path, Path(audio_path).with_suffix(".wav"))
-            print("  Narration normalized to podcast loudness.")
-        except Exception as error:
-            print(f"  Loudness normalization skipped ({error}); keeping the original narration.")
+        # Loudness is matched to the intro when the episode is merged (audio_polish.join).
         filename = self.filename(step, "mp3", f"v2_{step['id']}_{voice_name}")
         link = legacy.upload_audio_to_gcs(audio_path, f"{step['folder'].rstrip('/')}/{filename}")
         print(f"  Audio saved: {link}")

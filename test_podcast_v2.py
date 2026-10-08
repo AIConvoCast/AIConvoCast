@@ -105,12 +105,7 @@ class FakeLegacy:
 
 class FakeAudio:
     def __init__(self):
-        self.polished = []
         self.merged = None
-
-    def polish_speech(self, audio_path, master_path=None):
-        self.polished.append(Path(audio_path).name)
-        return audio_path
 
     def merge(self, paths, output):
         self.merged = list(paths)
@@ -187,8 +182,6 @@ class PodcastV2RunnerTests(unittest.TestCase):
         self.assertEqual(folders, ["descriptions", "scripts", "eleven-labs", "podcasts"])
         self.assertTrue(all("Opus_55_Arrives" in blob for blob in legacy.uploads))
         self.assertEqual([Path(p).name for p in audio.merged], ["Intro.mp3", "latest.wav", "Outro.mp3"])
-        # Only the Google fallback narration is loudness-normalized.
-        self.assertEqual(audio.polished, ["v2_narration_google.mp3"])
         self.assertIn("Description:", runner.final_description_text)
         self.assertTrue(runner.final_audio_filename.endswith("_Opus_55_Arrives.mp3"))
 
@@ -572,7 +565,6 @@ class ElevenV4Tests(unittest.TestCase):
         with mock.patch.object(runner, "resolve", return_value="A short script."):
             result = runner.run_voice(step)
         self.assertTrue(result.endswith("v2_narration_google.mp3"))
-        self.assertEqual(audio.polished, ["v2_narration_google.mp3"])
         self.assertEqual(len(self.legacy.uploads), 1)
 
     def test_v4_success_is_uploaded_without_changing_voice(self):
@@ -596,14 +588,13 @@ class ElevenV4Tests(unittest.TestCase):
         old_tts.assert_called_once()
         self.legacy.requests.post.assert_not_called()
 
-    def test_eleven_narration_is_normalized_like_google(self):
-        audio = FakeAudio()
-        runner = run_podcast.Runner({"steps": []}, self.legacy, audio=audio)
+    def test_v4_narration_is_named_on_the_run_page(self):
+        runner = run_podcast.Runner({"steps": []}, self.legacy, audio=FakeAudio())
         step = next(s for s in run_podcast.load_json(run_podcast.WORKFLOW_PATH)["steps"] if s["type"] == "voice")
         with mock.patch.object(runner, "resolve", return_value="A short script."):
             runner.run_voice(step)
-        self.assertEqual(audio.polished, ["v2_narration.mp3"])
         self.assertEqual(runner.narration, "ElevenLabs eleven_v4, voice TX3LPaxmHKxFdv7VOQHJ")
+        self.assertIn("**Narration:** ElevenLabs eleven_v4", "\n".join(runner.summary_lines()))
 
     def test_v4_api_error_retries_the_same_voice_on_v3(self):
         failed = mock.Mock(status_code=422, text="unsupported parameter", content=b"")
@@ -693,6 +684,33 @@ class AudioPolishTests(unittest.TestCase):
         image = spectrum[np.abs(freqs - 15000) < 50].max()
         # Linear interpolation leaves an image about 9 dB down; soxr removes it.
         self.assertLess(20 * np.log10(image / tone), -60)
+
+    def loudness(self, path):
+        return float(self.polish.measure_loudness(path)["input_i"])
+
+    def test_quiet_narration_is_leveled_to_the_intro(self):
+        from pydub.generators import Sine
+        # A -21 LUFS-ish intro, a much quieter narration, and an outro within tolerance.
+        Sine(440, sample_rate=44100).to_audio_segment(duration=3000).apply_gain(-18).export(
+            self.dir / "intro_music.wav", format="wav")
+        Sine(300, sample_rate=44100).to_audio_segment(duration=4000).apply_gain(-28).export(
+            self.dir / "narration.wav", format="wav")
+        Sine(500, sample_rate=44100).to_audio_segment(duration=3000).apply_gain(-18.5).export(
+            self.dir / "outro_music.wav", format="wav")
+        paths = [self.dir / "intro_music.wav", self.dir / "narration.wav", self.dir / "outro_music.wav"]
+        with contextlib.redirect_stdout(io.StringIO()) as log:
+            leveled = self.polish.level_to_first(paths, self.dir)
+        intro = self.loudness(paths[0])
+        self.assertAlmostEqual(self.loudness(leveled[1]), intro, delta=1.0)
+        self.assertEqual(leveled[0], paths[0])
+        self.assertEqual(leveled[2], paths[2])  # within tolerance: untouched
+        self.assertIn("Clip 2 leveled", log.getvalue())
+        self.assertEqual(self.polish.probe(leveled[1]), (44100, 1))
+
+    def test_leveling_problems_keep_the_clip(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            parts = self.polish.level_to_first([self.dir / "intro.wav", self.dir / "missing.wav"], self.dir)
+        self.assertEqual(parts, [self.dir / "intro.wav", self.dir / "missing.wav"])
 
     def test_speech_is_normalized_to_podcast_loudness(self):
         out = self.polish.normalize_loudness(self.dir / "speech.wav", self.dir / "loud.wav")

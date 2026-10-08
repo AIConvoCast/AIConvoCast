@@ -1,12 +1,15 @@
-"""Audio finishing for V2 with ffmpeg: clean resampling and podcast loudness.
+"""Audio finishing for V2 with ffmpeg: clean resampling and level-matched clips.
 
 pydub resamples by linear interpolation when it joins clips with different
 sample rates (Google's 24 kHz voice with a 44.1 kHz intro), which adds audible
 grain. Here every clip is converted with ffmpeg's soxr resampler before joining,
-and Google narration is normalized to the usual podcast loudness.
+and the narration is leveled to the intro's loudness so the episode has no jump
+in volume whichever voice made it (Eleven v4 arrives about 3 LU quieter than v3
+did, Google narration differs again).
 """
 
 import json
+import math
 import re
 import subprocess
 import tempfile
@@ -15,6 +18,9 @@ from pathlib import Path
 TARGET_LUFS = -16.0
 TRUE_PEAK_DB = -1.5
 LOUDNESS_RANGE = 11.0
+# Clips within this many LU of the intro keep their own level (Eleven v3 narration
+# sat about 1.5 LU below the intro, so it is left as it was).
+LEVEL_TOLERANCE_LU = 2.0
 
 
 def _ffmpeg(*args):
@@ -52,10 +58,10 @@ def measure_loudness(path):
     return json.loads(re.findall(r"\{[^{}]*\}", measured)[-1])
 
 
-def normalize_loudness(source, destination):
-    """Two-pass EBU R128 normalization to podcast loudness, keeping the sample rate."""
+def normalize_loudness(source, destination, target_lufs=TARGET_LUFS):
+    """Two-pass EBU R128 normalization to target_lufs, keeping the sample rate."""
     rate, channels = probe(source)
-    target = f"I={TARGET_LUFS}:TP={TRUE_PEAK_DB}:LRA={LOUDNESS_RANGE}"
+    target = f"I={target_lufs}:TP={TRUE_PEAK_DB}:LRA={LOUDNESS_RANGE}"
     measured = subprocess.run(
         ["ffmpeg", "-hide_banner", "-nostdin", "-i", str(source),
          "-af", f"loudnorm={target}:print_format=json", "-f", "null", "-"],
@@ -70,16 +76,44 @@ def normalize_loudness(source, destination):
     return Path(destination)
 
 
+def level_to_first(parts, workdir):
+    """Bring any clip more than LEVEL_TOLERANCE_LU from the first clip's loudness to it.
+
+    The first clip is the intro, so the narration matches the intro and outro
+    the way Eleven v3 narration did. Leveling problems keep a clip as it is.
+    """
+    try:
+        reference = float(measure_loudness(parts[0])["input_i"])
+    except Exception as error:
+        print(f"  Loudness leveling skipped ({error}).")
+        return list(parts)
+    if not math.isfinite(reference):
+        return list(parts)
+    leveled = [parts[0]]
+    for index, part in enumerate(parts[1:], start=1):
+        try:
+            level = float(measure_loudness(part)["input_i"])
+            if math.isfinite(level) and abs(level - reference) > LEVEL_TOLERANCE_LU:
+                part = normalize_loudness(part, Path(workdir) / f"part_{index}_leveled.wav", reference)
+                print(f"  Clip {index + 1} leveled from {level:.1f} to {reference:.1f} LUFS to match the intro.")
+        except Exception as error:
+            print(f"  Clip {index + 1} kept at its own level ({error}).")
+        leveled.append(part)
+    return leveled
+
+
 def join(paths, workdir):
-    """Join clips at the highest sample rate and channel count among them."""
+    """Join clips at the highest sample rate and channel count among them, leveled to the first."""
     from pydub import AudioSegment
 
     formats = [probe(path) for path in paths]
     rate = max(r for r, _ in formats)
     channels = max(c for _, c in formats)
+    parts = [resample(path, Path(workdir) / f"part_{index}.wav", rate, channels)
+             for index, path in enumerate(paths)]
     combined = None
-    for index, path in enumerate(paths):
-        clip = AudioSegment.from_wav(resample(path, Path(workdir) / f"part_{index}.wav", rate, channels))
+    for part in level_to_first(parts, workdir):
+        clip = AudioSegment.from_wav(part)
         combined = clip if combined is None else combined + clip
     return combined
 
@@ -90,16 +124,6 @@ class AudioFinisher:
     def __init__(self, export, bitrate="192k"):
         self.export = export
         self.bitrate = bitrate
-
-    def polish_speech(self, audio_path, master_path=None):
-        """Normalize loudness in place, starting from the lossless master when there is one."""
-        from pydub import AudioSegment
-
-        source = Path(master_path) if master_path and Path(master_path).is_file() else Path(audio_path)
-        with tempfile.TemporaryDirectory() as workdir:
-            polished = normalize_loudness(source, Path(workdir) / "polished.wav")
-            self.export(AudioSegment.from_wav(polished), audio_path, bitrate=self.bitrate)
-        return audio_path
 
     def merge(self, paths, output_path):
         with tempfile.TemporaryDirectory() as workdir:
