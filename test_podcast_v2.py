@@ -596,6 +596,15 @@ class ElevenV4Tests(unittest.TestCase):
         old_tts.assert_called_once()
         self.legacy.requests.post.assert_not_called()
 
+    def test_eleven_narration_is_normalized_like_google(self):
+        audio = FakeAudio()
+        runner = run_podcast.Runner({"steps": []}, self.legacy, audio=audio)
+        step = next(s for s in run_podcast.load_json(run_podcast.WORKFLOW_PATH)["steps"] if s["type"] == "voice")
+        with mock.patch.object(runner, "resolve", return_value="A short script."):
+            runner.run_voice(step)
+        self.assertEqual(audio.polished, ["v2_narration.mp3"])
+        self.assertEqual(runner.narration, "ElevenLabs eleven_v4, voice TX3LPaxmHKxFdv7VOQHJ")
+
     def test_v4_api_error_retries_the_same_voice_on_v3(self):
         failed = mock.Mock(status_code=422, text="unsupported parameter", content=b"")
         failed.raise_for_status.side_effect = RuntimeError("422 unsupported parameter")

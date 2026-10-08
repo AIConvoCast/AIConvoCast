@@ -17,7 +17,7 @@ action and its Google Sheet are unchanged but are now manual only.
 | `eleven_v4.py` | Single-voice V4 narration through the Text to Dialogue REST API. |
 | `voice_sample.txt` | Sample narration text for the `voice_sample` preview. |
 | `update_models.py` | Refreshes `models.json` from the OpenAI, Anthropic and Google APIs. |
-| `audio_polish.py` | ffmpeg finishing: soxr resampling when joining intro/narration/outro, and -16 LUFS loudness for Google narration. |
+| `audio_polish.py` | ffmpeg finishing: soxr resampling when joining intro/narration/outro, and -16 LUFS loudness for all narration (ElevenLabs or Google). |
 
 Google credentials (`GOOGLE_CREDS_JSON`) are still used for Cloud Storage and
 Google text-to-speech, but nothing reads or writes the sheet.
@@ -30,6 +30,9 @@ Dialogue endpoint, using sentence-aware chunks below its recommended 2,000
 character request limit and 100-character adjacent-text context for continuity.
 The output format stays MP3 at 44.1 kHz/128 kbps, avoiding new subscription-tier
 requirements; existing chunk assembly and final episode finishing still apply.
+V4 audio arrives about 10 LU below podcast loudness (about -26 LUFS), so every
+narration, ElevenLabs or Google, is normalized to -16 LUFS before the intro and
+outro are added.
 
 V4 does not support Speed or Style, so those fields are omitted. V3 also did not
 support the former Speed setting; no audio speed adjustment is added. The same
@@ -41,8 +44,9 @@ run page's **Narration** line say which model and voice were used.
 To hear the voice before an episode uses it, run **Preview V2 Research** with
 `voice_sample` on. It narrates `voice_sample.txt` (two V4 requests, about 2,200
 characters, with no fallback so a V4 problem shows as a failure), attaches the
-MP3 to the run as the `voice-sample` artifact, reports its pace, and uploads or
-emails nothing.
+MP3 (normalized, as in an episode) to the run as the `voice-sample` artifact,
+reports its pace and loudness next to the intro, outro and latest saved audio,
+and uploads or emails nothing.
 
 To roll back narration, set `elevenlabs.Model` to `eleven_v3` in both workflow
 files. V2 still supports the existing Text to Speech helper for that model.
