@@ -419,6 +419,16 @@ class TopicEpisodeTests(unittest.TestCase):
         self.assertEqual(list(runner.outputs), ["recent_episodes", "research"])
         self.assertEqual((legacy.calls, legacy.uploads, audio.merged), ([], [], None))
 
+    def test_script_preview_stops_before_uploads_and_audio(self):
+        for path in (run_podcast.WORKFLOW_PATH, run_podcast.TOPIC_WORKFLOW_PATH):
+            workflow = copy.deepcopy(run_podcast.load_json(path))
+            ids = [step["id"] for step in workflow["steps"]]
+            # Everything after the title step saves, voices or merges, so a preview must stop there.
+            after = {step["type"] for step in workflow["steps"][ids.index("title") + 1:]}
+            self.assertEqual(after, {"save_text", "voice", "merge_audio"})
+            self.assertTrue(all(step["type"] in ("recent_episodes", "model")
+                                for step in workflow["steps"][:ids.index("title") + 1]))
+
     def test_text_parts_are_literal(self):
         runner = run_podcast.Runner({"steps": []}, FakeLegacy(tempfile.gettempdir()))
         self.assertEqual(runner.resolve("text:Topic for this episode:"), "Topic for this episode:")

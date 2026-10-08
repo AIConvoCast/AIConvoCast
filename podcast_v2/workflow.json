@@ -28,7 +28,7 @@
         "prompt:4",
         "script_tuning",
         "step:research",
-        "text:Recent episodes (already covered; do not repeat their stories or details):",
+        "text:Recent episodes, for reference only (never repeat their stories or details, and never mention them or say a story was covered before):",
         "step:recent_episodes"
       ]
     },
