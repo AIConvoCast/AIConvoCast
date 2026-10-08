@@ -14,11 +14,30 @@ action and its Google Sheet are unchanged but are now manual only.
 | `prompts/script_tuning.txt` | Claude script requirements (length, quotes, structure) added by the `script_tuning` part. |
 | `models.json` | Known models by name, with web-search support and availability. |
 | `run_podcast.py` | The runner (`--check` validates only, `--no-email` skips the email). |
+| `eleven_v4.py` | Single-voice V4 narration through the Text to Dialogue REST API. |
 | `update_models.py` | Refreshes `models.json` from the OpenAI, Anthropic and Google APIs. |
 | `audio_polish.py` | ffmpeg finishing: soxr resampling when joining intro/narration/outro, and -16 LUFS loudness for Google narration. |
 
 Google credentials (`GOOGLE_CREDS_JSON`) are still used for Cloud Storage and
 Google text-to-speech, but nothing reads or writes the sheet.
+
+## Narration
+
+Daily and custom-topic episodes use `eleven_v4` with the existing voice ID
+`TX3LPaxmHKxFdv7VOQHJ`. V2 sends Stability and Similarity through the Text to
+Dialogue endpoint, using sentence-aware chunks below its recommended 2,000
+character request limit and 100-character adjacent-text context for continuity.
+The output format stays MP3 at 44.1 kHz/128 kbps, avoiding new subscription-tier
+requirements; existing chunk assembly and final episode finishing still apply.
+
+V4 does not support Speed or Style, so those fields are omitted. V3 also did not
+support the former Speed setting; no audio speed adjustment is added. The same
+voice ID can sound different on V4. Google fallback still uses Alnilam at 1.08
+on ElevenLabs credit/quota errors. Other API errors stop generation rather than
+silently changing the narrator or model.
+
+To roll back narration, set `elevenlabs.Model` to `eleven_v3` in both workflow
+files. V2 still supports the existing Text to Speech helper for that model.
 
 ## Changing a model
 
