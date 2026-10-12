@@ -193,9 +193,10 @@ def compose_music(legacy, music, seconds, output):
         f"{API}/music", headers={"xi-api-key": legacy.ELEVENLABS_API_KEY, "Accept": "audio/mpeg"},
         json={"prompt": music["prompt"], "music_length_ms": int(seconds * 1000), "force_instrumental": True},
         timeout=(10, 300))
-    if response.status_code != 200 and legacy.is_elevenlabs_credit_quota_error(response.text, response.status_code):
-        raise RuntimeError(f"ElevenLabs credit/quota error composing music: {response.text[:300]}")
-    response.raise_for_status()
+    if response.status_code != 200:
+        kind = ("credit/quota error" if legacy.is_elevenlabs_credit_quota_error(response.text, response.status_code)
+                else f"HTTP {response.status_code}")
+        raise RuntimeError(f"Eleven Music refused the request ({kind}): {response.text[:300]}")
     if not response.content:
         raise RuntimeError("Eleven Music returned empty audio.")
     Path(output).write_bytes(response.content)
@@ -289,15 +290,20 @@ def record(legacy, config, workflow, out_dir, email=False):
 
     longest = max(duration_seconds(path) for path in voices.values())
     needed = float(music["lead_in_seconds"]) + longest + float(music["tail_seconds"]) + 1.0
+    music_problem = None
     bed = legacy.download_mp3_file_from_gcs(music["file"])
     if bed and duration_seconds(bed) >= needed:
         lines.append(f"Music: reusing {music['file']} from Cloud Storage.")
     else:
-        bed = compose_music(legacy, music, needed, work / "music_bed.mp3")
-        if not legacy.upload_audio_to_gcs(bed, music["file"]):
-            raise RuntimeError(f"Uploading {music['file']} to Cloud Storage failed.")
-        lines.append(f"Music: composed a {duration_seconds(bed):.0f}-second bed with Eleven Music "
-                     f"and saved it as {music['file']}.")
+        try:
+            bed = compose_music(legacy, music, needed, work / "music_bed.mp3")
+            if not legacy.upload_audio_to_gcs(bed, music["file"]):
+                raise RuntimeError(f"Uploading {music['file']} to Cloud Storage failed.")
+            lines.append(f"Music: composed a {duration_seconds(bed):.0f}-second bed with Eleven Music "
+                         f"and saved it as {music['file']}.")
+        except Exception as error:  # the voice-only candidates are still worth reviewing
+            bed, music_problem = None, str(error)
+            lines.append(f"Music: unavailable, so only voice-only candidates were made ({music_problem}).")
     lines.append("")
 
     review = []
@@ -305,12 +311,13 @@ def record(legacy, config, workflow, out_dir, email=False):
     for name, clip in clips.items():
         current = legacy.download_mp3_file_from_gcs(clip["source"])
         plain = finish(f"{name.title()}, voice only", voices[name], clip["file"])
-        mixed = mix_over_music(voices[name], bed, work / f"{name}_music_mix.wav", music)
-        scored = finish(f"{name.title()} over music", mixed, clip["music_file"])
         if current:
             review.append((f"Current {name} ({clip['source']})", current))
-        review += [(f"New {name}, voice only ({clip['file']})", plain),
-                   (f"New {name} over light synth music ({clip['music_file']})", scored)]
+        review.append((f"New {name}, voice only ({clip['file']})", plain))
+        if bed:
+            mixed = mix_over_music(voices[name], bed, work / f"{name}_music_mix.wav", music)
+            scored = finish(f"{name.title()} over music", mixed, clip["music_file"])
+            review.append((f"New {name} over light synth music ({clip['music_file']})", scored))
 
     parts, timeline, position = [], [], 0.0
     for label, path in review:
@@ -329,9 +336,12 @@ def record(legacy, config, workflow, out_dir, email=False):
         "The attached file plays these in order (minute:second):",
         *timeline,
         "",
-        "The new versions use the episode voice on Eleven v4. The music versions sit over a new light synth "
-        "bed from Eleven Music. Reply with which intro and outro to use (voice only, with music, or keep the "
-        "current ones). Episodes keep the current intro and outro until you approve a change.",
+        "The new versions use the episode voice on Eleven v4."
+        + (" The music versions sit over a new light synth bed from Eleven Music." if bed else
+           " Light synth music versions could not be made this time because Eleven Music refused the request;"
+           " the voice-only versions match the current clips, which have no music under them."),
+        "Reply with which intro and outro to use (voice only" + (", with music" if bed else "")
+        + ", or keep the current ones). Episodes keep the current intro and outro until you approve a change.",
     ])
     if email:
         legacy.send_podcast_email(review_path, description, workflow_id="intro/outro review",

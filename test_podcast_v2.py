@@ -876,6 +876,21 @@ class IntroOutroTests(unittest.TestCase):
                          ["Intro_Outro_review.mp3", "Intro_v4.mp3", "Intro_v4_music.mp3",
                           "Outro_v4.mp3", "Outro_v4_music.mp3"])
 
+    def test_record_without_music_still_reviews_the_voice_only_candidates(self):
+        def refused(*args, **kwargs):
+            raise RuntimeError("Eleven Music refused the request (HTTP 401): missing_permissions")
+
+        with mock.patch.object(run_podcast, "narrate", side_effect=self.fake_narrate), \
+                mock.patch.object(intro_outro, "compose_music", side_effect=refused):
+            lines = intro_outro.record(self.legacy, self.config, self.workflow, self.dir / "out", email=True)
+        self.assertEqual(self.uploads, ["Intro_v4.mp3", "Outro_v4.mp3"])
+        self.assertIn("Music: unavailable, so only voice-only candidates were made", "\n".join(lines))
+        description = self.legacy.send_podcast_email.call_args.args[1]
+        self.assertIn("could not be made", description)
+        self.assertNotIn("over light synth music (", description)
+        self.assertEqual(sorted(p.name for p in (self.dir / "out").glob("*.mp3")),
+                         ["Intro_Outro_review.mp3", "Intro_v4.mp3", "Outro_v4.mp3"])
+
     def test_record_reuses_a_saved_music_bed(self):
         self.fake_music(self.legacy, self.config["music"], 10, self.dir / "Bed.mp3")
         self.stored.add("Bed.mp3")
