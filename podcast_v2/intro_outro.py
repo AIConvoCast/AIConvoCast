@@ -109,6 +109,220 @@ def bucket_root_files(legacy):
     return sorted(files, key=lambda f: f[2] or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
 
 
+def spectral_flatness(path, start, end):
+    """0 for tonal sound such as music, towards 1 for noise, over 100-5000 Hz (None if too short)."""
+    import numpy as np
+
+    raw = subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", "-ss", f"{start:.3f}", "-to", f"{end:.3f}",
+                          "-i", str(path), "-ac", "1", "-ar", "16000", "-f", "s16le", "-"],
+                         check=True, capture_output=True).stdout
+    samples = np.frombuffer(raw, dtype="<i2").astype(float)
+    if len(samples) < 3200:
+        return None
+    power = np.abs(np.fft.rfft(samples * np.hanning(len(samples)))) ** 2 + 1e-12
+    freqs = np.fft.rfftfreq(len(samples), 1 / 16000)
+    band = power[(freqs >= 100) & (freqs <= 5000)]
+    return float(np.exp(np.mean(np.log(band))) / np.mean(band))
+
+
+def quiet_spans(words, length, minimum=0.4):
+    """(start, end) of stretches with no speech: before the first word, pauses, after the last."""
+    spoken = [w for w in words if w.get("type") == "word" and "start" in w and "end" in w]
+    if not spoken:
+        return [(0.0, length)]
+    edges = [0.0] + [x for w in spoken for x in (w["start"], w["end"])] + [length]
+    spans = [(edges[i] + 0.05, edges[i + 1] - 0.05) for i in range(0, len(edges), 2)]
+    return [(a, b) for a, b in spans if b - a >= minimum]
+
+
+def describe_background(path, words, length):
+    """One line on whether the quiet stretches hold music: level and spectral flatness."""
+    spans = quiet_spans(words, length)
+    if not spans:
+        return "no pauses long enough to measure."
+    measured = []
+    for start, end in spans:
+        level = segment_level(path, start, end)
+        if level is not None:
+            measured.append((level, start, end))
+    if not measured:
+        return "no pauses long enough to measure."
+    level, start, end = max(measured)
+    flatness = spectral_flatness(path, start, end)
+    verdict = ("likely music" if level > -45 and flatness is not None and flatness < 0.2
+               else "likely just silence or room noise" if level < -50 else "unclear")
+    return (f"loudest quiet stretch {start:.1f}-{end:.1f} s at {level:.0f} dBFS, spectral flatness "
+            f"{'n/a' if flatness is None else f'{flatness:.2f}'} ({verdict}).")
+
+
+def object_versions(legacy, name):
+    """Every stored generation of a bucket object (more than one only if versioning is on)."""
+    bucket = legacy.get_gcs_client().bucket(legacy.GCS_BUCKET_NAME)
+    return sorted(((b.generation, b.updated, b.size or 0) for b in bucket.list_blobs(prefix=name, versions=True)
+                   if b.name == name), key=lambda v: v[1])
+
+
+def download_version(legacy, name, generation, path):
+    bucket = legacy.get_gcs_client().bucket(legacy.GCS_BUCKET_NAME)
+    bucket.blob(name, generation=generation).download_to_filename(str(path))
+    return Path(path)
+
+
+def episode_samples(legacy, before, count=4):
+    """Older episodes (podcasts/ folder), spread evenly over those made before `before`."""
+    names = sorted(n for n in legacy.list_files_in_gcs_folder("podcasts/") if n.endswith(".mp3"))
+    older = [n for n in names if Path(n).name[:8] < before.strftime("%Y%m%d")]
+    if len(older) <= count:
+        return older
+    step = (len(older) - 1) / (count - 1)
+    return [older[round(i * step)] for i in range(count)]
+
+
+def clip_start(path, seconds, output):
+    subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", "-y", "-t", f"{seconds}", "-i", str(path),
+                    "-c:a", "pcm_s16le", str(output)], check=True, capture_output=True)
+    return Path(output)
+
+
+NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+
+
+def read_mono(path, rate=16000, mix="0.5*c0+0.5*c1"):
+    """Samples of `path` as one channel; mix picks mid (default) or side (0.5*c0-0.5*c1)."""
+    import numpy as np
+
+    raw = subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", "-i", str(path), "-af", f"pan=mono|c0={mix}",
+                          "-ar", str(rate), "-f", "s16le", "-"], check=True, capture_output=True).stdout
+    return np.frombuffer(raw, dtype="<i2").astype(float) / 32768
+
+
+def tempo_and_notes(samples, rate=16000):
+    """Rough tempo (BPM, from onset autocorrelation) and the three strongest pitch classes."""
+    import numpy as np
+
+    hop = rate // 100
+    frames = samples[: len(samples) // hop * hop].reshape(-1, hop)
+    energy = np.sqrt(np.mean(frames ** 2, axis=1) + 1e-12)
+    onsets = np.maximum(np.diff(np.log(energy)), 0)
+    onsets -= onsets.mean()
+    corr = np.correlate(onsets, onsets, "full")[len(onsets) - 1:]
+    lags = np.arange(len(corr))
+    usable = (lags >= 30) & (lags <= 100)  # 60-200 BPM
+    tempo = 6000 / lags[usable][np.argmax(corr[usable])] if usable.any() else None
+    power = np.abs(np.fft.rfft(samples * np.hanning(len(samples)))) ** 2
+    freqs = np.fft.rfftfreq(len(samples), 1 / rate)
+    keep = (freqs >= 80) & (freqs <= 2000)
+    classes = np.zeros(12)
+    np.add.at(classes, np.round(12 * np.log2(freqs[keep] / 440) + 69).astype(int) % 12, power[keep])
+    top = [NOTE_NAMES[i] for i in np.argsort(classes)[::-1][:3]]
+    return tempo, top
+
+
+def music_trace(legacy, clip, work):
+    """The music under a clip with the centred voice cancelled (left minus right), as far as it goes."""
+    lines = []
+    path = legacy.download_mp3_file_from_gcs(clip["source"])
+    if not path:
+        return [f"- {clip['source']}: could not download it."]
+    import numpy as np
+
+    rate = 16000
+    mid, side = read_mono(path, rate), read_mono(path, rate, "0.5*c0-0.5*c1")
+    level = lambda x: 20 * np.log10(np.sqrt(np.mean(x ** 2)) + 1e-12)
+    lines.append(f"- {clip['source']}: mid (voice and music) {level(mid):.0f} dBFS; side (voice cancelled) "
+                 f"{level(side):.0f} dBFS, {level(side) - level(mid):.0f} dB below the mid.")
+    windows = [level(side[i:i + rate]) for i in range(0, len(side) - rate + 1, rate)]
+    lines.append("  side level per second: " + ", ".join(f"{w:.0f}" for w in windows))
+    tempo, notes = tempo_and_notes(side if level(side) > -60 else mid, rate)
+    lines.append(f"  tempo about {tempo:.0f} BPM; strongest notes {', '.join(notes)}." if tempo
+                 else f"  strongest notes {', '.join(notes)}.")
+    out = Path(work) / f"{Path(clip['source']).stem}_music_only.mp3"
+    subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", "-y", "-i", str(path), "-af",
+                    "pan=stereo|c0=0.5*c0-0.5*c1|c1=0.5*c1-0.5*c0,loudnorm=I=-23", "-b:a", "192k", str(out)],
+                   check=True, capture_output=True)
+    lines.append(f"  saved {out.name} (voice cancelled, loudness raised to listen) for the run's artifacts.")
+    return lines
+
+
+def history(legacy, config, work):
+    """Look for the music that older intros and outros used: stored versions and older episodes."""
+    work = Path(work)
+    work.mkdir(parents=True, exist_ok=True)
+    lines = ["## Earlier intros and outros", "", "### Music under the current clips", ""]
+    for name, clip in config["clips"].items():
+        try:
+            lines += music_trace(legacy, clip, work)
+        except Exception as error:
+            lines.append(f"- {clip['source']}: could not trace the music ({error}).")
+    lines.append("")
+    newest = None
+    for name, clip in config["clips"].items():
+        try:
+            versions = object_versions(legacy, clip["source"])
+        except Exception as error:
+            lines += [f"Could not list versions of {clip['source']} ({error}).", ""]
+            continue
+        lines.append(f"### {clip['source']}: {len(versions)} stored version(s)")
+        for generation, updated, size in versions:
+            lines.append(f"- {updated:%Y-%m-%d}, {size / 1e6:.2f} MB (generation {generation})")
+            if name == "intro":
+                newest = max(newest or updated, updated)
+        for generation, updated, size in versions[:-1]:  # older generations only
+            try:
+                path = download_version(legacy, clip["source"], generation, work / f"{name}_{generation}.mp3")
+                text, events, words = transcribe(legacy, path)
+                lines.append(f"  - {updated:%Y-%m-%d}: \"{text[:120]}\" events: {', '.join(events) or 'none'}; "
+                             + describe_background(path, words, duration_seconds(path)))
+            except Exception as error:
+                lines.append(f"  - {updated:%Y-%m-%d}: could not analyse ({error}).")
+        lines.append("")
+    if newest:
+        lines += [f"### Older episodes (before the current intro, {newest:%Y-%m-%d}): first 25 seconds", ""]
+        for blob in episode_samples(legacy, newest):
+            try:
+                episode = legacy.download_mp3_file_from_gcs(blob)
+                start = clip_start(episode, 25, work / f"{Path(blob).stem[:15]}_start.wav")
+                text, events, words = transcribe(legacy, start)
+                lines.append(f"- {Path(blob).name[:8]}: \"{text[:120]}\" events: {', '.join(events) or 'none'}; "
+                             + describe_background(start, words, 25.0))
+            except Exception as error:
+                lines.append(f"- {blob}: could not analyse ({error}).")
+        lines.append("")
+        samples = episode_samples(legacy, newest)
+        if samples:
+            lines += timeline(legacy, samples[-1], work)
+    return lines
+
+
+def timeline(legacy, blob, work, seconds=45):
+    """Where the old intro's voice and music sit in the opening of one episode."""
+    lines = [f"### Opening of {Path(blob).name} (first {seconds} s)", ""]
+    try:
+        start = clip_start(legacy.download_mp3_file_from_gcs(blob), seconds, Path(work) / "timeline.wav")
+        text, events, words = transcribe(legacy, start)
+        spoken = [w for w in words if w.get("type") == "word" and "start" in w]
+        sentence, begun = [], None
+        for word in spoken:
+            begun = word["start"] if begun is None else begun
+            sentence.append(word["text"])
+            if word["text"].rstrip().endswith((".", "!", "?", ":")):
+                lines.append(f"- {begun:5.1f}-{word['end']:5.1f} s speech: {' '.join(sentence)[:90]}")
+                sentence, begun = [], None
+        if sentence:
+            lines.append(f"- {begun:5.1f}-{spoken[-1]['end']:5.1f} s speech: {' '.join(sentence)[:90]}")
+        for a, b in quiet_spans(words, float(seconds), minimum=0.3):
+            level, flatness = segment_level(start, a, b), spectral_flatness(start, a, b)
+            lines.append(f"- {a:5.1f}-{b:5.1f} s no speech: {level:.0f} dBFS, flatness "
+                         f"{'n/a' if flatness is None else f'{flatness:.2f}'}")
+        for second in range(0, seconds, 3):
+            level = segment_level(start, second, min(second + 3, seconds))
+            lines.append(f"  - level {second:2d}-{min(second + 3, seconds):2d} s: {level:.0f} dBFS")
+    except Exception as error:
+        lines.append(f"Could not analyse it ({error}).")
+    lines.append("")
+    return lines
+
+
 def transcribe(legacy, path):
     """ElevenLabs Speech to Text with audio-event tags, e.g. (music)."""
     with open(path, "rb") as audio:
@@ -203,19 +417,50 @@ def compose_music(legacy, music, seconds, output):
     return Path(output)
 
 
-MUSIC_SOURCES = {
-    "synth": "a light synth bed made for the show (soft pads, a gentle arpeggio and a low bass)",
-    "eleven": "a light synth bed from Eleven Music",
-}
+def music_description(music):
+    if music.get("source", "synth") == "eleven":
+        return "a light synth bed from Eleven Music"
+    if music.get("source") == "url":
+        return "the show's own music track"
+    from podcast_v2.synth_bed import STYLES
+
+    return f"a synth bed made for the show ({STYLES[music.get('style', 'calm')]})"
+
+
+def fetch_music(legacy, url, work):
+    """Download a track from a direct audio link, or from a page that names one (such as a Suno song page)."""
+    import html
+
+    response = legacy.requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=(10, 120))
+    response.raise_for_status()
+    audio_link = url.lower().split("?")[0].endswith((".mp3", ".wav", ".m4a"))
+    if not response.headers.get("Content-Type", "").startswith("audio/") and not audio_link:
+        page = response.text
+        found = (re.search(r'property="og:audio"[^>]*content="([^"]+)"', page)
+                 or re.search(r'content="([^"]+)"[^>]*property="og:audio"', page)
+                 or re.search(r'(https://cdn\d*\.suno\.ai/[^"\s]+?\.mp3)', page))
+        if not found:
+            raise RuntimeError("That page does not name an audio file; send a direct MP3 link instead.")
+        response = legacy.requests.get(html.unescape(found.group(1)), headers={"User-Agent": "Mozilla/5.0"},
+                                       timeout=(10, 120))
+        response.raise_for_status()
+    if not response.content:
+        raise RuntimeError("The music link returned no audio.")
+    path = Path(work) / "music_source.mp3"
+    path.write_bytes(response.content)
+    return path
 
 
 def make_music_bed(legacy, music, seconds, work):
-    """Compose a bed of at least `seconds`: synthesized here (default) or by Eleven Music."""
+    """A bed of at least `seconds`: synthesized here (default), by Eleven Music, or the track at music["url"]."""
     if music.get("source", "synth") == "eleven":
         return compose_music(legacy, music, seconds, Path(work) / "music_bed.mp3")
+    if music.get("source") == "url":
+        return fetch_music(legacy, music["url"], work)
     from podcast_v2 import synth_bed
 
-    return synth_bed.compose(seconds, Path(work) / "music_bed.wav", seed=int(music.get("seed", 7)))
+    return synth_bed.compose(seconds, Path(work) / "music_bed.wav", seed=int(music.get("seed", 7)),
+                             style=music.get("style", "calm"))
 
 
 def mix_over_music(voice, music, output, music_settings):
@@ -223,8 +468,14 @@ def mix_over_music(voice, music, output, music_settings):
     lead = float(music_settings["lead_in_seconds"])
     tail = float(music_settings["tail_seconds"])
     total = lead + duration_seconds(voice) + tail
-    if duration_seconds(music) < total:
+    offset = float(music_settings.get("start_seconds", 0))
+    if duration_seconds(music) - offset < total:
         raise RuntimeError(f"The music bed is shorter than the {total:.1f}-second clip it must cover.")
+    # Use (and measure) only the stretch of the track that sits under this clip.
+    segment = Path(output).with_name(Path(output).stem + "_bed.wav")
+    subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", "-y", "-ss", f"{offset:.3f}", "-t", f"{total:.3f}",
+                    "-i", str(music), "-c:a", "pcm_s16le", str(segment)], check=True, capture_output=True)
+    music = segment
     gain = (float(measure_loudness(voice)["input_i"]) - float(music_settings["below_voice_lu"])
             - float(measure_loudness(music)["input_i"]))
     fade = min(2.5, tail)
@@ -320,7 +571,7 @@ def record(legacy, config, workflow, out_dir, email=False):
                 legacy.export_audio(AudioSegment.from_wav(bed), saved, bitrate=legacy.DEFAULT_MP3_EXPORT_BITRATE)
             if not legacy.upload_audio_to_gcs(saved, music["file"]):
                 raise RuntimeError(f"Uploading {music['file']} to Cloud Storage failed.")
-            lines.append(f"Music: composed {MUSIC_SOURCES[music.get('source', 'synth')]}, "
+            lines.append(f"Music: composed {music_description(music)}, "
                          f"{duration_seconds(bed):.0f} seconds, and saved it as {music['file']}.")
         except Exception as error:  # the voice-only candidates are still worth reviewing
             bed, music_problem = None, str(error)
@@ -358,7 +609,7 @@ def record(legacy, config, workflow, out_dir, email=False):
         *timeline,
         "",
         "The new versions use the episode voice on Eleven v4."
-        + (f" The music versions sit over {MUSIC_SOURCES[music.get('source', 'synth')]}, ducked under the "
+        + (f" The music versions sit over {music_description(music)}, ducked under the "
            "voice, with a short lead-in and fade-out." if bed else
            f" Light synth music versions could not be made this time ({music_problem});"
            " the voice-only versions match the current clips, which have no music under them."),
@@ -388,12 +639,16 @@ def main(argv=None):
     action = parser.add_mutually_exclusive_group(required=True)
     action.add_argument("--inspect", action="store_true", help="Describe and transcribe the current clips.")
     action.add_argument("--record", action="store_true", help="Make, save and review the new candidates.")
+    action.add_argument("--history", action="store_true",
+                        help="Look for the music older intros and outros used (stored versions, older episodes).")
     parser.add_argument("--email", action="store_true", help="With --record, email the review file.")
     args = parser.parse_args(argv)
     legacy = run_podcast.load_legacy()
     config = load_config()
     if args.inspect:
         report(inspect(legacy, config))
+    elif args.history:
+        report(history(legacy, config, Path(legacy.MP3_OUTPUT_DIR) / "history"))
     else:
         workflow = run_podcast.load_json(run_podcast.WORKFLOW_PATH)
         report(record(legacy, config, workflow, Path(legacy.MP3_OUTPUT_DIR) / "intro_outro", email=args.email))

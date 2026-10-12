@@ -60,17 +60,25 @@ Episodes join the intro, narration and outro named in the `merge_audio` step of
 `workflow.json` and `topic_workflow.json` (Cloud Storage files such as
 `Intro.mp3`). The **Intro and Outro V2** action manages them:
 
+- `history` (read-only) looks for the music older clips used: stored versions
+  of the clips, the voice-cancelled music under the current ones (attached to
+  the run), and the opening of older episodes.
 - `inspect` (read-only) reports each current clip's length, loudness, pauses and
   ElevenLabs transcript, and the original generation if it is still in
   ElevenLabs history.
 - `record` narrates the text in `intro_outro.json` with the episode voice and
   model and makes two candidates per clip: voice only (`Intro_v4.mp3`) and over
   a light synth bed (`Intro_v4_music.mp3`). The bed is synthesized by
-  `synth_bed.py` (soft pads, a gentle arpeggio and a low bass; set
-  `"source": "eleven"` to use Eleven Music, which needs the API key's
-  music_generation permission). It sits about 9 LU under the voice on its own,
-  ducks under speech, and is saved once (`IntroOutro_music_bed.mp3`) so later
-  re-records reuse the same music; rename it in `intro_outro.json` to compose a
+  `synth_bed.py` in one of two styles: `upbeat` (the default in
+  `intro_outro.json`: a relaxed 112 BPM groove with electric-piano-like bells,
+  a pulsing bass, soft drums and pads) or `calm` (soft pads, a gentle arpeggio
+  and a low bass at 100 BPM). Set `"source": "eleven"` to use Eleven Music
+  instead, which needs the API key's music_generation permission, or
+  `"source": "url"` with `"url"` set to a direct MP3 link or a song page that
+  names its audio (such as a Suno song page) to use your own track;
+  `"start_seconds"` picks where in the track the bed starts. The bed sits
+  about 9 LU under the voice on its own, ducks under speech, and is saved once
+  (`IntroOutro_music_bed_upbeat.mp3`) so later re-records reuse the same music; rename it in `intro_outro.json` to compose a
   new one, or upload your own track under that name to use it instead. Candidates
   are leveled to the current intro, saved to Cloud Storage under their new
   names, and attached to the run with a review MP3 (current clip, then each

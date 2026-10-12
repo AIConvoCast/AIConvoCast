@@ -1,7 +1,8 @@
 {
   "music": {
-    "file": "IntroOutro_music_bed.mp3",
+    "file": "IntroOutro_music_bed_upbeat.mp3",
     "source": "synth",
+    "style": "upbeat",
     "seed": 7,
     "lead_in_seconds": 1.5,
     "tail_seconds": 2.5,

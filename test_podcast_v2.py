@@ -795,11 +795,31 @@ class IntroOutroTests(unittest.TestCase):
         path = synth_bed.compose(6.0, self.dir / "bed.wav")
         self.assertEqual(intro_outro.probe(path), (48000, 2))
 
+    def test_upbeat_bed_differs_and_has_a_beat(self):
+        from podcast_v2 import synth_bed
+        import numpy as np
+
+        upbeat = synth_bed.light_synth_bed(6.0, style="upbeat")
+        self.assertEqual(upbeat.shape, (6 * synth_bed.RATE, 2))
+        self.assertAlmostEqual(float(np.max(np.abs(upbeat))), 0.5, places=3)
+        self.assertLess(float(np.max(np.abs(upbeat[:50]))), 1e-3)
+        self.assertFalse(np.allclose(upbeat, synth_bed.light_synth_bed(6.0)))
+        # A kick on beats 1 and 3: low-frequency energy peaks every half bar (about 1.07 s at 112 BPM).
+        low = np.abs(np.fft.irfft(np.fft.rfft(upbeat.mean(axis=1)) * (np.fft.rfftfreq(len(upbeat), 1 / 48000) < 120)))
+        frames = low[: 5 * 48000].reshape(-1, 480).max(axis=1)
+        period = 60 / synth_bed.UPBEAT_TEMPO * 2
+        autocorr = np.correlate(frames - frames.mean(), frames - frames.mean(), "full")[len(frames) - 1:]
+        lag = int(round(period * 100))
+        self.assertGreater(autocorr[lag], autocorr[lag // 2])
+        with self.assertRaisesRegex(ValueError, "Unknown synth style"):
+            synth_bed.light_synth_bed(1.0, style="loud")
+
     def test_music_bed_source_picks_synth_or_eleven(self):
         with mock.patch("podcast_v2.synth_bed.compose", return_value=self.dir / "synth.wav") as synth, \
                 mock.patch.object(intro_outro, "compose_music", return_value=self.dir / "eleven.mp3") as eleven:
-            self.assertEqual(intro_outro.make_music_bed(self.legacy, {"seed": 3}, 9, self.dir), self.dir / "synth.wav")
-            synth.assert_called_once_with(9, self.dir / "music_bed.wav", seed=3)
+            self.assertEqual(intro_outro.make_music_bed(self.legacy, {"seed": 3, "style": "upbeat"}, 9, self.dir),
+                             self.dir / "synth.wav")
+            synth.assert_called_once_with(9, self.dir / "music_bed.wav", seed=3, style="upbeat")
             intro_outro.make_music_bed(self.legacy, {"source": "eleven", "prompt": "p"}, 9, self.dir)
             eleven.assert_called_once()
 
@@ -838,6 +858,30 @@ class IntroOutroTests(unittest.TestCase):
         self.assertTrue(all(level < -80 for level in dry.values()))
         self.assertTrue(all(-40 < level < -25 for level in music.values()))
 
+    def test_quiet_spans_and_flatness_tell_music_from_noise(self):
+        import numpy as np
+        from pydub.generators import Sine, WhiteNoise
+
+        words = [{"type": "word", "start": 1.0, "end": 2.0}, {"type": "word", "start": 2.2, "end": 3.0},
+                 {"type": "word", "start": 4.0, "end": 5.0}]
+        self.assertEqual([(round(a, 2), round(b, 2)) for a, b in intro_outro.quiet_spans(words, 6.0)],
+                         [(0.05, 0.95), (3.05, 3.95), (5.05, 5.95)])
+        Sine(440, sample_rate=44100).to_audio_segment(duration=1000).apply_gain(-20).export(
+            self.dir / "tone.wav", format="wav")
+        WhiteNoise(sample_rate=44100).to_audio_segment(duration=1000).apply_gain(-20).export(
+            self.dir / "noise.wav", format="wav")
+        self.assertLess(intro_outro.spectral_flatness(self.dir / "tone.wav", 0, 1), 0.05)
+        self.assertGreater(intro_outro.spectral_flatness(self.dir / "noise.wav", 0, 1), 0.4)
+        self.assertIn("likely music", intro_outro.describe_background(self.dir / "tone.wav", [], 1.0))
+
+    def test_episode_samples_spread_over_older_episodes(self):
+        from datetime import datetime, timezone
+
+        names = [f"podcasts/2026{m:02d}01_160000_Episode.mp3" for m in range(1, 11)] + ["podcasts/notes.txt"]
+        self.legacy.list_files_in_gcs_folder = lambda prefix: names
+        picked = intro_outro.episode_samples(self.legacy, datetime(2026, 4, 26, tzinfo=timezone.utc), count=3)
+        self.assertEqual([Path(p).name[:8] for p in picked], ["20260101", "20260301", "20260401"])
+
     def test_bucket_listing_shows_only_top_level_files(self):
         from datetime import datetime, timezone
 
@@ -875,6 +919,32 @@ class IntroOutroTests(unittest.TestCase):
         short = self.fake_music(self.legacy, self.config["music"], 3, self.dir)
         with self.assertRaisesRegex(RuntimeError, "shorter than"):
             intro_outro.mix_over_music(self.dir / "quiet.wav", short, self.dir / "mix2.wav", self.config["music"])
+
+    def test_mix_can_start_partway_into_a_long_track(self):
+        music = self.fake_music(self.legacy, self.config["music"], 10, self.dir)
+        settings = dict(self.config["music"], start_seconds=3)
+        mixed = intro_outro.mix_over_music(self.dir / "quiet.wav", music, self.dir / "mix.wav", settings)
+        self.assertAlmostEqual(intro_outro.duration_seconds(mixed), 4.5, delta=0.05)
+        with self.assertRaisesRegex(RuntimeError, "shorter than"):
+            intro_outro.mix_over_music(self.dir / "quiet.wav", music, self.dir / "mix2.wav",
+                                       dict(settings, start_seconds=7))
+
+    def test_fetch_music_from_a_link_or_a_song_page(self):
+        audio = SimpleNamespace(headers={"Content-Type": "audio/mpeg"}, content=b"ID3 song", text="",
+                                raise_for_status=lambda: None)
+        page = SimpleNamespace(headers={"Content-Type": "text/html"}, content=b"<html>",
+                               raise_for_status=lambda: None,
+                               text='<meta property="og:audio" content="https://cdn1.suno.ai/abc.mp3?x=1&amp;y=2">')
+        self.legacy.requests.get = mock.Mock(side_effect=[page, audio])
+        path = intro_outro.fetch_music(self.legacy, "https://suno.com/song/abc", self.dir)
+        self.assertEqual(path.read_bytes(), b"ID3 song")
+        self.assertEqual(self.legacy.requests.get.call_args_list[1].args[0], "https://cdn1.suno.ai/abc.mp3?x=1&y=2")
+        self.legacy.requests.get = mock.Mock(return_value=SimpleNamespace(
+            headers={"Content-Type": "text/html"}, text="<html>no audio</html>", content=b"x",
+            raise_for_status=lambda: None))
+        with self.assertRaisesRegex(RuntimeError, "does not name an audio file"):
+            intro_outro.fetch_music(self.legacy, "https://example.com/page", self.dir)
+        self.assertEqual(intro_outro.music_description({"source": "url"}), "the show's own music track")
 
     def test_record_saves_both_candidates_and_a_review_file(self):
         lines, compose = self.record(email=True)
