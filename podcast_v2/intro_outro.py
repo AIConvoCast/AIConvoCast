@@ -27,6 +27,7 @@ candidates and review file in generated_mp3/intro_outro/ for the run's artifacts
 
 import argparse
 import json
+import math
 import os
 import re
 import subprocess
@@ -639,6 +640,20 @@ def make_music_bed(legacy, music, seconds, work, link=None):
                              style=music.get("style", "calm"))
 
 
+def bucket_copy(bed, output, bitrate):
+    """An MP3 copy of a bed for Cloud Storage, made by ffmpeg (a long track never sits in memory).
+
+    A quiet track is raised to about -20 LUFS first, keeping 1 dB of headroom: an MP3 encoder drops
+    detail it takes to be inaudible, and the mix sets the bed's level itself anyway.
+    """
+    stats = measure_loudness(bed)
+    level, peak = float(stats["input_i"]), float(stats["input_tp"])
+    gain = max(0.0, min(-20 - level, -1 - peak)) if math.isfinite(level) and math.isfinite(peak) else 0.0
+    subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", "-y", "-i", str(bed), "-af", f"volume={gain:.2f}dB",
+                    "-c:a", "libmp3lame", "-b:a", bitrate, str(output)], check=True, capture_output=True)
+    return Path(output)
+
+
 def mix_over_music(voice, music, output, music_settings):
     """Voice over the bed: lead-in, ducking under speech, fade out after the tail.
 
@@ -751,10 +766,9 @@ def record(legacy, config, workflow, out_dir, email=False, link=None):
             lines.append(f"Music: reusing {music['file']} from Cloud Storage ({music_description(music)}, "
                          f"{track_time(duration_seconds(bed))} long).")
         else:
-            saved = bed
-            if bed.suffix.lower() != ".mp3":  # keep the original for mixing, save an MP3 copy
-                saved = work / "music_bed_upload.mp3"
-                legacy.export_audio(AudioSegment.from_file(bed), saved, bitrate=legacy.DEFAULT_MP3_EXPORT_BITRATE)
+            saved = bed  # keep the original for mixing, save an MP3 copy
+            if bed.suffix.lower() != ".mp3":
+                saved = bucket_copy(bed, work / "music_bed_upload.mp3", legacy.DEFAULT_MP3_EXPORT_BITRATE)
             if not legacy.upload_audio_to_gcs(saved, music["file"]):
                 raise RuntimeError(f"Uploading {music['file']} to Cloud Storage failed.")
             made = "downloaded" if music.get("source") == "url" else "composed"

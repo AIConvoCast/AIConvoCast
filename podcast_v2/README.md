@@ -72,7 +72,9 @@ Episodes join the intro, narration and outro named in the `merge_audio` step of
   model and makes two candidates per clip: voice only (the clip's `file`, e.g.
   `Intro_v4.mp3`) and over the music bed (its `music_file`). The bed is one of:
   - The show's own track (`"source": "url"`; now `Music Bed.wav`, the music
-    under the original intro and outro). Give its link as the action's
+    under the original intro and outro: a 35-minute, very quiet loop bed, of
+    which both original clips use the stretch from 26:56.4, hence
+    `"start_seconds": 1616.4`). Give its link as the action's
     `music_link` input; a Google Drive share link works once its General
     access is "Anyone with the link". The repo and its logs are public, so the
     link is masked and never committed. `record` saves the track to Cloud

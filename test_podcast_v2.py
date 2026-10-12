@@ -1058,6 +1058,18 @@ class IntroOutroTests(unittest.TestCase):
             lines = "\n".join(intro_outro.record(self.legacy, config, self.workflow, self.dir / "third"))
         self.assertIn("Missing.mp3 is not in Cloud Storage yet; run the action with music_link set", lines)
 
+    def test_bucket_copy_lifts_only_a_quiet_track(self):
+        import numpy as np
+
+        noise = np.random.default_rng(4).normal(0, 1, (2, 5 * 16000))
+        quiet = self.stereo_wav(self.dir / "quiet_song.wav", 0.001 * noise[0], 0.001 * noise[1])
+        loud = self.stereo_wav(self.dir / "loud_song.wav", 0.2 * noise[0], 0.2 * noise[1])
+        for path, raised in ((quiet, True), (loud, False)):
+            before = float(intro_outro.measure_loudness(path)["input_i"])
+            saved = intro_outro.bucket_copy(path, path.with_suffix(".mp3"), "192k")
+            after = float(intro_outro.measure_loudness(saved)["input_i"])
+            self.assertAlmostEqual(after, -20.0 if raised else before, delta=1.0)
+
     def test_music_link_errors_never_show_the_link(self):
         import requests
 
