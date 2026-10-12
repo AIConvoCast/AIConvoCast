@@ -16,6 +16,7 @@ action and its Google Sheet are unchanged but are now manual only.
 | `run_podcast.py` | The runner (`--check` validates only, `--no-email` skips the email). |
 | `eleven_v4.py` | Single-voice V4 narration through the Text to Dialogue REST API. |
 | `voice_sample.txt` | Sample narration text for the `voice_sample` preview. |
+| `intro_outro.py`, `intro_outro.json` | Inspect and re-record the intro and outro (the **Intro and Outro V2** action). |
 | `update_models.py` | Refreshes `models.json` from the OpenAI, Anthropic and Google APIs. |
 | `audio_polish.py` | ffmpeg finishing: soxr resampling when joining intro/narration/outro, and narration leveled to the intro's loudness. |
 
@@ -51,6 +52,21 @@ saved audio, and uploads or emails nothing.
 
 To roll back narration, set `elevenlabs.Model` to `eleven_v3` in both workflow
 files. V2 still supports the existing Text to Speech helper for that model.
+
+## Intro and outro
+
+Episodes join the intro, narration and outro named in the `merge_audio` step of
+`workflow.json` and `topic_workflow.json` (Cloud Storage files such as
+`Intro.mp3`). The **Intro and Outro V2** action manages them:
+
+- `inspect` (read-only) reports each current clip's length, loudness, pauses and
+  ElevenLabs transcript, and the original generation if it is still in
+  ElevenLabs history.
+- `record` narrates the text in `intro_outro.json` with the episode voice and
+  model, levels it to the current intro's loudness, saves it to Cloud Storage
+  under its new name (for example `Intro_v4.mp3`), and attaches the MP3s to the
+  run. It never overwrites the old files, so switching back is a one-line
+  change in the two workflow files.
 
 ## Changing a model
 
