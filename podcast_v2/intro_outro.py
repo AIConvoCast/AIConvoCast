@@ -222,6 +222,38 @@ def history(legacy, config, work):
             except Exception as error:
                 lines.append(f"- {blob}: could not analyse ({error}).")
         lines.append("")
+        samples = episode_samples(legacy, newest)
+        if samples:
+            lines += timeline(legacy, samples[-1], work)
+    return lines
+
+
+def timeline(legacy, blob, work, seconds=45):
+    """Where the old intro's voice and music sit in the opening of one episode."""
+    lines = [f"### Opening of {Path(blob).name} (first {seconds} s)", ""]
+    try:
+        start = clip_start(legacy.download_mp3_file_from_gcs(blob), seconds, Path(work) / "timeline.wav")
+        text, events, words = transcribe(legacy, start)
+        spoken = [w for w in words if w.get("type") == "word" and "start" in w]
+        sentence, begun = [], None
+        for word in spoken:
+            begun = word["start"] if begun is None else begun
+            sentence.append(word["text"])
+            if word["text"].rstrip().endswith((".", "!", "?", ":")):
+                lines.append(f"- {begun:5.1f}-{word['end']:5.1f} s speech: {' '.join(sentence)[:90]}")
+                sentence, begun = [], None
+        if sentence:
+            lines.append(f"- {begun:5.1f}-{spoken[-1]['end']:5.1f} s speech: {' '.join(sentence)[:90]}")
+        for a, b in quiet_spans(words, float(seconds), minimum=0.3):
+            level, flatness = segment_level(start, a, b), spectral_flatness(start, a, b)
+            lines.append(f"- {a:5.1f}-{b:5.1f} s no speech: {level:.0f} dBFS, flatness "
+                         f"{'n/a' if flatness is None else f'{flatness:.2f}'}")
+        for second in range(0, seconds, 3):
+            level = segment_level(start, second, min(second + 3, seconds))
+            lines.append(f"  - level {second:2d}-{min(second + 3, seconds):2d} s: {level:.0f} dBFS")
+    except Exception as error:
+        lines.append(f"Could not analyse it ({error}).")
+    lines.append("")
     return lines
 
 
