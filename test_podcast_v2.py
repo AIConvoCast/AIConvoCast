@@ -731,32 +731,63 @@ class IntroOutroTests(unittest.TestCase):
         self.dir = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.dir)
         tone = Sine(440, sample_rate=44100).to_audio_segment
-        # Intro-like reference about 15 dB louder than the "raw narration".
+        # Intro/outro-like references about 15 dB louder than the "raw narration".
         tone(duration=3000).apply_gain(-15).export(self.dir / "Intro.mp3", format="mp3")
+        tone(duration=3000).apply_gain(-16).export(self.dir / "Outro.mp3", format="mp3")
         tone(duration=2000).apply_gain(-30).export(self.dir / "quiet.wav", format="wav")
         self.uploads = []
+        self.stored = {"Intro.mp3", "Outro.mp3"}
         self.legacy = SimpleNamespace(
             ELEVENLABS_API_KEY="test-key", DEFAULT_MP3_EXPORT_BITRATE="192k", MP3_OUTPUT_DIR=self.dir,
-            export_audio=export_audio,
-            download_mp3_file_from_gcs=lambda name: self.dir / name if (self.dir / name).exists() else None,
-            upload_audio_to_gcs=lambda path, blob: self.uploads.append((Path(path).name, blob)) or f"https://gcs/{blob}",
+            export_audio=export_audio, send_podcast_email=mock.Mock(),
+            is_elevenlabs_credit_quota_error=lambda text, status=None: status == 402,
+            download_mp3_file_from_gcs=lambda name: self.dir / name if name in self.stored else None,
+            upload_audio_to_gcs=self.upload,
             requests=SimpleNamespace(post=mock.Mock(), get=mock.Mock()),
         )
         self.workflow = run_podcast.load_json(run_podcast.WORKFLOW_PATH)
-        self.config = {"intro": {"source": "Intro.mp3", "file": "Intro_v4.mp3", "text": "Welcome to AI Convo Cast."},
-                       "outro": {"source": "Outro.mp3", "file": "Outro_v4.mp3", "text": "Thanks for listening."}}
+        self.config = {
+            "music": {"file": "Bed.mp3", "prompt": "light synth", "lead_in_seconds": 1.0,
+                      "tail_seconds": 1.5, "below_voice_lu": 15},
+            "clips": {
+                "intro": {"source": "Intro.mp3", "file": "Intro_v4.mp3", "music_file": "Intro_v4_music.mp3",
+                          "text": "Welcome to AI Convo Cast."},
+                "outro": {"source": "Outro.mp3", "file": "Outro_v4.mp3", "music_file": "Outro_v4_music.mp3",
+                          "text": "Thanks for listening."}}}
         self.quiet = contextlib.redirect_stdout(io.StringIO())
         self.quiet.__enter__()
         self.addCleanup(self.quiet.__exit__, None, None, None)
+
+    def upload(self, path, blob):
+        self.uploads.append(blob)
+        if Path(path) != self.dir / blob:
+            shutil.copyfile(path, self.dir / blob)
+        self.stored.add(blob)
+        return f"https://gcs/{blob}"
 
     def fake_narrate(self, legacy, text, eleven, output, fallback=True):
         shutil.copyfile(self.dir / "quiet.wav", Path(output).with_suffix(".wav"))
         return Path(output).with_suffix(".wav"), eleven["Model"]
 
+    def fake_music(self, legacy, music, seconds, output):
+        from pydub.generators import Sine
+        Sine(220, sample_rate=44100).to_audio_segment(duration=int(seconds * 1000)).apply_gain(-20).export(
+            output, format="mp3")
+        return Path(output)
+
+    def record(self, **kwargs):
+        with mock.patch.object(run_podcast, "narrate", side_effect=self.fake_narrate), \
+                mock.patch.object(intro_outro, "compose_music", side_effect=self.fake_music) as compose:
+            lines = intro_outro.record(self.legacy, self.config, self.workflow, self.dir / "out", **kwargs)
+        return lines, compose
+
     def test_shipped_config_names_new_files(self):
         config = intro_outro.load_config()
-        self.assertEqual({name: (c["source"], c["file"]) for name, c in config.items()},
-                         {"intro": ("Intro.mp3", "Intro_v4.mp3"), "outro": ("Outro.mp3", "Outro_v4.mp3")})
+        self.assertEqual({name: (c["source"], c["file"], c["music_file"]) for name, c in config["clips"].items()},
+                         {"intro": ("Intro.mp3", "Intro_v4.mp3", "Intro_v4_music.mp3"),
+                          "outro": ("Outro.mp3", "Outro_v4.mp3", "Outro_v4_music.mp3")})
+        self.assertTrue(all(c["text"].strip() for c in config["clips"].values()))
+        intro_outro.check_config(config)
 
     def test_silences_tell_speech_pauses_from_a_continuous_bed(self):
         from pydub import AudioSegment
@@ -805,7 +836,8 @@ class IntroOutroTests(unittest.TestCase):
         self.legacy.requests.get.return_value = mock.Mock(json=lambda: {"history": [{
             "history_item_id": "h1", "voice_name": "Narrator", "voice_id": "v1", "model_id": "eleven_multilingual_v2",
             "date_unix": 1735689600, "settings": {"stability": 0.4}, "text": "Welcome to AI Convo Cast."}]})
-        lines = "\n".join(intro_outro.inspect(self.legacy, {"intro": self.config["intro"]}))
+        config = {"clips": {"intro": self.config["clips"]["intro"]}}
+        lines = "\n".join(intro_outro.inspect(self.legacy, config))
         self.assertIn("> Welcome to AI Convo Cast.", lines)
         self.assertIn("Audio events: (music).", lines)
         self.assertIn("2025-01-01: voice Narrator (v1), model eleven_multilingual_v2", lines)
@@ -813,25 +845,72 @@ class IntroOutroTests(unittest.TestCase):
         self.assertEqual((params["search"], params["source"]), ("Welcome to AI Convo Cast", "TTS"))
         self.assertEqual(self.legacy.requests.post.call_args.kwargs["data"]["model_id"], "scribe_v2")
 
-    def test_record_levels_to_the_current_intro_and_never_overwrites(self):
-        with mock.patch.object(run_podcast, "narrate", side_effect=self.fake_narrate):
-            lines = intro_outro.record(self.legacy, self.config, self.workflow, self.dir / "out")
-        self.assertEqual(self.uploads, [("Intro_v4.mp3", "Intro_v4.mp3"), ("Outro_v4.mp3", "Outro_v4.mp3")])
+    def test_mix_over_music_adds_lead_in_and_tail(self):
+        music = self.fake_music(self.legacy, self.config["music"], 8, self.dir / "bed.mp3")
+        mixed = intro_outro.mix_over_music(self.dir / "quiet.wav", music, self.dir / "mix.wav", self.config["music"])
+        self.assertAlmostEqual(intro_outro.duration_seconds(mixed), 1.0 + 2.0 + 1.5, delta=0.05)
+        self.assertEqual(intro_outro.probe(mixed), (48000, 2))
+        short = self.fake_music(self.legacy, self.config["music"], 3, self.dir / "short.mp3")
+        with self.assertRaisesRegex(RuntimeError, "shorter than"):
+            intro_outro.mix_over_music(self.dir / "quiet.wav", short, self.dir / "mix2.wav", self.config["music"])
+
+    def test_record_saves_both_candidates_and_a_review_file(self):
+        lines, compose = self.record(email=True)
+        compose.assert_called_once()
+        self.assertEqual(self.uploads, ["Bed.mp3", "Intro_v4.mp3", "Intro_v4_music.mp3",
+                                        "Outro_v4.mp3", "Outro_v4_music.mp3"])
         reference = float(intro_outro.measure_loudness(self.dir / "Intro.mp3")["input_i"])
-        for name in ("Intro_v4.mp3", "Outro_v4.mp3"):
+        for name in ("Intro_v4.mp3", "Intro_v4_music.mp3", "Outro_v4.mp3", "Outro_v4_music.mp3"):
             level = float(intro_outro.measure_loudness(self.dir / "out" / name)["input_i"])
             self.assertAlmostEqual(level, reference, delta=1.0)
-        self.assertIn("eleven_v4, voice TX3LPaxmHKxFdv7VOQHJ", "\n".join(lines))
-        # Only the finished clips sit at the top level, for the run's artifacts.
-        self.assertEqual(sorted(p.name for p in (self.dir / "out").glob("*.mp3")), ["Intro_v4.mp3", "Outro_v4.mp3"])
+        # Current intro, two candidates, current outro, two candidates, with 1.5 s gaps.
+        review = self.dir / "out" / "Intro_Outro_review.mp3"
+        self.assertGreater(intro_outro.duration_seconds(review), 3 + 2 + 4.5 + 3 + 2 + 4.5 + 5 * 1.5 - 0.5)
+        text = "\n".join(lines)
+        self.assertIn("0:00  Current intro (Intro.mp3)", text)
+        self.assertIn("New outro over light synth music (Outro_v4_music.mp3)", text)
+        audio, description = self.legacy.send_podcast_email.call_args.args
+        self.assertEqual(Path(audio).name, "Intro_Outro_review.mp3")
+        self.assertTrue(description.startswith("Title: New AI Convo Cast intro and outro samples to approve"))
+        self.assertEqual(sorted(p.name for p in (self.dir / "out").glob("*.mp3")),
+                         ["Intro_Outro_review.mp3", "Intro_v4.mp3", "Intro_v4_music.mp3",
+                          "Outro_v4.mp3", "Outro_v4_music.mp3"])
 
-    def test_record_needs_text_and_a_new_name(self):
-        empty = dict(self.config, outro=dict(self.config["outro"], text=""))
-        with self.assertRaisesRegex(RuntimeError, "no text for the outro"):
-            intro_outro.record(self.legacy, empty, self.workflow, self.dir / "out")
-        same = dict(self.config, intro=dict(self.config["intro"], file="Intro.mp3"))
-        with self.assertRaisesRegex(RuntimeError, "must not overwrite Intro.mp3"):
-            intro_outro.record(self.legacy, same, self.workflow, self.dir / "out")
+    def test_record_without_music_still_reviews_the_voice_only_candidates(self):
+        def refused(*args, **kwargs):
+            raise RuntimeError("Eleven Music refused the request (HTTP 401): missing_permissions")
+
+        with mock.patch.object(run_podcast, "narrate", side_effect=self.fake_narrate), \
+                mock.patch.object(intro_outro, "compose_music", side_effect=refused):
+            lines = intro_outro.record(self.legacy, self.config, self.workflow, self.dir / "out", email=True)
+        self.assertEqual(self.uploads, ["Intro_v4.mp3", "Outro_v4.mp3"])
+        self.assertIn("Music: unavailable, so only voice-only candidates were made", "\n".join(lines))
+        description = self.legacy.send_podcast_email.call_args.args[1]
+        self.assertIn("could not be made", description)
+        self.assertNotIn("over light synth music (", description)
+        self.assertEqual(sorted(p.name for p in (self.dir / "out").glob("*.mp3")),
+                         ["Intro_Outro_review.mp3", "Intro_v4.mp3", "Outro_v4.mp3"])
+
+    def test_record_reuses_a_saved_music_bed(self):
+        self.fake_music(self.legacy, self.config["music"], 10, self.dir / "Bed.mp3")
+        self.stored.add("Bed.mp3")
+        lines, compose = self.record()
+        compose.assert_not_called()
+        self.assertNotIn("Bed.mp3", self.uploads)
+        self.assertIn("Music: reusing Bed.mp3", "\n".join(lines))
+        self.legacy.send_podcast_email.assert_not_called()
+
+    def test_record_checks_text_and_names_before_any_request(self):
+        def broken(**changes):
+            config = copy.deepcopy(self.config)
+            config["clips"]["outro"].update(changes)
+            return config
+
+        for config, message in ((broken(text=""), "no text for the outro"),
+                                (broken(music_file="Outro.mp3"), "must not overwrite Outro.mp3"),
+                                (broken(music_file="Intro_v4_music.mp3"), "its own file name")):
+            with self.assertRaisesRegex(RuntimeError, message):
+                intro_outro.record(self.legacy, config, self.workflow, self.dir / "out")
         self.assertEqual(self.uploads, [])
 
 

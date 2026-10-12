@@ -1,16 +1,22 @@
 """Inspect and re-record the episode intro and outro with the narration voice.
 
 --inspect  For each current clip (Intro.mp3, Outro.mp3 in Cloud Storage), report its
-           length, format, loudness and pauses (a music bed leaves few silences),
-           transcribe it with ElevenLabs Speech to Text, and look for the original
-           generation in ElevenLabs history (voice, model, settings, text).
---record   Narrate each clip's text in intro_outro.json with the episode voice and
-           model, level it to the current intro's loudness, and save it to Cloud
-           Storage under its new name. The old files are never overwritten, so
-           switching back is a one-line change in workflow.json.
+           length, format, loudness and pauses, transcribe it with ElevenLabs Speech
+           to Text, measure the level where nobody speaks (a music bed is not near
+           silent there), look for the original generation in ElevenLabs history,
+           and list the files at the top of the bucket.
+--record   For each clip in intro_outro.json, narrate its text with the episode
+           voice and model and make two candidates, voice only and over a light
+           music bed (Eleven Music, composed once and saved so later re-records
+           reuse the same music), both leveled to the current intro. Save every
+           candidate to Cloud Storage under its own new name (old files are never
+           overwritten) and build one review MP3: current clip, then each
+           candidate, for intro and outro. With --email the review file goes to
+           the usual episode address.
 
-Both write a report to the run page; --record also leaves the new MP3s in
-generated_mp3/intro_outro/ for the run's artifacts.
+Episodes keep the current clips until workflow.json and topic_workflow.json name
+a candidate. Both modes write a report to the run page; --record leaves the
+candidates and review file in generated_mp3/intro_outro/ for the run's artifacts.
 """
 
 import argparse
@@ -19,6 +25,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -131,7 +138,7 @@ def history_matches(legacy, text, limit=5):
 
 def inspect(legacy, config):
     lines = ["## Current intro and outro", ""]
-    for name, clip in config.items():
+    for name, clip in config["clips"].items():
         lines.append(f"### {name.title()} ({clip['source']})")
         path = legacy.download_mp3_file_from_gcs(clip["source"])
         if not path:
@@ -180,40 +187,169 @@ def inspect(legacy, config):
     return lines
 
 
-def record(legacy, config, workflow, out_dir):
-    """Narrate each clip with text, level it to the current intro, and upload it."""
-    from pydub import AudioSegment
+def compose_music(legacy, music, seconds, output):
+    """Instrumental bed from Eleven Music, at least `seconds` long."""
+    response = legacy.requests.post(
+        f"{API}/music", headers={"xi-api-key": legacy.ELEVENLABS_API_KEY, "Accept": "audio/mpeg"},
+        json={"prompt": music["prompt"], "music_length_ms": int(seconds * 1000), "force_instrumental": True},
+        timeout=(10, 300))
+    if response.status_code != 200:
+        kind = ("credit/quota error" if legacy.is_elevenlabs_credit_quota_error(response.text, response.status_code)
+                else f"HTTP {response.status_code}")
+        raise RuntimeError(f"Eleven Music refused the request ({kind}): {response.text[:300]}")
+    if not response.content:
+        raise RuntimeError("Eleven Music returned empty audio.")
+    Path(output).write_bytes(response.content)
+    return Path(output)
 
-    for name, clip in config.items():  # check everything before any paid request
+
+def mix_over_music(voice, music, output, music_settings):
+    """Voice over the bed: lead-in, ducking under speech, fade out after the tail."""
+    lead = float(music_settings["lead_in_seconds"])
+    tail = float(music_settings["tail_seconds"])
+    total = lead + duration_seconds(voice) + tail
+    if duration_seconds(music) < total:
+        raise RuntimeError(f"The music bed is shorter than the {total:.1f}-second clip it must cover.")
+    gain = (float(measure_loudness(voice)["input_i"]) - float(music_settings["below_voice_lu"])
+            - float(measure_loudness(music)["input_i"]))
+    fade = min(2.5, tail)
+    graph = (f"[1:a]aresample=48000,aformat=channel_layouts=stereo,volume={gain:.2f}dB,"
+             f"atrim=0:{total:.3f},afade=t=in:st=0:d=0.8,afade=t=out:st={total - fade:.3f}:d={fade:.3f}[bed];"
+             f"[0:a]aresample=48000,aformat=channel_layouts=stereo,adelay={int(lead * 1000)}:all=1,"
+             f"apad=whole_dur={total:.3f}[voice];"
+             "[voice]asplit=2[key][speech];"
+             "[bed][key]sidechaincompress=threshold=0.02:ratio=4:attack=20:release=500[ducked];"
+             "[ducked][speech]amix=inputs=2:duration=first:normalize=0[out]")
+    subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", "-y", "-i", str(voice), "-i", str(music),
+                    "-filter_complex", graph, "-map", "[out]", "-c:a", "pcm_s16le", str(output)],
+                   check=True, capture_output=True, text=True)
+    return Path(output)
+
+
+def silence(path, seconds):
+    subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", "-y", "-f", "lavfi", "-i",
+                    f"anullsrc=r=48000:cl=stereo", "-t", f"{seconds}", "-c:a", "pcm_s16le", str(path)],
+                   check=True, capture_output=True, text=True)
+    return Path(path)
+
+
+def clock(seconds):
+    return f"{int(seconds // 60)}:{int(seconds % 60):02d}"
+
+
+def check_config(config):
+    """Everything record needs, checked before any paid request."""
+    names = set()
+    for name, clip in config["clips"].items():
         if not clip.get("text", "").strip():
             raise RuntimeError(f"intro_outro.json has no text for the {name}; run --inspect first.")
-        if clip["file"] == clip["source"]:
-            raise RuntimeError(f"The new {name} must not overwrite {clip['source']}.")
+        for key in ("file", "music_file"):
+            if clip[key] == clip["source"]:
+                raise RuntimeError(f"The new {name} must not overwrite {clip['source']}.")
+            names.add(clip[key])
+    if len(names) != 2 * len(config["clips"]):
+        raise RuntimeError("Every candidate in intro_outro.json needs its own file name.")
+
+
+def record(legacy, config, workflow, out_dir, email=False):
+    """Make voice-only and music candidates for each clip, save them, and build a review file."""
+    from pydub import AudioSegment
+
+    from podcast_v2.audio_polish import join
+
+    check_config(config)
     out_dir = Path(out_dir)
     work = out_dir / "work"
     work.mkdir(parents=True, exist_ok=True)
-    reference_clip = config["intro"]["source"]
+    clips = config["clips"]
+    music = config["music"]
+    reference_clip = clips["intro"]["source"]
     reference = legacy.download_mp3_file_from_gcs(reference_clip)
     if not reference:
         raise RuntimeError(f"Could not download {reference_clip} to match its loudness.")
     target = float(measure_loudness(reference)["input_i"])
-    lines = ["## New intro and outro", "", f"Leveled to the current {reference_clip}: {target:.1f} LUFS.", ""]
-    for name, clip in config.items():
-        text = clip["text"].strip()
-        eleven = episode_voice(workflow, clip)
-        raw = work / f"{name}_raw.mp3"
-        path, model = run_podcast.narrate(legacy, text, eleven, raw, fallback=False)
-        leveled = normalize_loudness(path, work / f"{name}_leveled.wav", target)
-        final = out_dir / clip["file"]
+    lines = ["## New intro and outro candidates", "", f"All leveled to the current {reference_clip}: {target:.1f} LUFS.", ""]
+
+    def finish(name, wav, blob):
+        leveled = normalize_loudness(wav, work / f"{Path(blob).stem}_leveled.wav", target)
+        final = out_dir / blob
         legacy.export_audio(AudioSegment.from_wav(leveled), final, bitrate=legacy.DEFAULT_MP3_EXPORT_BITRATE)
-        stats = measure_loudness(final)
-        link = legacy.upload_audio_to_gcs(final, clip["file"])
-        if not link:
-            raise RuntimeError(f"Uploading {clip['file']} to Cloud Storage failed.")
-        lines.append(f"- {name.title()}: {model}, voice {eleven['voice_id']}, {duration_seconds(final):.1f} seconds, "
-                     f"{float(stats['input_i']):.1f} LUFS, saved as {clip['file']} ({link}).")
-    lines += ["", "Download the intro-outro artifact below to listen. Episodes use these files once "
-              "workflow.json and topic_workflow.json name them."]
+        if not legacy.upload_audio_to_gcs(final, blob):
+            raise RuntimeError(f"Uploading {blob} to Cloud Storage failed.")
+        lines.append(f"- {name}: {blob}, {duration_seconds(final):.1f} seconds, "
+                     f"{float(measure_loudness(final)['input_i']):.1f} LUFS.")
+        return final
+
+    voices = {}
+    for name, clip in clips.items():
+        eleven = episode_voice(workflow, clip)
+        path, model = run_podcast.narrate(legacy, clip["text"].strip(), eleven, work / f"{name}_voice.mp3",
+                                          fallback=False)
+        voices[name] = path
+        lines.append(f"{name.title()} narrated with {model}, voice {eleven['voice_id']}.")
+
+    longest = max(duration_seconds(path) for path in voices.values())
+    needed = float(music["lead_in_seconds"]) + longest + float(music["tail_seconds"]) + 1.0
+    music_problem = None
+    bed = legacy.download_mp3_file_from_gcs(music["file"])
+    if bed and duration_seconds(bed) >= needed:
+        lines.append(f"Music: reusing {music['file']} from Cloud Storage.")
+    else:
+        try:
+            bed = compose_music(legacy, music, needed, work / "music_bed.mp3")
+            if not legacy.upload_audio_to_gcs(bed, music["file"]):
+                raise RuntimeError(f"Uploading {music['file']} to Cloud Storage failed.")
+            lines.append(f"Music: composed a {duration_seconds(bed):.0f}-second bed with Eleven Music "
+                         f"and saved it as {music['file']}.")
+        except Exception as error:  # the voice-only candidates are still worth reviewing
+            bed, music_problem = None, str(error)
+            lines.append(f"Music: unavailable, so only voice-only candidates were made ({music_problem}).")
+    lines.append("")
+
+    review = []
+    gap = silence(work / "gap.wav", 1.5)
+    for name, clip in clips.items():
+        current = legacy.download_mp3_file_from_gcs(clip["source"])
+        plain = finish(f"{name.title()}, voice only", voices[name], clip["file"])
+        if current:
+            review.append((f"Current {name} ({clip['source']})", current))
+        review.append((f"New {name}, voice only ({clip['file']})", plain))
+        if bed:
+            mixed = mix_over_music(voices[name], bed, work / f"{name}_music_mix.wav", music)
+            scored = finish(f"{name.title()} over music", mixed, clip["music_file"])
+            review.append((f"New {name} over light synth music ({clip['music_file']})", scored))
+
+    parts, timeline, position = [], [], 0.0
+    for label, path in review:
+        timeline.append(f"{clock(position)}  {label}")
+        position += duration_seconds(path) + 1.5
+        parts += [path, gap]
+    review_path = out_dir / "Intro_Outro_review.mp3"
+    with tempfile.TemporaryDirectory() as joined:
+        legacy.export_audio(join(parts[:-1], joined), review_path, bitrate=legacy.DEFAULT_MP3_EXPORT_BITRATE)
+    lines += ["", "Review file (Intro_Outro_review.mp3), in order:", "", *[f"- {line}" for line in timeline], ""]
+
+    description = "\n".join([
+        "Title: New AI Convo Cast intro and outro samples to approve",
+        "",
+        "Description:",
+        "The attached file plays these in order (minute:second):",
+        *timeline,
+        "",
+        "The new versions use the episode voice on Eleven v4."
+        + (" The music versions sit over a new light synth bed from Eleven Music." if bed else
+           " Light synth music versions could not be made this time because Eleven Music refused the request;"
+           " the voice-only versions match the current clips, which have no music under them."),
+        "Reply with which intro and outro to use (voice only" + (", with music" if bed else "")
+        + ", or keep the current ones). Episodes keep the current intro and outro until you approve a change.",
+    ])
+    if email:
+        legacy.send_podcast_email(review_path, description, workflow_id="intro/outro review",
+                                  audio_filename="AI_Convo_Cast_intro_outro_review.mp3",
+                                  description_filename="intro_outro_review.txt")
+        lines.append("Emailed the review file to the usual episode address.")
+    lines += ["Download the intro-outro artifact below to listen. Episodes use a candidate once "
+              "workflow.json and topic_workflow.json name it."]
     return lines
 
 
@@ -226,10 +362,11 @@ def report(lines):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     action = parser.add_mutually_exclusive_group(required=True)
     action.add_argument("--inspect", action="store_true", help="Describe and transcribe the current clips.")
-    action.add_argument("--record", action="store_true", help="Record and upload the new clips.")
+    action.add_argument("--record", action="store_true", help="Make, save and review the new candidates.")
+    parser.add_argument("--email", action="store_true", help="With --record, email the review file.")
     args = parser.parse_args(argv)
     legacy = run_podcast.load_legacy()
     config = load_config()
@@ -237,7 +374,7 @@ def main(argv=None):
         report(inspect(legacy, config))
     else:
         workflow = run_podcast.load_json(run_podcast.WORKFLOW_PATH)
-        report(record(legacy, config, workflow, Path(legacy.MP3_OUTPUT_DIR) / "intro_outro"))
+        report(record(legacy, config, workflow, Path(legacy.MP3_OUTPUT_DIR) / "intro_outro", email=args.email))
     return 0
 
 

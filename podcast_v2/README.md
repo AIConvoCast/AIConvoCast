@@ -63,10 +63,15 @@ Episodes join the intro, narration and outro named in the `merge_audio` step of
   ElevenLabs transcript, and the original generation if it is still in
   ElevenLabs history.
 - `record` narrates the text in `intro_outro.json` with the episode voice and
-  model, levels it to the current intro's loudness, saves it to Cloud Storage
-  under its new name (for example `Intro_v4.mp3`), and attaches the MP3s to the
-  run. It never overwrites the old files, so switching back is a one-line
-  change in the two workflow files.
+  model and makes two candidates per clip: voice only (`Intro_v4.mp3`) and over
+  a light synth bed (`Intro_v4_music.mp3`). The bed is composed once with Eleven
+  Music and saved (`IntroOutro_music_bed.mp3`), so later re-records reuse the
+  same music; rename it in `intro_outro.json` to compose a new one. Candidates
+  are leveled to the current intro, saved to Cloud Storage under their new
+  names, and attached to the run with a review MP3 (current clip, then each
+  candidate) that is also emailed when `send_email` is on. It never overwrites
+  the old files; episodes switch only when the workflow files name a
+  candidate, so switching back is a one-line change.
 
 ## Changing a model
 
