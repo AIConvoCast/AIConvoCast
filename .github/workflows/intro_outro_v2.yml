@@ -83,6 +83,15 @@ jobs:
           PODCAST_EMAIL_TO: ianeoconnell@gmail.com
           GMAIL_OAUTH_TOKEN_B64: ${{ secrets.GMAIL_OAUTH_TOKEN_B64 }}
 
+      - name: Attach music traces
+        if: ${{ inputs.action == 'history' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: intro-outro-music-${{ github.run_id }}
+          path: generated_mp3/history/*.mp3
+          retention-days: 30
+          if-no-files-found: warn
+
       - name: Attach new clips
         if: ${{ inputs.action == 'record' }}
         uses: actions/upload-artifact@v4

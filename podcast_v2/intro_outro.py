@@ -184,11 +184,77 @@ def clip_start(path, seconds, output):
     return Path(output)
 
 
+NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+
+
+def read_mono(path, rate=16000, mix="0.5*c0+0.5*c1"):
+    """Samples of `path` as one channel; mix picks mid (default) or side (0.5*c0-0.5*c1)."""
+    import numpy as np
+
+    raw = subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", "-i", str(path), "-af", f"pan=mono|c0={mix}",
+                          "-ar", str(rate), "-f", "s16le", "-"], check=True, capture_output=True).stdout
+    return np.frombuffer(raw, dtype="<i2").astype(float) / 32768
+
+
+def tempo_and_notes(samples, rate=16000):
+    """Rough tempo (BPM, from onset autocorrelation) and the three strongest pitch classes."""
+    import numpy as np
+
+    hop = rate // 100
+    frames = samples[: len(samples) // hop * hop].reshape(-1, hop)
+    energy = np.sqrt(np.mean(frames ** 2, axis=1) + 1e-12)
+    onsets = np.maximum(np.diff(np.log(energy)), 0)
+    onsets -= onsets.mean()
+    corr = np.correlate(onsets, onsets, "full")[len(onsets) - 1:]
+    lags = np.arange(len(corr))
+    usable = (lags >= 30) & (lags <= 100)  # 60-200 BPM
+    tempo = 6000 / lags[usable][np.argmax(corr[usable])] if usable.any() else None
+    power = np.abs(np.fft.rfft(samples * np.hanning(len(samples)))) ** 2
+    freqs = np.fft.rfftfreq(len(samples), 1 / rate)
+    keep = (freqs >= 80) & (freqs <= 2000)
+    classes = np.zeros(12)
+    np.add.at(classes, np.round(12 * np.log2(freqs[keep] / 440) + 69).astype(int) % 12, power[keep])
+    top = [NOTE_NAMES[i] for i in np.argsort(classes)[::-1][:3]]
+    return tempo, top
+
+
+def music_trace(legacy, clip, work):
+    """The music under a clip with the centred voice cancelled (left minus right), as far as it goes."""
+    lines = []
+    path = legacy.download_mp3_file_from_gcs(clip["source"])
+    if not path:
+        return [f"- {clip['source']}: could not download it."]
+    import numpy as np
+
+    rate = 16000
+    mid, side = read_mono(path, rate), read_mono(path, rate, "0.5*c0-0.5*c1")
+    level = lambda x: 20 * np.log10(np.sqrt(np.mean(x ** 2)) + 1e-12)
+    lines.append(f"- {clip['source']}: mid (voice and music) {level(mid):.0f} dBFS; side (voice cancelled) "
+                 f"{level(side):.0f} dBFS, {level(side) - level(mid):.0f} dB below the mid.")
+    windows = [level(side[i:i + rate]) for i in range(0, len(side) - rate + 1, rate)]
+    lines.append("  side level per second: " + ", ".join(f"{w:.0f}" for w in windows))
+    tempo, notes = tempo_and_notes(side if level(side) > -60 else mid, rate)
+    lines.append(f"  tempo about {tempo:.0f} BPM; strongest notes {', '.join(notes)}." if tempo
+                 else f"  strongest notes {', '.join(notes)}.")
+    out = Path(work) / f"{Path(clip['source']).stem}_music_only.mp3"
+    subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", "-y", "-i", str(path), "-af",
+                    "pan=stereo|c0=0.5*c0-0.5*c1|c1=0.5*c1-0.5*c0,loudnorm=I=-23", "-b:a", "192k", str(out)],
+                   check=True, capture_output=True)
+    lines.append(f"  saved {out.name} (voice cancelled, loudness raised to listen) for the run's artifacts.")
+    return lines
+
+
 def history(legacy, config, work):
     """Look for the music that older intros and outros used: stored versions and older episodes."""
     work = Path(work)
     work.mkdir(parents=True, exist_ok=True)
-    lines = ["## Earlier intros and outros", ""]
+    lines = ["## Earlier intros and outros", "", "### Music under the current clips", ""]
+    for name, clip in config["clips"].items():
+        try:
+            lines += music_trace(legacy, clip, work)
+        except Exception as error:
+            lines.append(f"- {clip['source']}: could not trace the music ({error}).")
+    lines.append("")
     newest = None
     for name, clip in config["clips"].items():
         try:
