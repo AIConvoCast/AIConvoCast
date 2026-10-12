@@ -768,6 +768,36 @@ class IntroOutroTests(unittest.TestCase):
         self.assertEqual(len(intro_outro.silences(self.dir / "speech.wav")), 1)
         self.assertEqual(intro_outro.silences(self.dir / "bed.wav"), [])
 
+    def test_background_level_tells_a_music_bed_from_silence(self):
+        from pydub import AudioSegment
+        from pydub.generators import Sine
+
+        voice = Sine(300, sample_rate=44100).to_audio_segment(duration=1000).apply_gain(-12)
+        gap = AudioSegment.silent(800, frame_rate=44100)
+        (gap + voice + gap + voice + gap).export(self.dir / "dry.wav", format="wav")
+        bed = Sine(150, sample_rate=44100).to_audio_segment(duration=4400).apply_gain(-30)
+        bed.overlay(gap + voice + gap + voice + gap).export(self.dir / "bed.wav", format="wav")
+        words = [{"type": "word", "text": "one", "start": 0.8, "end": 1.8},
+                 {"type": "word", "text": "two", "start": 2.6, "end": 3.6}]
+        dry = intro_outro.background_levels(self.dir / "dry.wav", words, 4.4)
+        music = intro_outro.background_levels(self.dir / "bed.wav", words, 4.4)
+        self.assertEqual(set(dry), {"before the first word", "after the last word", "pauses between words"})
+        self.assertTrue(all(level < -80 for level in dry.values()))
+        self.assertTrue(all(-40 < level < -25 for level in music.values()))
+
+    def test_bucket_listing_shows_only_top_level_files(self):
+        from datetime import datetime, timezone
+
+        bucket = mock.Mock()
+        bucket.list_blobs.return_value = [
+            SimpleNamespace(name="Intro.mp3", size=500000, updated=datetime(2025, 3, 1, tzinfo=timezone.utc)),
+            SimpleNamespace(name="IntroMusic.wav", size=2000000, updated=datetime(2025, 2, 1, tzinfo=timezone.utc))]
+        self.legacy.get_gcs_client = lambda: SimpleNamespace(bucket=lambda name: bucket)
+        self.legacy.GCS_BUCKET_NAME = "jmio-podcast-storage"
+        files = intro_outro.bucket_root_files(self.legacy)
+        self.assertEqual([f[0] for f in files], ["Intro.mp3", "IntroMusic.wav"])
+        bucket.list_blobs.assert_called_once_with(delimiter="/")
+
     def test_inspect_reports_transcript_events_and_history(self):
         self.legacy.requests.post.return_value = mock.Mock(json=lambda: {
             "text": "Welcome to AI Convo Cast.",

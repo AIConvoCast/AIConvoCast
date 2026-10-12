@@ -62,6 +62,46 @@ def silences(path, noise_db=SILENCE_DB, minimum=SILENCE_SECONDS):
     return [float(value) for value in re.findall(r"silence_duration: ([\d.]+)", log)]
 
 
+def segment_level(path, start, end):
+    """Mean level in dBFS of path between start and end seconds (None if too short)."""
+    if end - start < 0.2:
+        return None
+    log = subprocess.run(
+        ["ffmpeg", "-hide_banner", "-nostdin", "-ss", f"{start:.3f}", "-to", f"{end:.3f}", "-i", str(path),
+         "-af", "volumedetect", "-f", "null", "-"],
+        check=True, capture_output=True, text=True).stderr
+    found = re.findall(r"mean_volume: (-?[\d.]+|-inf) dB", log)
+    return float(found[-1]) if found else None
+
+
+def background_levels(path, words, length):
+    """Levels where nobody speaks: before the first word, between sentences, after the last.
+
+    Speech alone is near silent there (about -60 dBFS or lower); a music bed is not.
+    """
+    spoken = [w for w in words if w.get("type") == "word" and "start" in w and "end" in w]
+    if not spoken:
+        return {}
+    levels = {"before the first word": segment_level(path, 0.0, spoken[0]["start"] - 0.05),
+              "after the last word": segment_level(path, spoken[-1]["end"] + 0.05, length)}
+    gaps = [segment_level(path, a["end"] + 0.05, b["start"] - 0.05)
+            for a, b in zip(spoken, spoken[1:]) if b["start"] - a["end"] >= 0.4]
+    gaps = [g for g in gaps if g is not None]
+    if gaps:
+        levels["pauses between words"] = max(gaps)
+    return {name: level for name, level in levels.items() if level is not None}
+
+
+def bucket_root_files(legacy):
+    """Files at the top of the Cloud Storage bucket (where Intro.mp3 lives), newest first."""
+    client = legacy.get_gcs_client()
+    if not client:
+        return []
+    blobs = client.bucket(legacy.GCS_BUCKET_NAME).list_blobs(delimiter="/")
+    files = [(blob.name, blob.size or 0, blob.updated) for blob in blobs]
+    return sorted(files, key=lambda f: f[2] or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+
+
 def transcribe(legacy, path):
     """ElevenLabs Speech to Text with audio-event tags, e.g. (music)."""
     with open(path, "rb") as audio:
@@ -71,8 +111,9 @@ def transcribe(legacy, path):
             files={"file": (Path(path).name, audio, "audio/mpeg")}, timeout=(10, 180))
     response.raise_for_status()
     result = response.json()
-    events = sorted({word["text"] for word in result.get("words", []) if word.get("type") == "audio_event"})
-    return result.get("text", "").strip(), events
+    words = result.get("words", [])
+    events = sorted({word["text"] for word in words if word.get("type") == "audio_event"})
+    return result.get("text", "").strip(), events, words
 
 
 def history_matches(legacy, text, limit=5):
@@ -96,6 +137,7 @@ def inspect(legacy, config):
         if not path:
             lines += ["Could not download it from Cloud Storage.", ""]
             continue
+        length = None
         try:
             rate, channels = probe(path)
             length = duration_seconds(path)
@@ -108,9 +150,15 @@ def inspect(legacy, config):
         except Exception as error:
             lines.append(f"Audio analysis failed ({error}).")
         try:
-            text, events = transcribe(legacy, path)
+            text, events, words = transcribe(legacy, path)
             lines += ["Transcript:", "", f"> {text}", ""]
             lines.append(f"Audio events: {', '.join(events) if events else 'none tagged'}.")
+            if length:
+                levels = background_levels(path, words, length)
+                if levels:
+                    lines.append("Level where nobody speaks (speech alone is about -60 dBFS or lower there; "
+                                 "music is much higher): " +
+                                 "; ".join(f"{where} {level:.0f} dBFS" for where, level in levels.items()) + ".")
             matches = history_matches(legacy, text)
             lines.append(f"ElevenLabs history matches: {len(matches)}.")
             for item in matches:
@@ -121,6 +169,14 @@ def inspect(legacy, config):
         except Exception as error:
             lines.append(f"Transcription or history lookup failed ({error}).")
         lines.append("")
+    try:
+        files = bucket_root_files(legacy)
+        lines += ["### Files at the top of the Cloud Storage bucket", ""]
+        lines += [f"- {name} ({size / 1e6:.2f} MB, updated {updated:%Y-%m-%d})" if updated
+                  else f"- {name} ({size / 1e6:.2f} MB)" for name, size, updated in files]
+        lines.append("")
+    except Exception as error:
+        lines += [f"Could not list the bucket ({error}).", ""]
     return lines
 
 
