@@ -1,14 +1,18 @@
 name: Intro and Outro V2
 
 # Inspects or re-records the episode intro and outro with the narration voice.
-#   inspect: reports each current clip's length, loudness, pauses and transcript,
-#            and the original ElevenLabs generation if it is still in history.
+#   inspect: reports each current clip's length, loudness, pauses, transcript and
+#            whether it sits over music, the original ElevenLabs generation if it
+#            is still in history, and the files at the top of the bucket.
 #            Read-only.
 #   record:  narrates the text in podcast_v2/intro_outro.json with the episode
-#            voice and model, levels it to the current intro, saves it to Cloud
-#            Storage under its new name (the old files are untouched), and
-#            attaches the new MP3s to the run. Episodes use the new clips only
-#            once workflow.json and topic_workflow.json name them.
+#            voice and model, makes a voice-only and a light-synth-music version
+#            of each clip (the music bed is composed once with Eleven Music and
+#            reused), levels them to the current intro, saves them to Cloud
+#            Storage under new names (the old files are untouched), attaches
+#            them and a review MP3 to the run, and emails the review file when
+#            send_email is on. Episodes keep the current clips until
+#            workflow.json and topic_workflow.json name a new one.
 
 permissions:
   contents: read
@@ -24,6 +28,11 @@ on:
           - inspect
           - record
         default: inspect
+      send_email:
+        description: 'With record, email the review file to the usual episode address'
+        required: false
+        type: boolean
+        default: true
 
 concurrency:
   group: intro-outro-v2
@@ -59,11 +68,15 @@ jobs:
           echo '${{ secrets.GOOGLE_CREDS_JSON }}' > jmio-google-api.json
 
       - name: Intro and outro
-        run: python podcast_v2/intro_outro.py --${{ inputs.action }}
+        run: python podcast_v2/intro_outro.py --${{ inputs.action }} ${{ inputs.action == 'record' && inputs.send_email && '--email' || '' }}
         env:
           # The shared pipeline module checks for both keys when it loads.
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          PODCAST_EMAIL_BACKEND: gmail_api
+          PODCAST_EMAIL_FROM: AIConvoCast@gmail.com
+          PODCAST_EMAIL_TO: ianeoconnell@gmail.com
+          GMAIL_OAUTH_TOKEN_B64: ${{ secrets.GMAIL_OAUTH_TOKEN_B64 }}
 
       - name: Attach new clips
         if: ${{ inputs.action == 'record' }}
