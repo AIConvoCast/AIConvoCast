@@ -1,0 +1,79 @@
+name: Intro and Outro V2
+
+# Inspects or re-records the episode intro and outro with the narration voice.
+#   inspect: reports each current clip's length, loudness, pauses and transcript,
+#            and the original ElevenLabs generation if it is still in history.
+#            Read-only.
+#   record:  narrates the text in podcast_v2/intro_outro.json with the episode
+#            voice and model, levels it to the current intro, saves it to Cloud
+#            Storage under its new name (the old files are untouched), and
+#            attaches the new MP3s to the run. Episodes use the new clips only
+#            once workflow.json and topic_workflow.json name them.
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'inspect (read-only) or record (makes and saves the new clips)'
+        required: true
+        type: choice
+        options:
+          - inspect
+          - record
+        default: inspect
+
+concurrency:
+  group: intro-outro-v2
+  cancel-in-progress: false
+
+jobs:
+  intro-outro:
+    name: Intro and outro (${{ inputs.action }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install ffmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Create Google credentials file
+        run: |
+          echo '${{ secrets.GOOGLE_CREDS_JSON }}' > jmio-google-api.json
+
+      - name: Intro and outro
+        run: python podcast_v2/intro_outro.py --${{ inputs.action }}
+        env:
+          # The shared pipeline module checks for both keys when it loads.
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+
+      - name: Attach new clips
+        if: ${{ inputs.action == 'record' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: intro-outro-${{ github.run_id }}
+          path: generated_mp3/intro_outro/*.mp3
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Cleanup
+        if: always()
+        run: rm -rf generated_mp3/ jmio-google-api.json

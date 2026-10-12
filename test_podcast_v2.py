@@ -13,7 +13,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from podcast_v2 import eleven_v4, run_podcast, sync_from_sheet, update_models
+from podcast_v2 import eleven_v4, intro_outro, run_podcast, sync_from_sheet, update_models
 
 _SUMMARY_ENV = mock.patch.dict(os.environ, {"GITHUB_STEP_SUMMARY": ""})
 
@@ -720,6 +720,89 @@ class AudioPolishTests(unittest.TestCase):
              "-f", "null", "-"], capture_output=True, text=True, check=True).stderr
         measured = float(json.loads(re.findall(r"\{[^{}]*\}", report)[-1])["input_i"])
         self.assertAlmostEqual(measured, self.polish.TARGET_LUFS, delta=1.5)
+
+
+@unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "ffmpeg is not installed")
+class IntroOutroTests(unittest.TestCase):
+    def setUp(self):
+        from pydub.generators import Sine
+        from audio_mastering import export_audio
+
+        self.dir = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.dir)
+        tone = Sine(440, sample_rate=44100).to_audio_segment
+        # Intro-like reference about 15 dB louder than the "raw narration".
+        tone(duration=3000).apply_gain(-15).export(self.dir / "Intro.mp3", format="mp3")
+        tone(duration=2000).apply_gain(-30).export(self.dir / "quiet.wav", format="wav")
+        self.uploads = []
+        self.legacy = SimpleNamespace(
+            ELEVENLABS_API_KEY="test-key", DEFAULT_MP3_EXPORT_BITRATE="192k", MP3_OUTPUT_DIR=self.dir,
+            export_audio=export_audio,
+            download_mp3_file_from_gcs=lambda name: self.dir / name if (self.dir / name).exists() else None,
+            upload_audio_to_gcs=lambda path, blob: self.uploads.append((Path(path).name, blob)) or f"https://gcs/{blob}",
+            requests=SimpleNamespace(post=mock.Mock(), get=mock.Mock()),
+        )
+        self.workflow = run_podcast.load_json(run_podcast.WORKFLOW_PATH)
+        self.config = {"intro": {"source": "Intro.mp3", "file": "Intro_v4.mp3", "text": "Welcome to AI Convo Cast."},
+                       "outro": {"source": "Outro.mp3", "file": "Outro_v4.mp3", "text": "Thanks for listening."}}
+        self.quiet = contextlib.redirect_stdout(io.StringIO())
+        self.quiet.__enter__()
+        self.addCleanup(self.quiet.__exit__, None, None, None)
+
+    def fake_narrate(self, legacy, text, eleven, output, fallback=True):
+        shutil.copyfile(self.dir / "quiet.wav", Path(output).with_suffix(".wav"))
+        return Path(output).with_suffix(".wav"), eleven["Model"]
+
+    def test_shipped_config_names_new_files(self):
+        config = intro_outro.load_config()
+        self.assertEqual({name: (c["source"], c["file"]) for name, c in config.items()},
+                         {"intro": ("Intro.mp3", "Intro_v4.mp3"), "outro": ("Outro.mp3", "Outro_v4.mp3")})
+
+    def test_silences_tell_speech_pauses_from_a_continuous_bed(self):
+        from pydub import AudioSegment
+        from pydub.generators import Sine
+
+        tone = Sine(440, sample_rate=44100).to_audio_segment(duration=1000).apply_gain(-10)
+        (tone + AudioSegment.silent(600, frame_rate=44100) + tone).export(self.dir / "speech.wav", format="wav")
+        (tone + tone + tone).export(self.dir / "bed.wav", format="wav")
+        self.assertEqual(len(intro_outro.silences(self.dir / "speech.wav")), 1)
+        self.assertEqual(intro_outro.silences(self.dir / "bed.wav"), [])
+
+    def test_inspect_reports_transcript_events_and_history(self):
+        self.legacy.requests.post.return_value = mock.Mock(json=lambda: {
+            "text": "Welcome to AI Convo Cast.",
+            "words": [{"text": "(music)", "type": "audio_event"}, {"text": "Welcome", "type": "word"}]})
+        self.legacy.requests.get.return_value = mock.Mock(json=lambda: {"history": [{
+            "history_item_id": "h1", "voice_name": "Narrator", "voice_id": "v1", "model_id": "eleven_multilingual_v2",
+            "date_unix": 1735689600, "settings": {"stability": 0.4}, "text": "Welcome to AI Convo Cast."}]})
+        lines = "\n".join(intro_outro.inspect(self.legacy, {"intro": self.config["intro"]}))
+        self.assertIn("> Welcome to AI Convo Cast.", lines)
+        self.assertIn("Audio events: (music).", lines)
+        self.assertIn("2025-01-01: voice Narrator (v1), model eleven_multilingual_v2", lines)
+        params = self.legacy.requests.get.call_args.kwargs["params"]
+        self.assertEqual((params["search"], params["source"]), ("Welcome to AI Convo Cast", "TTS"))
+        self.assertEqual(self.legacy.requests.post.call_args.kwargs["data"]["model_id"], "scribe_v2")
+
+    def test_record_levels_to_the_current_intro_and_never_overwrites(self):
+        with mock.patch.object(run_podcast, "narrate", side_effect=self.fake_narrate):
+            lines = intro_outro.record(self.legacy, self.config, self.workflow, self.dir / "out")
+        self.assertEqual(self.uploads, [("Intro_v4.mp3", "Intro_v4.mp3"), ("Outro_v4.mp3", "Outro_v4.mp3")])
+        reference = float(intro_outro.measure_loudness(self.dir / "Intro.mp3")["input_i"])
+        for name in ("Intro_v4.mp3", "Outro_v4.mp3"):
+            level = float(intro_outro.measure_loudness(self.dir / "out" / name)["input_i"])
+            self.assertAlmostEqual(level, reference, delta=1.0)
+        self.assertIn("eleven_v4, voice TX3LPaxmHKxFdv7VOQHJ", "\n".join(lines))
+        # Only the finished clips sit at the top level, for the run's artifacts.
+        self.assertEqual(sorted(p.name for p in (self.dir / "out").glob("*.mp3")), ["Intro_v4.mp3", "Outro_v4.mp3"])
+
+    def test_record_needs_text_and_a_new_name(self):
+        empty = dict(self.config, outro=dict(self.config["outro"], text=""))
+        with self.assertRaisesRegex(RuntimeError, "no text for the outro"):
+            intro_outro.record(self.legacy, empty, self.workflow, self.dir / "out")
+        same = dict(self.config, intro=dict(self.config["intro"], file="Intro.mp3"))
+        with self.assertRaisesRegex(RuntimeError, "must not overwrite Intro.mp3"):
+            intro_outro.record(self.legacy, same, self.workflow, self.dir / "out")
+        self.assertEqual(self.uploads, [])
 
 
 if __name__ == "__main__":

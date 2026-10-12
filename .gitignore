@@ -46,6 +46,7 @@ Thumbs.db
 !podcast_v2/topic_workflow.json
 !podcast_v2/models.json
 !podcast_v2/sheet_snapshot.json
+!podcast_v2/intro_outro.json
 jmio-google-api.json
 client_secret.json
 token.pickle
