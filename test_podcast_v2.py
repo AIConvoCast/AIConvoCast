@@ -920,6 +920,32 @@ class IntroOutroTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "shorter than"):
             intro_outro.mix_over_music(self.dir / "quiet.wav", short, self.dir / "mix2.wav", self.config["music"])
 
+    def test_mix_can_start_partway_into_a_long_track(self):
+        music = self.fake_music(self.legacy, self.config["music"], 10, self.dir)
+        settings = dict(self.config["music"], start_seconds=3)
+        mixed = intro_outro.mix_over_music(self.dir / "quiet.wav", music, self.dir / "mix.wav", settings)
+        self.assertAlmostEqual(intro_outro.duration_seconds(mixed), 4.5, delta=0.05)
+        with self.assertRaisesRegex(RuntimeError, "shorter than"):
+            intro_outro.mix_over_music(self.dir / "quiet.wav", music, self.dir / "mix2.wav",
+                                       dict(settings, start_seconds=7))
+
+    def test_fetch_music_from_a_link_or_a_song_page(self):
+        audio = SimpleNamespace(headers={"Content-Type": "audio/mpeg"}, content=b"ID3 song", text="",
+                                raise_for_status=lambda: None)
+        page = SimpleNamespace(headers={"Content-Type": "text/html"}, content=b"<html>",
+                               raise_for_status=lambda: None,
+                               text='<meta property="og:audio" content="https://cdn1.suno.ai/abc.mp3?x=1&amp;y=2">')
+        self.legacy.requests.get = mock.Mock(side_effect=[page, audio])
+        path = intro_outro.fetch_music(self.legacy, "https://suno.com/song/abc", self.dir)
+        self.assertEqual(path.read_bytes(), b"ID3 song")
+        self.assertEqual(self.legacy.requests.get.call_args_list[1].args[0], "https://cdn1.suno.ai/abc.mp3?x=1&y=2")
+        self.legacy.requests.get = mock.Mock(return_value=SimpleNamespace(
+            headers={"Content-Type": "text/html"}, text="<html>no audio</html>", content=b"x",
+            raise_for_status=lambda: None))
+        with self.assertRaisesRegex(RuntimeError, "does not name an audio file"):
+            intro_outro.fetch_music(self.legacy, "https://example.com/page", self.dir)
+        self.assertEqual(intro_outro.music_description({"source": "url"}), "the show's own music track")
+
     def test_record_saves_both_candidates_and_a_review_file(self):
         lines, compose = self.record(email=True)
         compose.assert_called_once()

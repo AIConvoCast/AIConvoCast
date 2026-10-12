@@ -420,15 +420,43 @@ def compose_music(legacy, music, seconds, output):
 def music_description(music):
     if music.get("source", "synth") == "eleven":
         return "a light synth bed from Eleven Music"
+    if music.get("source") == "url":
+        return "the show's own music track"
     from podcast_v2.synth_bed import STYLES
 
     return f"a synth bed made for the show ({STYLES[music.get('style', 'calm')]})"
 
 
+def fetch_music(legacy, url, work):
+    """Download a track from a direct audio link, or from a page that names one (such as a Suno song page)."""
+    import html
+
+    response = legacy.requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=(10, 120))
+    response.raise_for_status()
+    audio_link = url.lower().split("?")[0].endswith((".mp3", ".wav", ".m4a"))
+    if not response.headers.get("Content-Type", "").startswith("audio/") and not audio_link:
+        page = response.text
+        found = (re.search(r'property="og:audio"[^>]*content="([^"]+)"', page)
+                 or re.search(r'content="([^"]+)"[^>]*property="og:audio"', page)
+                 or re.search(r'(https://cdn\d*\.suno\.ai/[^"\s]+?\.mp3)', page))
+        if not found:
+            raise RuntimeError("That page does not name an audio file; send a direct MP3 link instead.")
+        response = legacy.requests.get(html.unescape(found.group(1)), headers={"User-Agent": "Mozilla/5.0"},
+                                       timeout=(10, 120))
+        response.raise_for_status()
+    if not response.content:
+        raise RuntimeError("The music link returned no audio.")
+    path = Path(work) / "music_source.mp3"
+    path.write_bytes(response.content)
+    return path
+
+
 def make_music_bed(legacy, music, seconds, work):
-    """Compose a bed of at least `seconds`: synthesized here (default) or by Eleven Music."""
+    """A bed of at least `seconds`: synthesized here (default), by Eleven Music, or the track at music["url"]."""
     if music.get("source", "synth") == "eleven":
         return compose_music(legacy, music, seconds, Path(work) / "music_bed.mp3")
+    if music.get("source") == "url":
+        return fetch_music(legacy, music["url"], work)
     from podcast_v2 import synth_bed
 
     return synth_bed.compose(seconds, Path(work) / "music_bed.wav", seed=int(music.get("seed", 7)),
@@ -440,8 +468,14 @@ def mix_over_music(voice, music, output, music_settings):
     lead = float(music_settings["lead_in_seconds"])
     tail = float(music_settings["tail_seconds"])
     total = lead + duration_seconds(voice) + tail
-    if duration_seconds(music) < total:
+    offset = float(music_settings.get("start_seconds", 0))
+    if duration_seconds(music) - offset < total:
         raise RuntimeError(f"The music bed is shorter than the {total:.1f}-second clip it must cover.")
+    # Use (and measure) only the stretch of the track that sits under this clip.
+    segment = Path(output).with_name(Path(output).stem + "_bed.wav")
+    subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", "-y", "-ss", f"{offset:.3f}", "-t", f"{total:.3f}",
+                    "-i", str(music), "-c:a", "pcm_s16le", str(segment)], check=True, capture_output=True)
+    music = segment
     gain = (float(measure_loudness(voice)["input_i"]) - float(music_settings["below_voice_lu"])
             - float(measure_loudness(music)["input_i"]))
     fade = min(2.5, tail)

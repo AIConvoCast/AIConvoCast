@@ -60,6 +60,9 @@ Episodes join the intro, narration and outro named in the `merge_audio` step of
 `workflow.json` and `topic_workflow.json` (Cloud Storage files such as
 `Intro.mp3`). The **Intro and Outro V2** action manages them:
 
+- `history` (read-only) looks for the music older clips used: stored versions
+  of the clips, the voice-cancelled music under the current ones (attached to
+  the run), and the opening of older episodes.
 - `inspect` (read-only) reports each current clip's length, loudness, pauses and
   ElevenLabs transcript, and the original generation if it is still in
   ElevenLabs history.
@@ -70,7 +73,10 @@ Episodes join the intro, narration and outro named in the `merge_audio` step of
   `intro_outro.json`: a relaxed 112 BPM groove with electric-piano-like bells,
   a pulsing bass, soft drums and pads) or `calm` (soft pads, a gentle arpeggio
   and a low bass at 100 BPM). Set `"source": "eleven"` to use Eleven Music
-  instead, which needs the API key's music_generation permission. The bed sits
+  instead, which needs the API key's music_generation permission, or
+  `"source": "url"` with `"url"` set to a direct MP3 link or a song page that
+  names its audio (such as a Suno song page) to use your own track;
+  `"start_seconds"` picks where in the track the bed starts. The bed sits
   about 9 LU under the voice on its own, ducks under speech, and is saved once
   (`IntroOutro_music_bed_upbeat.mp3`) so later re-records reuse the same music; rename it in `intro_outro.json` to compose a
   new one, or upload your own track under that name to use it instead. Candidates
