@@ -203,10 +203,12 @@ def compose_music(legacy, music, seconds, output):
     return Path(output)
 
 
-MUSIC_SOURCES = {
-    "synth": "a light synth bed made for the show (soft pads, a gentle arpeggio and a low bass)",
-    "eleven": "a light synth bed from Eleven Music",
-}
+def music_description(music):
+    if music.get("source", "synth") == "eleven":
+        return "a light synth bed from Eleven Music"
+    from podcast_v2.synth_bed import STYLES
+
+    return f"a synth bed made for the show ({STYLES[music.get('style', 'calm')]})"
 
 
 def make_music_bed(legacy, music, seconds, work):
@@ -215,7 +217,8 @@ def make_music_bed(legacy, music, seconds, work):
         return compose_music(legacy, music, seconds, Path(work) / "music_bed.mp3")
     from podcast_v2 import synth_bed
 
-    return synth_bed.compose(seconds, Path(work) / "music_bed.wav", seed=int(music.get("seed", 7)))
+    return synth_bed.compose(seconds, Path(work) / "music_bed.wav", seed=int(music.get("seed", 7)),
+                             style=music.get("style", "calm"))
 
 
 def mix_over_music(voice, music, output, music_settings):
@@ -320,7 +323,7 @@ def record(legacy, config, workflow, out_dir, email=False):
                 legacy.export_audio(AudioSegment.from_wav(bed), saved, bitrate=legacy.DEFAULT_MP3_EXPORT_BITRATE)
             if not legacy.upload_audio_to_gcs(saved, music["file"]):
                 raise RuntimeError(f"Uploading {music['file']} to Cloud Storage failed.")
-            lines.append(f"Music: composed {MUSIC_SOURCES[music.get('source', 'synth')]}, "
+            lines.append(f"Music: composed {music_description(music)}, "
                          f"{duration_seconds(bed):.0f} seconds, and saved it as {music['file']}.")
         except Exception as error:  # the voice-only candidates are still worth reviewing
             bed, music_problem = None, str(error)
@@ -358,7 +361,7 @@ def record(legacy, config, workflow, out_dir, email=False):
         *timeline,
         "",
         "The new versions use the episode voice on Eleven v4."
-        + (f" The music versions sit over {MUSIC_SOURCES[music.get('source', 'synth')]}, ducked under the "
+        + (f" The music versions sit over {music_description(music)}, ducked under the "
            "voice, with a short lead-in and fade-out." if bed else
            f" Light synth music versions could not be made this time ({music_problem});"
            " the voice-only versions match the current clips, which have no music under them."),

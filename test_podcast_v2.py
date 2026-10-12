@@ -795,11 +795,31 @@ class IntroOutroTests(unittest.TestCase):
         path = synth_bed.compose(6.0, self.dir / "bed.wav")
         self.assertEqual(intro_outro.probe(path), (48000, 2))
 
+    def test_upbeat_bed_differs_and_has_a_beat(self):
+        from podcast_v2 import synth_bed
+        import numpy as np
+
+        upbeat = synth_bed.light_synth_bed(6.0, style="upbeat")
+        self.assertEqual(upbeat.shape, (6 * synth_bed.RATE, 2))
+        self.assertAlmostEqual(float(np.max(np.abs(upbeat))), 0.5, places=3)
+        self.assertLess(float(np.max(np.abs(upbeat[:50]))), 1e-3)
+        self.assertFalse(np.allclose(upbeat, synth_bed.light_synth_bed(6.0)))
+        # A kick on beats 1 and 3: low-frequency energy peaks every half bar (about 1.07 s at 112 BPM).
+        low = np.abs(np.fft.irfft(np.fft.rfft(upbeat.mean(axis=1)) * (np.fft.rfftfreq(len(upbeat), 1 / 48000) < 120)))
+        frames = low[: 5 * 48000].reshape(-1, 480).max(axis=1)
+        period = 60 / synth_bed.UPBEAT_TEMPO * 2
+        autocorr = np.correlate(frames - frames.mean(), frames - frames.mean(), "full")[len(frames) - 1:]
+        lag = int(round(period * 100))
+        self.assertGreater(autocorr[lag], autocorr[lag // 2])
+        with self.assertRaisesRegex(ValueError, "Unknown synth style"):
+            synth_bed.light_synth_bed(1.0, style="loud")
+
     def test_music_bed_source_picks_synth_or_eleven(self):
         with mock.patch("podcast_v2.synth_bed.compose", return_value=self.dir / "synth.wav") as synth, \
                 mock.patch.object(intro_outro, "compose_music", return_value=self.dir / "eleven.mp3") as eleven:
-            self.assertEqual(intro_outro.make_music_bed(self.legacy, {"seed": 3}, 9, self.dir), self.dir / "synth.wav")
-            synth.assert_called_once_with(9, self.dir / "music_bed.wav", seed=3)
+            self.assertEqual(intro_outro.make_music_bed(self.legacy, {"seed": 3, "style": "upbeat"}, 9, self.dir),
+                             self.dir / "synth.wav")
+            synth.assert_called_once_with(9, self.dir / "music_bed.wav", seed=3, style="upbeat")
             intro_outro.make_music_bed(self.legacy, {"source": "eleven", "prompt": "p"}, 9, self.dir)
             eleven.assert_called_once()
 

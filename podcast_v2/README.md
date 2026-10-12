@@ -66,11 +66,13 @@ Episodes join the intro, narration and outro named in the `merge_audio` step of
 - `record` narrates the text in `intro_outro.json` with the episode voice and
   model and makes two candidates per clip: voice only (`Intro_v4.mp3`) and over
   a light synth bed (`Intro_v4_music.mp3`). The bed is synthesized by
-  `synth_bed.py` (soft pads, a gentle arpeggio and a low bass; set
-  `"source": "eleven"` to use Eleven Music, which needs the API key's
-  music_generation permission). It sits about 9 LU under the voice on its own,
-  ducks under speech, and is saved once (`IntroOutro_music_bed.mp3`) so later
-  re-records reuse the same music; rename it in `intro_outro.json` to compose a
+  `synth_bed.py` in one of two styles: `upbeat` (the default in
+  `intro_outro.json`: a relaxed 112 BPM groove with electric-piano-like bells,
+  a pulsing bass, soft drums and pads) or `calm` (soft pads, a gentle arpeggio
+  and a low bass at 100 BPM). Set `"source": "eleven"` to use Eleven Music
+  instead, which needs the API key's music_generation permission. The bed sits
+  about 9 LU under the voice on its own, ducks under speech, and is saved once
+  (`IntroOutro_music_bed_upbeat.mp3`) so later re-records reuse the same music; rename it in `intro_outro.json` to compose a
   new one, or upload your own track under that name to use it instead. Candidates
   are leveled to the current intro, saved to Cloud Storage under their new
   names, and attached to the run with a review MP3 (current clip, then each
