@@ -6,6 +6,11 @@ name: Intro and Outro V2
 #            is still in history, and the files at the top of the bucket. With
 #            the show's own track as the music, also describes the track and
 #            where the current clips' music sits in it. Read-only.
+#   check:   joins each episode workflow's intro, the latest saved narration
+#            and its outro exactly as an episode's merge step does, reports
+#            every part and the join (length, loudness, peaks), fails if
+#            anything is off, and attaches the opening and ending. No uploads
+#            or email.
 #   history: looks for the music that older intros and outros used: stored
 #            versions of Intro.mp3/Outro.mp3 and the start of older episodes.
 #            Read-only.
@@ -17,7 +22,7 @@ name: Intro and Outro V2
 #            files are untouched), attaches them and a review MP3 to the run, and
 #            emails the review file when send_email is on. Episodes keep the
 #            current clips until workflow.json and topic_workflow.json name a
-#            new one.
+#            new one, and it never overwrites a clip they use.
 # music_link: a link to the show's own track (a Google Drive share link works),
 #            needed until record has saved the track to Cloud Storage. The repo
 #            and its logs are public, so the link is masked and never printed.
@@ -29,12 +34,13 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: 'inspect (read-only) or record (makes and saves the new clips)'
+        description: 'inspect (read-only), record (makes and saves new candidates) or check (test-joins an episode)'
         required: true
         type: choice
         options:
           - inspect
           - record
+          - check
           - history
         default: inspect
       send_email:
@@ -109,6 +115,15 @@ jobs:
           name: intro-outro-music-${{ github.run_id }}
           path: generated_mp3/history/*.mp3
           retention-days: 30
+          if-no-files-found: warn
+
+      - name: Attach the episode opening and ending
+        if: ${{ always() && inputs.action == 'check' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: episode-check-${{ github.run_id }}
+          path: generated_mp3/episode_check/*.mp3
+          retention-days: 14
           if-no-files-found: warn
 
       - name: Attach new clips

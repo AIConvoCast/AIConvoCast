@@ -706,8 +706,15 @@ def clock(seconds):
     return f"{int(seconds // 60)}:{int(seconds % 60):02d}"
 
 
-def check_config(config):
+def episode_files():
+    """The intro and outro files the episode workflows join, which record must never overwrite."""
+    return {name for path in (run_podcast.WORKFLOW_PATH, run_podcast.TOPIC_WORKFLOW_PATH)
+            for name in run_podcast.episode_clips(run_podcast.load_json(path))}
+
+
+def check_config(config, in_use=None):
     """Everything record needs, checked before any paid request."""
+    in_use = episode_files() if in_use is None else in_use
     names = set()
     for name, clip in config["clips"].items():
         if not clip.get("text", "").strip():
@@ -715,6 +722,9 @@ def check_config(config):
         for key in ("file", "music_file"):
             if clip[key] == clip["source"]:
                 raise RuntimeError(f"The new {name} must not overwrite {clip['source']}.")
+            if clip[key] in in_use:
+                raise RuntimeError(f"The new {name} must not overwrite {clip[key]}, which episodes use; "
+                                   "give it a new name in intro_outro.json.")
             names.add(clip[key])
     if len(names) != 2 * len(config["clips"]):
         raise RuntimeError("Every candidate in intro_outro.json needs its own file name.")
@@ -829,6 +839,62 @@ def record(legacy, config, workflow, out_dir, email=False, link=None):
     return lines
 
 
+def describe_audio(path):
+    rate, channels = probe(path)
+    stats = measure_loudness(path)
+    return (f"{duration_seconds(path):.1f} s, {rate} Hz, {channels} channel(s), {float(stats['input_i']):.1f} LUFS, "
+            f"true peak {float(stats['input_tp']):.1f} dBTP")
+
+
+def excerpt(path, start, seconds, output):
+    subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", "-y", "-ss", f"{max(start, 0):.3f}", "-t", f"{seconds:.3f}",
+                    "-i", str(path), "-b:a", "192k", str(output)], check=True, capture_output=True)
+    return Path(output)
+
+
+def check_episode(legacy, out_dir):
+    """Join each episode workflow's intro, the latest saved narration and its outro exactly as its
+    merge step does, without uploading or emailing anything. Returns the report and any problems;
+    the opening and ending of each join are left in out_dir to listen to."""
+    out_dir = Path(out_dir)
+    work = out_dir / "work"
+    work.mkdir(parents=True, exist_ok=True)
+    lines = ["## Episode audio check", "",
+             "The latest saved narration stands in for the day's. Nothing is uploaded or emailed.", ""]
+    problems = []
+    for path in (run_podcast.WORKFLOW_PATH, run_podcast.TOPIC_WORKFLOW_PATH):
+        workflow = run_podcast.load_json(path)
+        step = next(step for step in workflow["steps"] if step["type"] == "merge_audio")
+        runner = run_podcast.Runner(workflow, legacy)
+        lines.append(f"### {path.name}: {' + '.join(step['parts'])}")
+        parts = [runner.resolve(part) for part in step["parts"]]
+        missing = [part for part, found in zip(step["parts"], parts) if not found]
+        if missing:
+            problems.append(f"{path.name} is missing {', '.join(missing)}")
+            lines += [f"Missing: {', '.join(missing)}.", ""]
+            continue
+        lines += [f"- {part}: {describe_audio(found)}." for part, found in zip(step["parts"], parts)]
+        joined = runner.audio.merge(parts, work / f"{path.stem}_episode.mp3")
+        expected = sum(duration_seconds(found) for found in parts)
+        length = duration_seconds(joined)
+        stats = measure_loudness(joined)
+        level, peak = float(stats["input_i"]), float(stats["input_tp"])
+        intro_level = float(measure_loudness(parts[0])["input_i"])
+        lines.append(f"- Joined: {describe_audio(joined)}; the parts add up to {expected:.1f} s.")
+        if abs(length - expected) > 1.0:
+            problems.append(f"{path.name}: the join is {length:.1f} s, not {expected:.1f} s")
+        if peak > -0.5:
+            problems.append(f"{path.name}: the join peaks at {peak:.1f} dBTP")
+        if abs(level - intro_level) > 3.0:
+            problems.append(f"{path.name}: the join is {level:.1f} LUFS against the intro's {intro_level:.1f}")
+        intro_length, outro_length = duration_seconds(parts[0]), duration_seconds(parts[-1])
+        opening = excerpt(joined, 0, intro_length + 20, out_dir / f"{path.stem}_opening.mp3")
+        ending = excerpt(joined, length - outro_length - 20, outro_length + 20, out_dir / f"{path.stem}_ending.mp3")
+        lines += [f"- Kept the opening ({opening.name}) and ending ({ending.name}) to listen to.", ""]
+    lines.append("All checks passed." if not problems else "Problems: " + "; ".join(problems) + ".")
+    return lines, problems
+
+
 def report(lines):
     print("\n".join(lines))
     summary = os.getenv("GITHUB_STEP_SUMMARY")
@@ -842,6 +908,8 @@ def main(argv=None):
     action = parser.add_mutually_exclusive_group(required=True)
     action.add_argument("--inspect", action="store_true", help="Describe and transcribe the current clips.")
     action.add_argument("--record", action="store_true", help="Make, save and review the new candidates.")
+    action.add_argument("--check", action="store_true",
+                        help="Join each workflow's intro, the latest narration and outro as an episode does.")
     action.add_argument("--history", action="store_true",
                         help="Look for the music older intros and outros used (stored versions, older episodes).")
     parser.add_argument("--email", action="store_true", help="With --record, email the review file.")
@@ -854,6 +922,10 @@ def main(argv=None):
         report(inspect(legacy, config, link))
     elif args.history:
         report(history(legacy, config, Path(legacy.MP3_OUTPUT_DIR) / "history"))
+    elif args.check:
+        lines, problems = check_episode(legacy, Path(legacy.MP3_OUTPUT_DIR) / "episode_check")
+        report(lines)
+        return 1 if problems else 0
     else:
         workflow = run_podcast.load_json(run_podcast.WORKFLOW_PATH)
         report(record(legacy, config, workflow, Path(legacy.MP3_OUTPUT_DIR) / "intro_outro", email=args.email,
