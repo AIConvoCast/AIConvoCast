@@ -1,10 +1,12 @@
 {
   "music": {
     "file": "IntroOutro_music_bed.mp3",
-    "prompt": "Light, modern synth background music for a technology news podcast intro and outro: soft warm synth pads, a gentle plucked arpeggio and a subtle steady pulse, optimistic and calm, around 100 BPM, no vocals, no big build-ups or drops, an even level throughout so it sits under a spoken voiceover.",
+    "source": "synth",
+    "seed": 7,
     "lead_in_seconds": 1.5,
     "tail_seconds": 2.5,
-    "below_voice_lu": 15
+    "below_voice_lu": 9,
+    "prompt": "Light, modern synth background music for a technology news podcast intro and outro: soft warm synth pads, a gentle plucked arpeggio and a subtle steady pulse, optimistic and calm, around 100 BPM, no vocals, no big build-ups or drops, an even level throughout so it sits under a spoken voiceover."
   },
   "clips": {
     "intro": {

@@ -17,6 +17,7 @@ action and its Google Sheet are unchanged but are now manual only.
 | `eleven_v4.py` | Single-voice V4 narration through the Text to Dialogue REST API. |
 | `voice_sample.txt` | Sample narration text for the `voice_sample` preview. |
 | `intro_outro.py`, `intro_outro.json` | Inspect and re-record the intro and outro (the **Intro and Outro V2** action). |
+| `synth_bed.py` | The light synth music bed for the intro and outro candidates. |
 | `update_models.py` | Refreshes `models.json` from the OpenAI, Anthropic and Google APIs. |
 | `audio_polish.py` | ffmpeg finishing: soxr resampling when joining intro/narration/outro, and narration leveled to the intro's loudness. |
 
@@ -64,9 +65,13 @@ Episodes join the intro, narration and outro named in the `merge_audio` step of
   ElevenLabs history.
 - `record` narrates the text in `intro_outro.json` with the episode voice and
   model and makes two candidates per clip: voice only (`Intro_v4.mp3`) and over
-  a light synth bed (`Intro_v4_music.mp3`). The bed is composed once with Eleven
-  Music and saved (`IntroOutro_music_bed.mp3`), so later re-records reuse the
-  same music; rename it in `intro_outro.json` to compose a new one. Candidates
+  a light synth bed (`Intro_v4_music.mp3`). The bed is synthesized by
+  `synth_bed.py` (soft pads, a gentle arpeggio and a low bass; set
+  `"source": "eleven"` to use Eleven Music, which needs the API key's
+  music_generation permission). It sits about 9 LU under the voice on its own,
+  ducks under speech, and is saved once (`IntroOutro_music_bed.mp3`) so later
+  re-records reuse the same music; rename it in `intro_outro.json` to compose a
+  new one, or upload your own track under that name to use it instead. Candidates
   are leveled to the current intro, saved to Cloud Storage under their new
   names, and attached to the run with a review MP3 (current clip, then each
   candidate) that is also emailed when `send_email` is on. It never overwrites

@@ -769,17 +769,39 @@ class IntroOutroTests(unittest.TestCase):
         shutil.copyfile(self.dir / "quiet.wav", Path(output).with_suffix(".wav"))
         return Path(output).with_suffix(".wav"), eleven["Model"]
 
-    def fake_music(self, legacy, music, seconds, output):
+    def fake_music(self, legacy, music, seconds, work):
         from pydub.generators import Sine
+        output = Path(work) / f"bed_{seconds:.1f}.mp3"
         Sine(220, sample_rate=44100).to_audio_segment(duration=int(seconds * 1000)).apply_gain(-20).export(
             output, format="mp3")
-        return Path(output)
+        return output
 
     def record(self, **kwargs):
         with mock.patch.object(run_podcast, "narrate", side_effect=self.fake_narrate), \
-                mock.patch.object(intro_outro, "compose_music", side_effect=self.fake_music) as compose:
+                mock.patch.object(intro_outro, "make_music_bed", side_effect=self.fake_music) as compose:
             lines = intro_outro.record(self.legacy, self.config, self.workflow, self.dir / "out", **kwargs)
         return lines, compose
+
+    def test_synth_bed_is_smooth_stereo_and_long_enough(self):
+        from podcast_v2 import synth_bed
+        import numpy as np
+
+        bed = synth_bed.light_synth_bed(6.0)
+        self.assertEqual(bed.shape, (6 * synth_bed.RATE, 2))
+        self.assertAlmostEqual(float(np.max(np.abs(bed))), 0.5, places=3)
+        self.assertLess(float(np.max(np.abs(np.diff(bed, axis=0)))), 0.1)  # no clicks
+        self.assertLess(float(np.max(np.abs(bed[:100]))), 1e-3)  # fades in from silence
+        self.assertTrue(np.array_equal(bed, synth_bed.light_synth_bed(6.0)))  # deterministic
+        path = synth_bed.compose(6.0, self.dir / "bed.wav")
+        self.assertEqual(intro_outro.probe(path), (48000, 2))
+
+    def test_music_bed_source_picks_synth_or_eleven(self):
+        with mock.patch("podcast_v2.synth_bed.compose", return_value=self.dir / "synth.wav") as synth, \
+                mock.patch.object(intro_outro, "compose_music", return_value=self.dir / "eleven.mp3") as eleven:
+            self.assertEqual(intro_outro.make_music_bed(self.legacy, {"seed": 3}, 9, self.dir), self.dir / "synth.wav")
+            synth.assert_called_once_with(9, self.dir / "music_bed.wav", seed=3)
+            intro_outro.make_music_bed(self.legacy, {"source": "eleven", "prompt": "p"}, 9, self.dir)
+            eleven.assert_called_once()
 
     def test_shipped_config_names_new_files(self):
         config = intro_outro.load_config()
@@ -846,11 +868,11 @@ class IntroOutroTests(unittest.TestCase):
         self.assertEqual(self.legacy.requests.post.call_args.kwargs["data"]["model_id"], "scribe_v2")
 
     def test_mix_over_music_adds_lead_in_and_tail(self):
-        music = self.fake_music(self.legacy, self.config["music"], 8, self.dir / "bed.mp3")
+        music = self.fake_music(self.legacy, self.config["music"], 8, self.dir)
         mixed = intro_outro.mix_over_music(self.dir / "quiet.wav", music, self.dir / "mix.wav", self.config["music"])
         self.assertAlmostEqual(intro_outro.duration_seconds(mixed), 1.0 + 2.0 + 1.5, delta=0.05)
         self.assertEqual(intro_outro.probe(mixed), (48000, 2))
-        short = self.fake_music(self.legacy, self.config["music"], 3, self.dir / "short.mp3")
+        short = self.fake_music(self.legacy, self.config["music"], 3, self.dir)
         with self.assertRaisesRegex(RuntimeError, "shorter than"):
             intro_outro.mix_over_music(self.dir / "quiet.wav", short, self.dir / "mix2.wav", self.config["music"])
 
@@ -881,7 +903,7 @@ class IntroOutroTests(unittest.TestCase):
             raise RuntimeError("Eleven Music refused the request (HTTP 401): missing_permissions")
 
         with mock.patch.object(run_podcast, "narrate", side_effect=self.fake_narrate), \
-                mock.patch.object(intro_outro, "compose_music", side_effect=refused):
+                mock.patch.object(intro_outro, "make_music_bed", side_effect=refused):
             lines = intro_outro.record(self.legacy, self.config, self.workflow, self.dir / "out", email=True)
         self.assertEqual(self.uploads, ["Intro_v4.mp3", "Outro_v4.mp3"])
         self.assertIn("Music: unavailable, so only voice-only candidates were made", "\n".join(lines))
@@ -892,7 +914,7 @@ class IntroOutroTests(unittest.TestCase):
                          ["Intro_Outro_review.mp3", "Intro_v4.mp3", "Outro_v4.mp3"])
 
     def test_record_reuses_a_saved_music_bed(self):
-        self.fake_music(self.legacy, self.config["music"], 10, self.dir / "Bed.mp3")
+        shutil.copyfile(self.fake_music(self.legacy, self.config["music"], 10, self.dir), self.dir / "Bed.mp3")
         self.stored.add("Bed.mp3")
         lines, compose = self.record()
         compose.assert_not_called()

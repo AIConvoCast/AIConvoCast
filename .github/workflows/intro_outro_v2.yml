@@ -7,8 +7,9 @@ name: Intro and Outro V2
 #            Read-only.
 #   record:  narrates the text in podcast_v2/intro_outro.json with the episode
 #            voice and model, makes a voice-only and a light-synth-music version
-#            of each clip (the music bed is composed once with Eleven Music and
-#            reused), levels them to the current intro, saves them to Cloud
+#            of each clip (the light synth bed is made once by
+#            podcast_v2/synth_bed.py and reused), levels them to the current
+#            intro, saves them to Cloud
 #            Storage under new names (the old files are untouched), attaches
 #            them and a review MP3 to the run, and emails the review file when
 #            send_email is on. Episodes keep the current clips until
