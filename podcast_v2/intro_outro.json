@@ -13,15 +13,15 @@
   },
   "clips": {
     "intro": {
-      "source": "Intro.mp3",
-      "file": "Intro_v4.mp3",
-      "music_file": "Intro_v4_original_music.mp3",
+      "source": "Intro_v4_original_music.mp3",
+      "file": "Intro_candidate.mp3",
+      "music_file": "Intro_candidate_music.mp3",
       "text": "Welcome to AI Convo Cast, where we bring you the latest in AI and tech innovation. Please don't forget to rate, review, and share if you like what you hear. Let's jump right in."
     },
     "outro": {
-      "source": "Outro.mp3",
-      "file": "Outro_v4.mp3",
-      "music_file": "Outro_v4_original_music.mp3",
+      "source": "Outro_v4_original_music.mp3",
+      "file": "Outro_candidate.mp3",
+      "music_file": "Outro_candidate_music.mp3",
       "text": "Thank you for listening to AI Convo Cast. Please don't forget to rate, review, and share if you like what you hear. Thanks, and hope to see you again next time."
     }
   }

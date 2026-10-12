@@ -76,9 +76,9 @@
       "id": "episode",
       "type": "merge_audio",
       "parts": [
-        "gcs_file:Intro.mp3",
+        "gcs_file:Intro_v4_original_music.mp3",
         "gcs_latest_mp3:eleven-labs/",
-        "gcs_file:Outro.mp3"
+        "gcs_file:Outro_v4_original_music.mp3"
       ],
       "folder": "podcasts/",
       "title_from": "title"

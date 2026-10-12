@@ -186,6 +186,13 @@ def narrate(legacy, text, eleven, output, fallback=True):
                 f"eleven_v3 (fallback after Eleven v4 failed: {type(error).__name__})")
 
 
+def episode_clips(workflow):
+    """The Cloud Storage files (intro, outro) the workflow's merge step puts around the narration."""
+    step = next(step for step in workflow["steps"] if step["type"] == "merge_audio")
+    files = [part.split(":", 1)[1] for part in step["parts"] if part.startswith("gcs_file:")]
+    return files[0], files[-1]
+
+
 def voice_sample(workflow, legacy, text_path=VOICE_SAMPLE_PATH):
     """Narrate the sample text with the workflow's ElevenLabs settings, with no
     fallback, upload or email, normalize it as an episode would, and report its
@@ -211,9 +218,10 @@ def voice_sample(workflow, legacy, text_path=VOICE_SAMPLE_PATH):
             loudness.append(f"{name}: unavailable ({error}).")
 
     intro = {}
+    intro_file, outro_file = episode_clips(workflow)
 
     def fetch_intro():
-        intro["path"] = legacy.download_mp3_file_from_gcs("Intro.mp3")
+        intro["path"] = legacy.download_mp3_file_from_gcs(intro_file)
         return intro["path"]
 
     def leveled():
@@ -226,9 +234,9 @@ def voice_sample(workflow, legacy, text_path=VOICE_SAMPLE_PATH):
         return path
 
     level("Sample as generated", lambda: path)
-    level("Intro", fetch_intro)
+    level(f"Intro ({intro_file})", fetch_intro)
     level("Sample leveled to the intro (as in an episode)", leveled)
-    level("Outro", lambda: legacy.download_mp3_file_from_gcs("Outro.mp3"))
+    level(f"Outro ({outro_file})", lambda: legacy.download_mp3_file_from_gcs(outro_file))
     level("Latest saved narration", lambda: legacy.download_latest_mp3_from_gcs("eleven-labs/"))
     level("Latest saved episode", lambda: legacy.download_latest_mp3_from_gcs("podcasts/"))
     lines = ["## Voice sample", "",

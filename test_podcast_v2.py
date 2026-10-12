@@ -181,7 +181,8 @@ class PodcastV2RunnerTests(unittest.TestCase):
         folders = [blob.split("/")[0] for blob in legacy.uploads]
         self.assertEqual(folders, ["descriptions", "scripts", "eleven-labs", "podcasts"])
         self.assertTrue(all("Opus_55_Arrives" in blob for blob in legacy.uploads))
-        self.assertEqual([Path(p).name for p in audio.merged], ["Intro.mp3", "latest.wav", "Outro.mp3"])
+        self.assertEqual([Path(p).name for p in audio.merged],
+                         ["Intro_v4_original_music.mp3", "latest.wav", "Outro_v4_original_music.mp3"])
         self.assertIn("Description:", runner.final_description_text)
         self.assertTrue(runner.final_audio_filename.endswith("_Opus_55_Arrives.mp3"))
 
@@ -826,8 +827,12 @@ class IntroOutroTests(unittest.TestCase):
     def test_shipped_config_names_new_files(self):
         config = intro_outro.load_config()
         self.assertEqual({name: (c["source"], c["file"], c["music_file"]) for name, c in config["clips"].items()},
-                         {"intro": ("Intro.mp3", "Intro_v4.mp3", "Intro_v4_original_music.mp3"),
-                          "outro": ("Outro.mp3", "Outro_v4.mp3", "Outro_v4_original_music.mp3")})
+                         {"intro": ("Intro_v4_original_music.mp3", "Intro_candidate.mp3", "Intro_candidate_music.mp3"),
+                          "outro": ("Outro_v4_original_music.mp3", "Outro_candidate.mp3", "Outro_candidate_music.mp3")})
+        # Both episode workflows use the approved clips, and record may never overwrite them.
+        for path in (run_podcast.WORKFLOW_PATH, run_podcast.TOPIC_WORKFLOW_PATH):
+            self.assertEqual(run_podcast.episode_clips(run_podcast.load_json(path)),
+                             ("Intro_v4_original_music.mp3", "Outro_v4_original_music.mp3"))
         self.assertTrue(all(c["text"].strip() for c in config["clips"].values()))
         intro_outro.check_config(config)
 
@@ -1089,6 +1094,29 @@ class IntroOutroTests(unittest.TestCase):
             intro_outro.fetch_music(self.legacy, link, self.dir)
         self.assertEqual(str(caught.exception), "downloading the music failed (ConnectionError)")
 
+    def test_check_joins_each_workflows_intro_narration_and_outro(self):
+        for name in ("Intro", "Outro"):
+            shutil.copyfile(self.dir / f"{name}.mp3", self.dir / f"{name}_v4_original_music.mp3")
+            self.stored.add(f"{name}_v4_original_music.mp3")
+        self.legacy.download_latest_mp3_from_gcs = lambda folder: self.dir / "quiet.wav"
+        lines, problems = intro_outro.check_episode(self.legacy, self.dir / "check")
+        text = "\n".join(lines)
+        self.assertEqual(problems, [])
+        self.assertIn("### workflow.json: gcs_file:Intro_v4_original_music.mp3 + gcs_latest_mp3:eleven-labs/ + "
+                      "gcs_file:Outro_v4_original_music.mp3", text)
+        self.assertIn("### topic_workflow.json:", text)
+        self.assertRegex(text, r"- Joined: 8\.\d s, .*; the parts add up to 8\.\d s\.")
+        self.assertTrue(text.endswith("All checks passed."))
+        self.assertEqual(sorted(p.name for p in (self.dir / "check").glob("*.mp3")),
+                         ["topic_workflow_ending.mp3", "topic_workflow_opening.mp3",
+                          "workflow_ending.mp3", "workflow_opening.mp3"])
+        self.assertEqual(self.uploads, [])
+        self.legacy.send_podcast_email.assert_not_called()
+        self.stored.discard("Outro_v4_original_music.mp3")
+        lines, problems = intro_outro.check_episode(self.legacy, self.dir / "check2")
+        self.assertEqual(problems, ["workflow.json is missing gcs_file:Outro_v4_original_music.mp3",
+                                    "topic_workflow.json is missing gcs_file:Outro_v4_original_music.mp3"])
+
     def test_record_saves_both_candidates_and_a_review_file(self):
         lines, compose = self.record(email=True)
         compose.assert_called_once()
@@ -1143,6 +1171,8 @@ class IntroOutroTests(unittest.TestCase):
 
         for config, message in ((broken(text=""), "no text for the outro"),
                                 (broken(music_file="Outro.mp3"), "must not overwrite Outro.mp3"),
+                                (broken(music_file="Outro_v4_original_music.mp3"),
+                                 "must not overwrite Outro_v4_original_music.mp3, which episodes use"),
                                 (broken(music_file="Intro_v4_music.mp3"), "its own file name")):
             with self.assertRaisesRegex(RuntimeError, message):
                 intro_outro.record(self.legacy, config, self.workflow, self.dir / "out")

@@ -57,8 +57,18 @@ files. V2 still supports the existing Text to Speech helper for that model.
 ## Intro and outro
 
 Episodes join the intro, narration and outro named in the `merge_audio` step of
-`workflow.json` and `topic_workflow.json` (Cloud Storage files such as
-`Intro.mp3`). The **Intro and Outro V2** action manages them:
+`workflow.json` and `topic_workflow.json`. They now use
+`Intro_v4_original_music.mp3` and `Outro_v4_original_music.mp3` (Eleven v4 over
+the show's own music), approved on 2026-10-12. `Intro.mp3` and `Outro.mp3`
+remain in Cloud Storage but episodes no longer use them; switching back is a
+two-line change in each workflow file. The **Intro and Outro V2** action
+manages the clips:
+
+- `check` joins each workflow's intro, the latest saved narration and its
+  outro exactly as an episode's merge step does, without uploading or emailing
+  anything. It reports every part and the join (length, loudness, true peak),
+  fails if a part is missing or the join is off, and attaches the opening and
+  ending of the join. Run it after changing the intro or outro.
 
 - `history` (read-only) looks for the music older clips used: stored versions
   of the clips, the voice-cancelled music under the current ones (attached to
@@ -69,7 +79,9 @@ Episodes join the intro, narration and outro named in the `merge_audio` step of
   describes the track (length, level over time, tempo) and finds where the
   current clips' music sits in it and how far under the voice it was.
 - `record` narrates the text in `intro_outro.json` with the episode voice and
-  model and makes two candidates per clip: voice only (the clip's `file`, e.g.
+  model and makes two candidates per clip (each clip's `source` is the one
+  episodes use now, for comparison and loudness; `record` refuses to write any
+  file the episode workflows use): voice only (the clip's `file`, e.g.
   `Intro_v4.mp3`) and over the music bed (its `music_file`). The bed is one of:
   - The show's own track (`"source": "url"`; now `Music Bed.wav`, the music
     under the original intro and outro: a 35-minute, very quiet loop bed, of
