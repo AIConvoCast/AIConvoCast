@@ -769,7 +769,7 @@ class IntroOutroTests(unittest.TestCase):
         shutil.copyfile(self.dir / "quiet.wav", Path(output).with_suffix(".wav"))
         return Path(output).with_suffix(".wav"), eleven["Model"]
 
-    def fake_music(self, legacy, music, seconds, work):
+    def fake_music(self, legacy, music, seconds, work, link=None):
         from pydub.generators import Sine
         output = Path(work) / f"bed_{seconds:.1f}.mp3"
         Sine(220, sample_rate=44100).to_audio_segment(duration=int(seconds * 1000)).apply_gain(-20).export(
@@ -826,8 +826,8 @@ class IntroOutroTests(unittest.TestCase):
     def test_shipped_config_names_new_files(self):
         config = intro_outro.load_config()
         self.assertEqual({name: (c["source"], c["file"], c["music_file"]) for name, c in config["clips"].items()},
-                         {"intro": ("Intro.mp3", "Intro_v4.mp3", "Intro_v4_music.mp3"),
-                          "outro": ("Outro.mp3", "Outro_v4.mp3", "Outro_v4_music.mp3")})
+                         {"intro": ("Intro.mp3", "Intro_v4.mp3", "Intro_v4_original_music.mp3"),
+                          "outro": ("Outro.mp3", "Outro_v4.mp3", "Outro_v4_original_music.mp3")})
         self.assertTrue(all(c["text"].strip() for c in config["clips"].values()))
         intro_outro.check_config(config)
 
@@ -916,18 +916,23 @@ class IntroOutroTests(unittest.TestCase):
         mixed = intro_outro.mix_over_music(self.dir / "quiet.wav", music, self.dir / "mix.wav", self.config["music"])
         self.assertAlmostEqual(intro_outro.duration_seconds(mixed), 1.0 + 2.0 + 1.5, delta=0.05)
         self.assertEqual(intro_outro.probe(mixed), (48000, 2))
-        short = self.fake_music(self.legacy, self.config["music"], 3, self.dir)
-        with self.assertRaisesRegex(RuntimeError, "shorter than"):
-            intro_outro.mix_over_music(self.dir / "quiet.wav", short, self.dir / "mix2.wav", self.config["music"])
+        # A track that runs out plays once and fades; the clip ends half a second after the voice.
+        short = self.fake_music(self.legacy, self.config["music"], 2.5, self.dir)
+        mixed = intro_outro.mix_over_music(self.dir / "quiet.wav", short, self.dir / "mix2.wav", self.config["music"])
+        self.assertAlmostEqual(intro_outro.duration_seconds(mixed), 1.0 + 2.0 + 0.5, delta=0.05)
+        self.assertLess(intro_outro.segment_level(mixed, 3.05, 3.5), -70)
+        with self.assertRaisesRegex(RuntimeError, "only 1.5 seconds left after 6.5 s"):
+            intro_outro.mix_over_music(self.dir / "quiet.wav", music, self.dir / "mix3.wav",
+                                       dict(self.config["music"], start_seconds=6.5))
 
     def test_mix_can_start_partway_into_a_long_track(self):
         music = self.fake_music(self.legacy, self.config["music"], 10, self.dir)
         settings = dict(self.config["music"], start_seconds=3)
         mixed = intro_outro.mix_over_music(self.dir / "quiet.wav", music, self.dir / "mix.wav", settings)
         self.assertAlmostEqual(intro_outro.duration_seconds(mixed), 4.5, delta=0.05)
-        with self.assertRaisesRegex(RuntimeError, "shorter than"):
+        with self.assertRaisesRegex(RuntimeError, "seconds left after 9 s"):
             intro_outro.mix_over_music(self.dir / "quiet.wav", music, self.dir / "mix2.wav",
-                                       dict(settings, start_seconds=7))
+                                       dict(settings, start_seconds=9))
 
     def test_fetch_music_from_a_link_or_a_song_page(self):
         audio = SimpleNamespace(headers={"Content-Type": "audio/mpeg"}, content=b"ID3 song", text="",
@@ -966,6 +971,111 @@ class IntroOutroTests(unittest.TestCase):
         self.legacy.requests.get = mock.Mock(return_value=signin)
         with self.assertRaisesRegex(RuntimeError, "Anyone with the link"):
             intro_outro.fetch_music(self.legacy, "https://drive.google.com/file/d/1AbCdEfGhIjKlMnOp/view", self.dir)
+
+    def stereo_wav(self, path, left, right, rate=16000):
+        import wave
+        import numpy as np
+
+        frames = (np.clip(np.stack([left, right], axis=1), -1, 1) * 32767).astype("<i2")
+        with wave.open(str(path), "wb") as out:
+            out.setnchannels(2)
+            out.setsampwidth(2)
+            out.setframerate(rate)
+            out.writeframes(frames.tobytes())
+        return Path(path)
+
+    def old_clip(self, rate=16000):
+        """A 30 s stereo "track", and a clip with a centred voice over the track from 7.5 s, 30 dB
+        down, where the music stops after 6 s."""
+        import numpy as np
+
+        noise = np.random.default_rng(1).normal(0, 0.1, (2, 30 * rate))
+        track = self.stereo_wav(self.dir / "track.wav", noise[0], noise[1])
+        music = noise[:, int(7.5 * rate):int(7.5 * rate) + 9 * rate] * 10 ** (-30 / 20)
+        music[:, 6 * rate:] = 0
+        voice = 0.25 * np.sin(2 * np.pi * 300 * np.arange(9 * rate) / rate)
+        return track, self.stereo_wav(self.dir / "clip.wav", voice + music[0], voice + music[1])
+
+    def test_line_up_finds_where_the_clip_music_starts_and_its_level(self):
+        track, clip = self.old_clip()
+        found = intro_outro.line_up(track, clip)
+        self.assertAlmostEqual(found["offset"], 7.5, delta=0.001)
+        self.assertGreater(found["match"], 0.7)
+        self.assertLess(found["next"], 0.2)
+        self.assertTrue(all(abs(gain + 30) < 1 for gain in found["gains"][:6]))
+        self.assertTrue(all(gain < -45 for gain in found["gains"][6:]))
+        # Voice power 0.25²/2 against the music's 0.001 × 0.1²/2 in the mid channel is about 38 dB; the
+        # 8 kHz analysis keeps half of the white-noise "music", so 41 dB.
+        self.assertAlmostEqual(found["under_voice"], 41.0, delta=1.5)
+
+    def test_inspect_describes_the_own_track_and_where_the_old_clips_sit_in_it(self):
+        track, clip = self.old_clip()
+        shutil.copyfile(track, self.dir / "Own.wav")
+        self.stored |= {"Own.wav", "clip.wav"}
+        config = {"music": {"source": "url", "file": "Own.wav", "name": "Music Bed.wav"},
+                  "clips": {"intro": {"source": "clip.wav"}}}
+        lines = "\n".join(intro_outro.describe_track(self.legacy, config, self.dir / "music"))
+        self.assertIn("### Music track: Music Bed.wav", lines)
+        self.assertIn("0:30.0 long (the copy saved as Own.wav), 16000 Hz, 2 channel(s)", lines)
+        self.assertEqual(len(re.search(r"Level every 1 s \(dBFS\): (.*)", lines).group(1).split(", ")), 30)
+        self.assertIn("- clip.wav: best match with the track from 0:07.5 (match 0.8", lines)
+        self.assertRegex(lines, r"the music sat about 4[0-2] dB under the voice")
+        self.legacy.requests.get.assert_not_called()
+
+    def test_record_takes_the_own_track_from_the_link_then_reuses_the_saved_copy(self):
+        import numpy as np
+
+        noise = np.random.default_rng(2).normal(0, 0.1, (2, 12 * 16000))
+        song = self.stereo_wav(self.dir / "song.wav", noise[0], noise[1]).read_bytes()
+        self.legacy.requests.get = mock.Mock(return_value=SimpleNamespace(
+            headers={"Content-Type": "audio/wav", "Content-Disposition": 'attachment; filename="Music Bed.wav"'},
+            content=song, text="", raise_for_status=lambda: None))
+        config = copy.deepcopy(self.config)
+        config["music"].update(source="url", name="Music Bed.wav", file="Own.mp3")
+        config["clips"]["outro"]["music"] = {"start_seconds": 4}
+        link = "https://drive.google.com/file/d/1AbCdEfGhIjKlMnOp/view?usp=sharing"
+        with mock.patch.object(run_podcast, "narrate", side_effect=self.fake_narrate):
+            lines = "\n".join(intro_outro.record(self.legacy, config, self.workflow, self.dir / "out", link=link))
+        self.assertEqual(self.uploads, ["Own.mp3", "Intro_v4.mp3", "Intro_v4_music.mp3",
+                                        "Outro_v4.mp3", "Outro_v4_music.mp3"])
+        self.assertIn("Music: downloaded the show's own music track (Music Bed.wav), 0:12.0 long, "
+                      "and saved it as Own.mp3.", lines)
+        self.assertIn("- Intro over music from 0:00.0: Intro_v4_music.mp3", lines)
+        self.assertIn("- Outro over music from 0:04.0: Outro_v4_music.mp3", lines)
+        self.assertIn("New intro over Music Bed.wav (Intro_v4_music.mp3)", lines)
+        self.assertNotIn("1AbCdEfGhIjKlMnOp", lines)
+        # Later runs reuse the saved copy without the link.
+        self.legacy.requests.get.reset_mock()
+        self.uploads.clear()
+        with mock.patch.object(run_podcast, "narrate", side_effect=self.fake_narrate):
+            lines = "\n".join(intro_outro.record(self.legacy, config, self.workflow, self.dir / "again"))
+        self.legacy.requests.get.assert_not_called()
+        self.assertIn("Music: reusing Own.mp3 from Cloud Storage (the show's own music track (Music Bed.wav)", lines)
+        self.assertNotIn("Own.mp3", self.uploads)
+        # With no saved copy and no link, the voice-only candidates still come out.
+        config["music"]["file"] = "Missing.mp3"
+        with mock.patch.object(run_podcast, "narrate", side_effect=self.fake_narrate):
+            lines = "\n".join(intro_outro.record(self.legacy, config, self.workflow, self.dir / "third"))
+        self.assertIn("Missing.mp3 is not in Cloud Storage yet; run the action with music_link set", lines)
+
+    def test_music_link_errors_never_show_the_link(self):
+        import requests
+
+        link = "https://drive.google.com/file/d/1SecretFileId1234567/view"
+
+        def forbidden():
+            raise requests.HTTPError("403 Client Error: Forbidden for url: https://drive.usercontent.google.com/"
+                                     "download?id=1SecretFileId1234567", response=SimpleNamespace(status_code=403))
+
+        self.legacy.requests.get = mock.Mock(return_value=SimpleNamespace(headers={}, raise_for_status=forbidden))
+        with self.assertRaises(RuntimeError) as caught:
+            intro_outro.fetch_music(self.legacy, link, self.dir)
+        self.assertEqual(str(caught.exception), "downloading the music failed (HTTP 403)")
+        self.assertIsNone(caught.exception.__cause__)
+        self.legacy.requests.get = mock.Mock(side_effect=requests.ConnectionError(f"Max retries with url: {link}"))
+        with self.assertRaises(RuntimeError) as caught:
+            intro_outro.fetch_music(self.legacy, link, self.dir)
+        self.assertEqual(str(caught.exception), "downloading the music failed (ConnectionError)")
 
     def test_record_saves_both_candidates_and_a_review_file(self):
         lines, compose = self.record(email=True)

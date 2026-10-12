@@ -65,24 +65,35 @@ Episodes join the intro, narration and outro named in the `merge_audio` step of
   the run), and the opening of older episodes.
 - `inspect` (read-only) reports each current clip's length, loudness, pauses and
   ElevenLabs transcript, and the original generation if it is still in
-  ElevenLabs history.
+  ElevenLabs history. With the show's own track as the music, it also
+  describes the track (length, level over time, tempo) and finds where the
+  current clips' music sits in it and how far under the voice it was.
 - `record` narrates the text in `intro_outro.json` with the episode voice and
-  model and makes two candidates per clip: voice only (`Intro_v4.mp3`) and over
-  a light synth bed (`Intro_v4_music.mp3`). The bed is synthesized by
-  `synth_bed.py` in one of two styles: `upbeat` (the default in
-  `intro_outro.json`: a relaxed 112 BPM groove with electric-piano-like bells,
-  a pulsing bass, soft drums and pads) or `calm` (soft pads, a gentle arpeggio
-  and a low bass at 100 BPM). Set `"source": "eleven"` to use Eleven Music
-  instead, which needs the API key's music_generation permission, or
-  `"source": "url"` with `"url"` set to a direct audio link, a Google Drive
-  share link (General access "Anyone with the link"), or a song page that names
-  its audio (such as a Suno song page) to use your own track;
-  `"start_seconds"` picks where in the track the bed starts. The bed sits
-  about 9 LU under the voice on its own, ducks under speech, and is saved once
-  (`IntroOutro_music_bed_upbeat.mp3`) so later re-records reuse the same music; rename it in `intro_outro.json` to compose a
-  new one, or upload your own track under that name to use it instead. Candidates
-  are leveled to the current intro, saved to Cloud Storage under their new
-  names, and attached to the run with a review MP3 (current clip, then each
+  model and makes two candidates per clip: voice only (the clip's `file`, e.g.
+  `Intro_v4.mp3`) and over the music bed (its `music_file`). The bed is one of:
+  - The show's own track (`"source": "url"`; now `Music Bed.wav`, the music
+    under the original intro and outro). Give its link as the action's
+    `music_link` input; a Google Drive share link works once its General
+    access is "Anyone with the link". The repo and its logs are public, so the
+    link is masked and never committed. `record` saves the track to Cloud
+    Storage as the music's `file`, so later runs need no link. A link that may be public
+    can go in `"url"` instead.
+  - A synth bed from `synth_bed.py` (`"source": "synth"`) in one of two
+    styles: `upbeat` (a relaxed 112 BPM groove with electric-piano-like bells,
+    a pulsing bass, soft drums and pads) or `calm` (soft pads, a gentle
+    arpeggio and a low bass at 100 BPM).
+  - Eleven Music (`"source": "eleven"`), which needs the API key's
+    music_generation permission.
+
+  `"start_seconds"` picks where in the track the bed starts; a clip's own
+  `"music"` settings (e.g. `{"start_seconds": 30}` on the outro) override the
+  shared ones. The bed starts `lead_in_seconds` before the voice, sits about
+  `below_voice_lu` (9) LU under it on its own, ducks under speech, and fades
+  out `tail_seconds` after it; a track that runs out sooner plays once and
+  fades at its end. The bed is saved once (as the music's `file`) so later
+  re-records reuse the same music; change that name to make or download a new one. Candidates are
+  leveled to the current intro, saved to Cloud Storage under their new names,
+  and attached to the run with a review MP3 (current clip, then each
   candidate) that is also emailed when `send_email` is on. It never overwrites
   the old files; episodes switch only when the workflow files name a
   candidate, so switching back is a one-line change.
