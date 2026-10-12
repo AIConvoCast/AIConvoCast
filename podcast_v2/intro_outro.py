@@ -203,6 +203,21 @@ def compose_music(legacy, music, seconds, output):
     return Path(output)
 
 
+MUSIC_SOURCES = {
+    "synth": "a light synth bed made for the show (soft pads, a gentle arpeggio and a low bass)",
+    "eleven": "a light synth bed from Eleven Music",
+}
+
+
+def make_music_bed(legacy, music, seconds, work):
+    """Compose a bed of at least `seconds`: synthesized here (default) or by Eleven Music."""
+    if music.get("source", "synth") == "eleven":
+        return compose_music(legacy, music, seconds, Path(work) / "music_bed.mp3")
+    from podcast_v2 import synth_bed
+
+    return synth_bed.compose(seconds, Path(work) / "music_bed.wav", seed=int(music.get("seed", 7)))
+
+
 def mix_over_music(voice, music, output, music_settings):
     """Voice over the bed: lead-in, ducking under speech, fade out after the tail."""
     lead = float(music_settings["lead_in_seconds"])
@@ -213,12 +228,14 @@ def mix_over_music(voice, music, output, music_settings):
     gain = (float(measure_loudness(voice)["input_i"]) - float(music_settings["below_voice_lu"])
             - float(measure_loudness(music)["input_i"]))
     fade = min(2.5, tail)
+    # The bed is thinned below 70 Hz and around 350 Hz so it leaves room for the voice.
     graph = (f"[1:a]aresample=48000,aformat=channel_layouts=stereo,volume={gain:.2f}dB,"
+             "highpass=f=70,equalizer=f=350:t=q:w=1.0:g=-4,"
              f"atrim=0:{total:.3f},afade=t=in:st=0:d=0.8,afade=t=out:st={total - fade:.3f}:d={fade:.3f}[bed];"
              f"[0:a]aresample=48000,aformat=channel_layouts=stereo,adelay={int(lead * 1000)}:all=1,"
              f"apad=whole_dur={total:.3f}[voice];"
              "[voice]asplit=2[key][speech];"
-             "[bed][key]sidechaincompress=threshold=0.02:ratio=4:attack=20:release=500[ducked];"
+             "[bed][key]sidechaincompress=threshold=0.02:ratio=4:attack=20:release=900[ducked];"
              "[ducked][speech]amix=inputs=2:duration=first:normalize=0[out]")
     subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", "-y", "-i", str(voice), "-i", str(music),
                     "-filter_complex", graph, "-map", "[out]", "-c:a", "pcm_s16le", str(output)],
@@ -296,11 +313,15 @@ def record(legacy, config, workflow, out_dir, email=False):
         lines.append(f"Music: reusing {music['file']} from Cloud Storage.")
     else:
         try:
-            bed = compose_music(legacy, music, needed, work / "music_bed.mp3")
-            if not legacy.upload_audio_to_gcs(bed, music["file"]):
+            bed = make_music_bed(legacy, music, needed, work)
+            saved = bed
+            if bed.suffix.lower() == ".wav":  # keep the WAV for mixing, save an MP3 copy
+                saved = work / "music_bed_upload.mp3"
+                legacy.export_audio(AudioSegment.from_wav(bed), saved, bitrate=legacy.DEFAULT_MP3_EXPORT_BITRATE)
+            if not legacy.upload_audio_to_gcs(saved, music["file"]):
                 raise RuntimeError(f"Uploading {music['file']} to Cloud Storage failed.")
-            lines.append(f"Music: composed a {duration_seconds(bed):.0f}-second bed with Eleven Music "
-                         f"and saved it as {music['file']}.")
+            lines.append(f"Music: composed {MUSIC_SOURCES[music.get('source', 'synth')]}, "
+                         f"{duration_seconds(bed):.0f} seconds, and saved it as {music['file']}.")
         except Exception as error:  # the voice-only candidates are still worth reviewing
             bed, music_problem = None, str(error)
             lines.append(f"Music: unavailable, so only voice-only candidates were made ({music_problem}).")
@@ -337,8 +358,9 @@ def record(legacy, config, workflow, out_dir, email=False):
         *timeline,
         "",
         "The new versions use the episode voice on Eleven v4."
-        + (" The music versions sit over a new light synth bed from Eleven Music." if bed else
-           " Light synth music versions could not be made this time because Eleven Music refused the request;"
+        + (f" The music versions sit over {MUSIC_SOURCES[music.get('source', 'synth')]}, ducked under the "
+           "voice, with a short lead-in and fade-out." if bed else
+           f" Light synth music versions could not be made this time ({music_problem});"
            " the voice-only versions match the current clips, which have no music under them."),
         "Reply with which intro and outro to use (voice only" + (", with music" if bed else "")
         + ", or keep the current ones). Episodes keep the current intro and outro until you approve a change.",
