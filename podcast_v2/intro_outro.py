@@ -427,14 +427,41 @@ def music_description(music):
     return f"a synth bed made for the show ({STYLES[music.get('style', 'calm')]})"
 
 
+DRIVE_ID = re.compile(r"drive\.google\.com/(?:file/d/|open\?id=|uc\?(?:[^#]*&)?id=)([\w-]{10,})"
+                      r"|docs\.google\.com/uc\?(?:[^#]*&)?id=([\w-]{10,})")
+
+
+def direct_link(url):
+    """Turn a Google Drive share link into its direct download link; other links pass through."""
+    match = DRIVE_ID.search(url)
+    if not match:
+        return url
+    return f"https://drive.usercontent.google.com/download?id={match.group(1) or match.group(2)}&export=download&confirm=t"
+
+
+def audio_suffix(response, url):
+    kind = response.headers.get("Content-Type", "").lower()
+    named = re.search(r'filename\*?=(?:UTF-8\'\')?"?([^";]+)', response.headers.get("Content-Disposition", ""))
+    name = (named.group(1) if named else url.split("?")[0]).lower()
+    for suffix in (".wav", ".mp3", ".m4a", ".flac", ".aac", ".ogg"):
+        if name.endswith(suffix) or suffix[1:] in kind:
+            return suffix
+    return ".wav" if "wave" in kind else ".mp3"
+
+
 def fetch_music(legacy, url, work):
-    """Download a track from a direct audio link, or from a page that names one (such as a Suno song page)."""
+    """Download a track from a direct audio link, a shared Google Drive file, or a page that names one
+    (such as a Suno song page)."""
     import html
 
-    response = legacy.requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=(10, 120))
+    drive = DRIVE_ID.search(url) is not None
+    url = direct_link(url)
+    response = legacy.requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=(10, 300))
     response.raise_for_status()
-    audio_link = url.lower().split("?")[0].endswith((".mp3", ".wav", ".m4a"))
-    if not response.headers.get("Content-Type", "").startswith("audio/") and not audio_link:
+    if response.headers.get("Content-Type", "").startswith("text/html"):
+        if drive:
+            raise RuntimeError("Google Drive did not share that file; set its General access to "
+                               "'Anyone with the link' and try again.")
         page = response.text
         found = (re.search(r'property="og:audio"[^>]*content="([^"]+)"', page)
                  or re.search(r'content="([^"]+)"[^>]*property="og:audio"', page)
@@ -446,7 +473,7 @@ def fetch_music(legacy, url, work):
         response.raise_for_status()
     if not response.content:
         raise RuntimeError("The music link returned no audio.")
-    path = Path(work) / "music_source.mp3"
+    path = Path(work) / f"music_source{audio_suffix(response, url)}"
     path.write_bytes(response.content)
     return path
 

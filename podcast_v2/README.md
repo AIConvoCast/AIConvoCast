@@ -74,8 +74,9 @@ Episodes join the intro, narration and outro named in the `merge_audio` step of
   a pulsing bass, soft drums and pads) or `calm` (soft pads, a gentle arpeggio
   and a low bass at 100 BPM). Set `"source": "eleven"` to use Eleven Music
   instead, which needs the API key's music_generation permission, or
-  `"source": "url"` with `"url"` set to a direct MP3 link or a song page that
-  names its audio (such as a Suno song page) to use your own track;
+  `"source": "url"` with `"url"` set to a direct audio link, a Google Drive
+  share link (General access "Anyone with the link"), or a song page that names
+  its audio (such as a Suno song page) to use your own track;
   `"start_seconds"` picks where in the track the bed starts. The bed sits
   about 9 LU under the voice on its own, ducks under speech, and is saved once
   (`IntroOutro_music_bed_upbeat.mp3`) so later re-records reuse the same music; rename it in `intro_outro.json` to compose a

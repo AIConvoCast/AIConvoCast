@@ -946,6 +946,27 @@ class IntroOutroTests(unittest.TestCase):
             intro_outro.fetch_music(self.legacy, "https://example.com/page", self.dir)
         self.assertEqual(intro_outro.music_description({"source": "url"}), "the show's own music track")
 
+    def test_google_drive_links_download_directly(self):
+        direct = "https://drive.usercontent.google.com/download?id=1AbCdEfGhIjKlMnOp&export=download&confirm=t"
+        for link in ("https://drive.google.com/file/d/1AbCdEfGhIjKlMnOp/view?usp=sharing",
+                     "https://drive.google.com/open?id=1AbCdEfGhIjKlMnOp",
+                     "https://drive.google.com/uc?export=download&id=1AbCdEfGhIjKlMnOp"):
+            self.assertEqual(intro_outro.direct_link(link), direct)
+        self.assertEqual(intro_outro.direct_link("https://example.com/a.mp3"), "https://example.com/a.mp3")
+        wav = SimpleNamespace(headers={"Content-Type": "application/octet-stream",
+                                       "Content-Disposition": 'attachment; filename="Music Bed.wav"'},
+                              content=b"RIFF....WAVE", text="", raise_for_status=lambda: None)
+        self.legacy.requests.get = mock.Mock(return_value=wav)
+        path = intro_outro.fetch_music(self.legacy, "https://drive.google.com/file/d/1AbCdEfGhIjKlMnOp/view",
+                                       self.dir)
+        self.assertEqual((path.name, path.read_bytes()), ("music_source.wav", b"RIFF....WAVE"))
+        self.assertEqual(self.legacy.requests.get.call_args.args[0], direct)
+        signin = SimpleNamespace(headers={"Content-Type": "text/html; charset=utf-8"}, content=b"<html>",
+                                 text="<html>Sign in</html>", raise_for_status=lambda: None)
+        self.legacy.requests.get = mock.Mock(return_value=signin)
+        with self.assertRaisesRegex(RuntimeError, "Anyone with the link"):
+            intro_outro.fetch_music(self.legacy, "https://drive.google.com/file/d/1AbCdEfGhIjKlMnOp/view", self.dir)
+
     def test_record_saves_both_candidates_and_a_review_file(self):
         lines, compose = self.record(email=True)
         compose.assert_called_once()
