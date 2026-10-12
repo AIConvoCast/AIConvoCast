@@ -109,6 +109,122 @@ def bucket_root_files(legacy):
     return sorted(files, key=lambda f: f[2] or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
 
 
+def spectral_flatness(path, start, end):
+    """0 for tonal sound such as music, towards 1 for noise, over 100-5000 Hz (None if too short)."""
+    import numpy as np
+
+    raw = subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", "-ss", f"{start:.3f}", "-to", f"{end:.3f}",
+                          "-i", str(path), "-ac", "1", "-ar", "16000", "-f", "s16le", "-"],
+                         check=True, capture_output=True).stdout
+    samples = np.frombuffer(raw, dtype="<i2").astype(float)
+    if len(samples) < 3200:
+        return None
+    power = np.abs(np.fft.rfft(samples * np.hanning(len(samples)))) ** 2 + 1e-12
+    freqs = np.fft.rfftfreq(len(samples), 1 / 16000)
+    band = power[(freqs >= 100) & (freqs <= 5000)]
+    return float(np.exp(np.mean(np.log(band))) / np.mean(band))
+
+
+def quiet_spans(words, length, minimum=0.4):
+    """(start, end) of stretches with no speech: before the first word, pauses, after the last."""
+    spoken = [w for w in words if w.get("type") == "word" and "start" in w and "end" in w]
+    if not spoken:
+        return [(0.0, length)]
+    edges = [0.0] + [x for w in spoken for x in (w["start"], w["end"])] + [length]
+    spans = [(edges[i] + 0.05, edges[i + 1] - 0.05) for i in range(0, len(edges), 2)]
+    return [(a, b) for a, b in spans if b - a >= minimum]
+
+
+def describe_background(path, words, length):
+    """One line on whether the quiet stretches hold music: level and spectral flatness."""
+    spans = quiet_spans(words, length)
+    if not spans:
+        return "no pauses long enough to measure."
+    measured = []
+    for start, end in spans:
+        level = segment_level(path, start, end)
+        if level is not None:
+            measured.append((level, start, end))
+    if not measured:
+        return "no pauses long enough to measure."
+    level, start, end = max(measured)
+    flatness = spectral_flatness(path, start, end)
+    verdict = ("likely music" if level > -45 and flatness is not None and flatness < 0.2
+               else "likely just silence or room noise" if level < -50 else "unclear")
+    return (f"loudest quiet stretch {start:.1f}-{end:.1f} s at {level:.0f} dBFS, spectral flatness "
+            f"{'n/a' if flatness is None else f'{flatness:.2f}'} ({verdict}).")
+
+
+def object_versions(legacy, name):
+    """Every stored generation of a bucket object (more than one only if versioning is on)."""
+    bucket = legacy.get_gcs_client().bucket(legacy.GCS_BUCKET_NAME)
+    return sorted(((b.generation, b.updated, b.size or 0) for b in bucket.list_blobs(prefix=name, versions=True)
+                   if b.name == name), key=lambda v: v[1])
+
+
+def download_version(legacy, name, generation, path):
+    bucket = legacy.get_gcs_client().bucket(legacy.GCS_BUCKET_NAME)
+    bucket.blob(name, generation=generation).download_to_filename(str(path))
+    return Path(path)
+
+
+def episode_samples(legacy, before, count=4):
+    """Older episodes (podcasts/ folder), spread evenly over those made before `before`."""
+    names = sorted(n for n in legacy.list_files_in_gcs_folder("podcasts/") if n.endswith(".mp3"))
+    older = [n for n in names if Path(n).name[:8] < before.strftime("%Y%m%d")]
+    if len(older) <= count:
+        return older
+    step = (len(older) - 1) / (count - 1)
+    return [older[round(i * step)] for i in range(count)]
+
+
+def clip_start(path, seconds, output):
+    subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", "-y", "-t", f"{seconds}", "-i", str(path),
+                    "-c:a", "pcm_s16le", str(output)], check=True, capture_output=True)
+    return Path(output)
+
+
+def history(legacy, config, work):
+    """Look for the music that older intros and outros used: stored versions and older episodes."""
+    work = Path(work)
+    work.mkdir(parents=True, exist_ok=True)
+    lines = ["## Earlier intros and outros", ""]
+    newest = None
+    for name, clip in config["clips"].items():
+        try:
+            versions = object_versions(legacy, clip["source"])
+        except Exception as error:
+            lines += [f"Could not list versions of {clip['source']} ({error}).", ""]
+            continue
+        lines.append(f"### {clip['source']}: {len(versions)} stored version(s)")
+        for generation, updated, size in versions:
+            lines.append(f"- {updated:%Y-%m-%d}, {size / 1e6:.2f} MB (generation {generation})")
+            if name == "intro":
+                newest = max(newest or updated, updated)
+        for generation, updated, size in versions[:-1]:  # older generations only
+            try:
+                path = download_version(legacy, clip["source"], generation, work / f"{name}_{generation}.mp3")
+                text, events, words = transcribe(legacy, path)
+                lines.append(f"  - {updated:%Y-%m-%d}: \"{text[:120]}\" events: {', '.join(events) or 'none'}; "
+                             + describe_background(path, words, duration_seconds(path)))
+            except Exception as error:
+                lines.append(f"  - {updated:%Y-%m-%d}: could not analyse ({error}).")
+        lines.append("")
+    if newest:
+        lines += [f"### Older episodes (before the current intro, {newest:%Y-%m-%d}): first 25 seconds", ""]
+        for blob in episode_samples(legacy, newest):
+            try:
+                episode = legacy.download_mp3_file_from_gcs(blob)
+                start = clip_start(episode, 25, work / f"{Path(blob).stem[:15]}_start.wav")
+                text, events, words = transcribe(legacy, start)
+                lines.append(f"- {Path(blob).name[:8]}: \"{text[:120]}\" events: {', '.join(events) or 'none'}; "
+                             + describe_background(start, words, 25.0))
+            except Exception as error:
+                lines.append(f"- {blob}: could not analyse ({error}).")
+        lines.append("")
+    return lines
+
+
 def transcribe(legacy, path):
     """ElevenLabs Speech to Text with audio-event tags, e.g. (music)."""
     with open(path, "rb") as audio:
@@ -391,12 +507,16 @@ def main(argv=None):
     action = parser.add_mutually_exclusive_group(required=True)
     action.add_argument("--inspect", action="store_true", help="Describe and transcribe the current clips.")
     action.add_argument("--record", action="store_true", help="Make, save and review the new candidates.")
+    action.add_argument("--history", action="store_true",
+                        help="Look for the music older intros and outros used (stored versions, older episodes).")
     parser.add_argument("--email", action="store_true", help="With --record, email the review file.")
     args = parser.parse_args(argv)
     legacy = run_podcast.load_legacy()
     config = load_config()
     if args.inspect:
         report(inspect(legacy, config))
+    elif args.history:
+        report(history(legacy, config, Path(legacy.MP3_OUTPUT_DIR) / "history"))
     else:
         workflow = run_podcast.load_json(run_podcast.WORKFLOW_PATH)
         report(record(legacy, config, workflow, Path(legacy.MP3_OUTPUT_DIR) / "intro_outro", email=args.email))

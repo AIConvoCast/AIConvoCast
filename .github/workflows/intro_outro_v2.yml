@@ -5,6 +5,9 @@ name: Intro and Outro V2
 #            whether it sits over music, the original ElevenLabs generation if it
 #            is still in history, and the files at the top of the bucket.
 #            Read-only.
+#   history: looks for the music that older intros and outros used: stored
+#            versions of Intro.mp3/Outro.mp3 and the start of older episodes.
+#            Read-only.
 #   record:  narrates the text in podcast_v2/intro_outro.json with the episode
 #            voice and model, makes a voice-only and a light-synth-music version
 #            of each clip (the light synth bed is made once by
@@ -28,6 +31,7 @@ on:
         options:
           - inspect
           - record
+          - history
         default: inspect
       send_email:
         description: 'With record, email the review file to the usual episode address'

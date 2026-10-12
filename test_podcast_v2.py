@@ -858,6 +858,30 @@ class IntroOutroTests(unittest.TestCase):
         self.assertTrue(all(level < -80 for level in dry.values()))
         self.assertTrue(all(-40 < level < -25 for level in music.values()))
 
+    def test_quiet_spans_and_flatness_tell_music_from_noise(self):
+        import numpy as np
+        from pydub.generators import Sine, WhiteNoise
+
+        words = [{"type": "word", "start": 1.0, "end": 2.0}, {"type": "word", "start": 2.2, "end": 3.0},
+                 {"type": "word", "start": 4.0, "end": 5.0}]
+        self.assertEqual([(round(a, 2), round(b, 2)) for a, b in intro_outro.quiet_spans(words, 6.0)],
+                         [(0.05, 0.95), (3.05, 3.95), (5.05, 5.95)])
+        Sine(440, sample_rate=44100).to_audio_segment(duration=1000).apply_gain(-20).export(
+            self.dir / "tone.wav", format="wav")
+        WhiteNoise(sample_rate=44100).to_audio_segment(duration=1000).apply_gain(-20).export(
+            self.dir / "noise.wav", format="wav")
+        self.assertLess(intro_outro.spectral_flatness(self.dir / "tone.wav", 0, 1), 0.05)
+        self.assertGreater(intro_outro.spectral_flatness(self.dir / "noise.wav", 0, 1), 0.4)
+        self.assertIn("likely music", intro_outro.describe_background(self.dir / "tone.wav", [], 1.0))
+
+    def test_episode_samples_spread_over_older_episodes(self):
+        from datetime import datetime, timezone
+
+        names = [f"podcasts/2026{m:02d}01_160000_Episode.mp3" for m in range(1, 11)] + ["podcasts/notes.txt"]
+        self.legacy.list_files_in_gcs_folder = lambda prefix: names
+        picked = intro_outro.episode_samples(self.legacy, datetime(2026, 4, 26, tzinfo=timezone.utc), count=3)
+        self.assertEqual([Path(p).name[:8] for p in picked], ["20260101", "20260301", "20260401"])
+
     def test_bucket_listing_shows_only_top_level_files(self):
         from datetime import datetime, timezone
 
