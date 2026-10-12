@@ -3,20 +3,24 @@ name: Intro and Outro V2
 # Inspects or re-records the episode intro and outro with the narration voice.
 #   inspect: reports each current clip's length, loudness, pauses, transcript and
 #            whether it sits over music, the original ElevenLabs generation if it
-#            is still in history, and the files at the top of the bucket.
-#            Read-only.
+#            is still in history, and the files at the top of the bucket. With
+#            the show's own track as the music, also describes the track and
+#            where the current clips' music sits in it. Read-only.
 #   history: looks for the music that older intros and outros used: stored
 #            versions of Intro.mp3/Outro.mp3 and the start of older episodes.
 #            Read-only.
 #   record:  narrates the text in podcast_v2/intro_outro.json with the episode
-#            voice and model, makes a voice-only and a light-synth-music version
-#            of each clip (the light synth bed is made once by
-#            podcast_v2/synth_bed.py and reused), levels them to the current
-#            intro, saves them to Cloud
-#            Storage under new names (the old files are untouched), attaches
-#            them and a review MP3 to the run, and emails the review file when
-#            send_email is on. Episodes keep the current clips until
-#            workflow.json and topic_workflow.json name a new one.
+#            voice and model, makes a voice-only and a with-music version of
+#            each clip (over a synth bed from podcast_v2/synth_bed.py or the
+#            show's own track, saved once and reused), levels them to the
+#            current intro, saves them to Cloud Storage under new names (the old
+#            files are untouched), attaches them and a review MP3 to the run, and
+#            emails the review file when send_email is on. Episodes keep the
+#            current clips until workflow.json and topic_workflow.json name a
+#            new one.
+# music_link: a link to the show's own track (a Google Drive share link works),
+#            needed until record has saved the track to Cloud Storage. The repo
+#            and its logs are public, so the link is masked and never printed.
 
 permissions:
   contents: read
@@ -38,6 +42,11 @@ on:
         required: false
         type: boolean
         default: true
+      music_link:
+        description: 'Optional link to your own music track (e.g. a Google Drive share link); kept out of the logs'
+        required: false
+        type: string
+        default: ''
 
 concurrency:
   group: intro-outro-v2
@@ -71,6 +80,16 @@ jobs:
       - name: Create Google credentials file
         run: |
           echo '${{ secrets.GOOGLE_CREDS_JSON }}' > jmio-google-api.json
+
+      # Read from the event file, not ${{ }}, so the link never shows in the printed script.
+      - name: Hide the music link
+        run: |
+          link=$(jq -r '.inputs.music_link // ""' "$GITHUB_EVENT_PATH")
+          if [ -n "$link" ]; then
+            echo "::add-mask::$link"
+            for part in $(grep -oE '[A-Za-z0-9_-]{16,}' <<< "$link"); do echo "::add-mask::$part"; done
+            echo "MUSIC_LINK=$link" >> "$GITHUB_ENV"
+          fi
 
       - name: Intro and outro
         run: python podcast_v2/intro_outro.py --${{ inputs.action }} ${{ inputs.action == 'record' && inputs.send_email && '--email' || '' }}

@@ -1,25 +1,27 @@
 {
   "music": {
-    "file": "IntroOutro_music_bed_upbeat.mp3",
-    "source": "synth",
-    "style": "upbeat",
-    "seed": 7,
+    "file": "IntroOutro_music_bed_original.mp3",
+    "source": "url",
+    "name": "Music Bed.wav",
+    "start_seconds": 1616.4,
     "lead_in_seconds": 1.5,
     "tail_seconds": 2.5,
     "below_voice_lu": 9,
+    "style": "upbeat",
+    "seed": 7,
     "prompt": "Light, modern synth background music for a technology news podcast intro and outro: soft warm synth pads, a gentle plucked arpeggio and a subtle steady pulse, optimistic and calm, around 100 BPM, no vocals, no big build-ups or drops, an even level throughout so it sits under a spoken voiceover."
   },
   "clips": {
     "intro": {
       "source": "Intro.mp3",
       "file": "Intro_v4.mp3",
-      "music_file": "Intro_v4_music.mp3",
+      "music_file": "Intro_v4_original_music.mp3",
       "text": "Welcome to AI Convo Cast, where we bring you the latest in AI and tech innovation. Please don't forget to rate, review, and share if you like what you hear. Let's jump right in."
     },
     "outro": {
       "source": "Outro.mp3",
       "file": "Outro_v4.mp3",
-      "music_file": "Outro_v4_music.mp3",
+      "music_file": "Outro_v4_original_music.mp3",
       "text": "Thank you for listening to AI Convo Cast. Please don't forget to rate, review, and share if you like what you hear. Thanks, and hope to see you again next time."
     }
   }
