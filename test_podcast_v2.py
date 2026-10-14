@@ -135,6 +135,21 @@ class PodcastV2ConfigTests(unittest.TestCase):
         models = {"models": [{"name": "m", "web_search": False, "available": True}]}
         self.assertIn("does not support web search", run_podcast.validate_workflow(workflow, models)[0])
 
+    def test_prompts_ask_for_model_feedback_and_a_reception_round_up(self):
+        import news_research
+
+        prompts = run_podcast.V2_DIR / "prompts"
+        research = [(prompts / "P10.txt").read_text(), (prompts / "P8.txt").read_text(),
+                    news_research.RESEARCH_INSTRUCTIONS.replace("\n", " ")]
+        for text in research:
+            self.assertIn("reception round-up", text)
+            self.assertIn("not only the last 24 hours", text)
+        self.assertIn("reception of any frontier model released in the past week", research[0])
+        self.assertIn("first on any new or upgraded model release", research[0])
+        for name in ("P4.txt", "script_tuning.txt"):
+            self.assertIn("what early users, developers or researchers say it is strong at",
+                          (prompts / name).read_text())
+
     def test_recent_episodes_match_v1_format(self):
         text = run_podcast.format_recent_episodes(RSS, 2)
         self.assertEqual(text, "Title: Newest & best\nDescription Short: Short one.\n\n"

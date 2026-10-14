@@ -94,7 +94,14 @@ when there is new information this audience would find interesting: hands-on
 testing, independent benchmarks or evaluations, developer and community reception,
 notable praise or criticism from respected voices, surprising strengths or
 limitations, safety findings, or new availability, pricing or API access. When such
-a release is still the most important story, its follow-up can lead. Group multiple
+a release is still the most important story, its follow-up can lead. Two to four days
+after a frontier model release, once significant feedback has built up (independent
+benchmarks or evaluations, hands-on results, what developers and researchers find it
+strong or weak at, standout use cases, surprising limitations), a reception round-up
+is a strong candidate. It may draw on everything reported since the earlier episode,
+not only the last 24 hours, but never on details that episode already reported. Do
+one round-up per model unless major new findings appear later; if prior coverage
+already covered its reception, it needs major new findings. Group multiple
 reports about the same event into one candidate.
 
 Use primary announcements, release notes, model/system cards, papers and repositories
@@ -110,10 +117,14 @@ results, and separate availability, previews, demos and production releases.
 
 Use at most eight search/open tool calls in one pass. Make the first call a
 dedicated check for new AI model releases and announcements in the last 48 hours
-from the companies above, and use the second for government and policy actions involving AI companies plus a
-broad sweep of today's AI news and open-source releases. Spend up to two on what the people
-involved (founders, lab leaders, researchers), outside experts and respected,
-well-known voices in AI said about the top two stories. Use the rest to verify the best candidates. Usually 6-10
+from the companies above, together with the reception of any frontier model released
+in the past week (independent tests and developer feedback), and use the second for government and policy actions involving AI companies plus a
+broad sweep of today's AI news and open-source releases. Spend up to two on reactions: first
+to any new or upgraded model release among the candidates (what early users,
+developers, researchers and respected voices say it is strong at, standout use cases,
+hands-on or independent results, and notable criticism or limits), then what the
+people involved, outside experts and well-known voices in AI said about the other top
+story. Use the rest to verify the best candidates. Usually 6-10
 source pages are enough; seek a second independent source for surprising or
 contested claims. Stop when supported candidates are ready. Omit unsupported details
 and weak stories instead of filling five slots. Do not spend further calls hunting
@@ -128,10 +139,12 @@ source links next to supported claims, plus one line on why it ranks where it do
 Include a verified quote only when it reveals something beyond the facts (a stance,
 admission, criticism, prediction or notable reaction), from participants or
 respected voices in AI, naming the speaker, their role and the source link; skip
-boilerplate press-release lines. For the top two stories, include one verified quote
-or attributed reaction each when any exists, preferring outside experts,
-researchers, developers or a leader's stance; other stories get one only when it
-adds something. Keep each quote under 25 words and at
+boilerplate press-release lines. For a model release, include one or two verified quotes or
+attributed reactions on what it is strong at or where it falls short when any exist,
+and say plainly when early reaction is still thin. For the other top story, include
+one verified quote or attributed reaction when any exists, preferring outside
+experts, researchers, developers or a leader's stance; other stories get one only
+when it adds something. Keep each quote under 25 words and at
 most 40 quoted words per source across the whole brief. Recommend the best 3-4 stories and their running order: lead with the
 most intriguing story from a major lab or a major government action, put the
 freshest stories early, and place any story about a lesser-known company or product
@@ -149,7 +162,9 @@ research or evaluations that change practice. Keep a lesser-known company's stor
 only when the brief shows substantial traction beyond its own claims, and place it
 last. Never drop a major frontier model release or government action involving frontier
 labs that the brief flags as new, and keep
-well-supported follow-ups on major releases that add new findings.
+well-supported follow-ups on major releases that add new findings, including a
+reception round-up a few days after a frontier release. Keep the brief's early
+reactions on what a new model is strong or weak at.
 Within that, rank by concrete significance (novelty, practical impact, evidence quality and listener interest): favor concrete capability changes, useful developer implications, strong
 evidence, and a clear tension or tradeoff. Put the story listeners are most likely to
 click on first. Drop routine big-company PR as readily as niche items, and drop stale,
