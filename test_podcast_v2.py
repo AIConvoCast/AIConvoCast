@@ -682,6 +682,10 @@ def importable(name):
         return True
     except Exception:
         return False
+    except BaseException as error:  # e.g. a Rust extension panicking while it loads
+        if isinstance(error, (KeyboardInterrupt, SystemExit)):
+            raise
+        return False
 
 
 @unittest.skipUnless(shutil.which("ffmpeg") and importable("podcast_email"), "needs ffmpeg and the email libraries")
