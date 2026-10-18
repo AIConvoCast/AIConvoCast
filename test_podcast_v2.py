@@ -676,6 +676,97 @@ class ElevenV4Tests(unittest.TestCase):
 
 
 @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "ffmpeg is not installed")
+def importable(name):
+    try:
+        __import__(name)
+        return True
+    except Exception:
+        return False
+
+
+@unittest.skipUnless(shutil.which("ffmpeg") and importable("podcast_email"), "needs ffmpeg and the email libraries")
+class ResendEpisodeTests(unittest.TestCase):
+    EPISODE = "podcasts/20261018_200653_New_Title.mp3"
+    DESCRIPTION = "Title:\nNew Title\n\nDescription:\nIn this episode, we discuss things."
+
+    def setUp(self):
+        from podcast_v2 import resend_episode
+
+        self.resend_episode = resend_episode
+        self.dir = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.dir)
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "sine=f=440:d=70", "-ac", "2",
+                        "-ar", "48000", "-b:a", "192k", str(self.dir / "episode.mp3")], check=True)
+        self.files = {
+            "podcasts/": ["podcasts/20261015_200101_Old_Title.mp3", self.EPISODE, "podcasts/notes.txt"],
+            "descriptions/": ["descriptions/20261015_195959_Old_Title.txt",
+                              "descriptions/20261018_200451_New_Title.txt"],
+        }
+        self.legacy = SimpleNamespace(
+            MP3_OUTPUT_DIR=self.dir, send_podcast_email=mock.Mock(),
+            list_files_in_gcs_folder=lambda prefix: self.files[prefix],
+            download_mp3_file_from_gcs=lambda name: self.dir / "episode.mp3" if name == self.EPISODE else None,
+            download_file_from_gcs=self.download_text)
+        self.quiet = contextlib.redirect_stdout(io.StringIO())
+        self.quiet.__enter__()
+        self.addCleanup(self.quiet.__exit__, None, None, None)
+
+    def download_text(self, blob, path):
+        if blob != "descriptions/20261018_200451_New_Title.txt":
+            return None
+        Path(path).write_text(self.DESCRIPTION, encoding="utf-8")
+        return path
+
+    def damage(self, keep=None):
+        data = bytearray((self.dir / "episode.mp3").read_bytes())
+        if keep:
+            data = data[:keep]
+        else:
+            data[len(data) // 2:len(data) // 2 + 4000] = bytes([0x55]) * 4000
+        (self.dir / "episode.mp3").write_bytes(bytes(data))
+
+    def test_a_sound_episode_is_checked_and_sent_again_with_its_names(self):
+        lines, problems = self.resend_episode.resend(self.legacy)
+        text = "\n".join(lines)
+        self.assertEqual(problems, [])
+        self.assertIn(f"Episode: {self.EPISODE}", text)
+        self.assertIn("Description: descriptions/20261018_200451_New_Title.txt", text)
+        self.assertRegex(text, r"Format: mp3, codec mp3, 48000 Hz, 2 channel\(s\), 192 kbps, 70\.0 s reported")
+        self.assertRegex(text, r"Full decode: 70\.0 s of audio, 0 decoder error\(s\)")
+        self.assertIn("audio/mpeg, base64, named '20261018_200653_New_Title.mp3'; identical to the episode file", text)
+        self.assertTrue(text.endswith("All checks passed, and the episode email was sent again."))
+        args, kwargs = self.legacy.send_podcast_email.call_args
+        self.assertEqual((Path(args[0]).name, args[1]), ("episode.mp3", self.DESCRIPTION))
+        self.assertEqual((kwargs["audio_filename"], kwargs["description_filename"]),
+                         ("20261018_200653_New_Title.mp3", "20261018_200451_New_Title.txt"))
+
+    def test_check_only_sends_nothing(self):
+        lines, problems = self.resend_episode.resend(self.legacy, check_only=True)
+        self.assertEqual(problems, [])
+        self.assertIn("Check only, so nothing was emailed.", lines[-1])
+        self.legacy.send_podcast_email.assert_not_called()
+
+    def test_a_damaged_or_cut_short_episode_is_not_sent(self):
+        self.damage()
+        lines, problems = self.resend_episode.resend(self.legacy)
+        self.assertTrue(any("decoder error(s), first:" in p for p in problems), problems)
+        self.assertIn("The episode was not emailed again.", lines[-1])
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "sine=f=440:d=70", "-ac", "2",
+                        "-ar", "48000", "-b:a", "192k", str(self.dir / "episode.mp3")], check=True)
+        self.damage(keep=len((self.dir / "episode.mp3").read_bytes()) // 2)
+        lines, problems = self.resend_episode.resend(self.legacy)
+        self.assertTrue(any("does not match the reported 70.0 s" in p for p in problems), problems)
+        self.legacy.send_podcast_email.assert_not_called()
+
+    def test_an_episode_without_a_matching_description_is_not_sent(self):
+        self.files["descriptions/"] = ["descriptions/20261015_195959_Old_Title.txt"]
+        lines, problems = self.resend_episode.resend(self.legacy)
+        self.assertIn("no description text for this episode", problems)
+        self.legacy.send_podcast_email.assert_not_called()
+        self.assertEqual(self.resend_episode.pick_episode(self.legacy, "podcasts/20261015_200101_Old_Title.mp3"),
+                         ("podcasts/20261015_200101_Old_Title.mp3", "descriptions/20261015_195959_Old_Title.txt"))
+
+
 class AudioPolishTests(unittest.TestCase):
     def setUp(self):
         from pydub.generators import Sine
