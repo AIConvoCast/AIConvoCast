@@ -112,6 +112,17 @@ manages the clips:
   the old files; episodes switch only when the workflow files name a
   candidate, so switching back is a one-line change.
 
+## Resending an episode
+
+If the emailed episode won't open, run the **Resend V2 Episode Email** action
+(`resend_episode.py`). It takes the newest episode in `podcasts/` (or the one
+named in `episode`) and its description in `descriptions/`, checks that the MP3
+decodes from start to end without errors and matches its reported length, and
+that the email built from it carries the file intact and under Gmail's size
+limit. It then emails the episode again with the same attachment names, but only
+if every check passes; `check_only` stops after the checks. Nothing is
+regenerated or uploaded.
+
 ## Changing a model
 
 Edit the `model` (and `web_search`) of the step in `workflow.json`, using the

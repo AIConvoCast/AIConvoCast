@@ -1,0 +1,77 @@
+name: Resend V2 Episode Email
+
+# Checks a finished episode in Cloud Storage (the newest in podcasts/ unless one is
+# named) and its description in descriptions/: that the MP3 decodes from start to
+# end without errors and matches its reported length, and that the episode email
+# built from it carries the file intact and under Gmail's size limit. Unless
+# check_only is on, it then emails the episode again, as the daily run does, but
+# only if every check passes. Nothing is regenerated or uploaded.
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      check_only:
+        description: 'Only check the episode; do not email it'
+        required: false
+        type: boolean
+        default: false
+      episode:
+        description: 'Episode to check (optional), e.g. podcasts/20261018_200653_Title.mp3; default is the newest'
+        required: false
+        type: string
+        default: ''
+
+concurrency:
+  group: resend-v2-episode
+  cancel-in-progress: false
+
+jobs:
+  resend:
+    name: Check and resend the episode
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install ffmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Create Google credentials file
+        run: |
+          echo '${{ secrets.GOOGLE_CREDS_JSON }}' > jmio-google-api.json
+
+      - name: Check and resend
+        run: python podcast_v2/resend_episode.py ${{ inputs.check_only && '--check-only' || '' }}
+        env:
+          # The shared pipeline module checks for both keys when it loads.
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          # Passed through the environment, never pasted into the shell command.
+          EPISODE: ${{ inputs.episode }}
+          PODCAST_EMAIL_BACKEND: gmail_api
+          PODCAST_EMAIL_FROM: AIConvoCast@gmail.com
+          PODCAST_EMAIL_TO: ianeoconnell@gmail.com
+          GMAIL_OAUTH_TOKEN_B64: ${{ secrets.GMAIL_OAUTH_TOKEN_B64 }}
+          PODCAST_SMTP_USERNAME: ${{ secrets.PODCAST_SMTP_USERNAME }}
+          PODCAST_SMTP_PASSWORD: ${{ secrets.PODCAST_SMTP_PASSWORD }}
+
+      - name: Cleanup
+        if: always()
+        run: rm -rf generated_mp3/ jmio-google-api.json
