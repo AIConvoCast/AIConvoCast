@@ -57,7 +57,7 @@ jobs:
       - name: Build current episodes and search metadata
         run: python build_site.py --output public
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
           path: 'public'
       - name: Deploy to GitHub Pages
