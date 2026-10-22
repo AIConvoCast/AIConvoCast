@@ -196,7 +196,7 @@ jobs:
 
       - name: Upload generated audio files
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: generated-audio-files-${{ github.run_id }}
           path: |
@@ -206,7 +206,7 @@ jobs:
 
       - name: Upload logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pipeline-logs-${{ github.run_id }}
           path: |
