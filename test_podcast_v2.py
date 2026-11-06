@@ -160,6 +160,9 @@ class PodcastV2ConfigTests(unittest.TestCase):
             self.assertIn("election results", text)
             self.assertIn("credible reports of upcoming frontier models", text)
             self.assertIn("report politics neutrally, without taking sides", text)
+        for text in research:
+            self.assertIn("next flagship model is close", text)
+            self.assertIn("a major election or other political shift", text)
         self.assertIn("then check the political landscape", research[0])
         self.assertIn("Use at most ten search/open tool calls", research[1])
         for name in ("P4.txt", "script_tuning.txt"):

@@ -96,7 +96,12 @@ limited previews and early-access releases, saying who can use it; and (2) a maj
 government action involving frontier labs or their leaders, such as a White House or
 government agreement or accord signed by lab CEOs, an executive order, major
 legislation, or an investigation, lawsuit or ruling against a frontier lab. Do not
-drop either kind for a smaller story.
+drop either kind for a smaller story. Also make candidates of these, unless prior
+coverage already includes them, though they need not lead: (3) credible new reporting
+that a frontier lab's next flagship model is close, such as a reputable outlet
+reporting a release window or the model's name appearing in the lab's own products,
+with what it is expected to bring; and (4) a major election or other political shift
+with clear consequences for AI policy or AI infrastructure, with what it may mean.
 
 Prior coverage: do not return a story whose main event appears in the supplied prior
 coverage. A follow-up qualifies only with substantial new evidence reported after
