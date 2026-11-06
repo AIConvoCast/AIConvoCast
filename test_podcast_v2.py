@@ -150,6 +150,24 @@ class PodcastV2ConfigTests(unittest.TestCase):
             self.assertIn("what early users, developers or researchers say it is strong at",
                           (prompts / name).read_text())
 
+    def test_prompts_watch_politics_and_upcoming_releases(self):
+        import news_research
+
+        prompts = run_podcast.V2_DIR / "prompts"
+        research = [(prompts / "P10.txt").read_text(), news_research.RESEARCH_INSTRUCTIONS.replace("\n", " ")]
+        for text in research:
+            self.assertIn("Look ahead as well as back.", text)
+            self.assertIn("election results", text)
+            self.assertIn("credible reports of upcoming frontier models", text)
+            self.assertIn("report politics neutrally, without taking sides", text)
+        for text in research:
+            self.assertIn("next flagship model is close", text)
+            self.assertIn("a major election or other political shift", text)
+        self.assertIn("then check the political landscape", research[0])
+        self.assertIn("Use at most ten search/open tool calls", research[1])
+        for name in ("P4.txt", "script_tuning.txt"):
+            self.assertIn("what is reported, expected or analysis", (prompts / name).read_text())
+
     def test_recent_episodes_match_v1_format(self):
         text = run_podcast.format_recent_episodes(RSS, 2)
         self.assertEqual(text, "Title: Newest & best\nDescription Short: Short one.\n\n"

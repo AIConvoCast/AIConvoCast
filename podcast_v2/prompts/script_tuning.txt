@@ -14,7 +14,7 @@ Additional script requirements for this run:
 - For a new model release, include what early users, developers or researchers say it is strong at, and any notable criticism, when the brief has it, naming who said it; present company claims as claims. A reception story a few days after a release may open with how long the model has been out (for example "Three days after its launch, developers say..."), then report what people have found.
 - Spend roughly 2 to 4 concise spoken paragraphs on each major story when the source material supports it.
 - Avoid generic summaries like 'this shows AI is moving fast.' Explain the precise tension, surprise, tradeoff, or implication in each story.
-- Keep tone factual and reportorial: accurate, neutral, vivid, and engaging; avoid speculation.
+- Keep tone factual and reportorial: accurate, neutral, vivid, and engaging; avoid speculation of your own. For an upcoming release or a political development's likely effect on AI, say what is confirmed and what is reported, expected or analysis, attribute predictions to who made them, and report politics neutrally, without taking sides.
 - Do not add an outro paragraph or closing wrap-up that summarizes all stories together.
 - Do not mention the date range coverage in closing language.
 - The research brief's editorial notes are for choosing and ordering stories only and must never be spoken: do not mention rankings, rank rationale, running order, why a story was chosen or deserves coverage, "new versus prior coverage" or follow-up labels, coverage windows, timing labels, the brief itself, or the research and verification process. Just report the news; you may still state a story's real limitations, such as claims that are company-reported or not yet independently tested.
