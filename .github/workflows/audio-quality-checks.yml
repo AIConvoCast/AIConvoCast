@@ -20,6 +20,7 @@ on:
       - 'test_scheduled_podcast.py'
       - 'requirements.txt'
       - '.github/workflows/audio-quality-checks.yml'
+      - '.github/scripts/install_ffmpeg.sh'
       - '.github/workflows/ai_podcast_pipeline.yml'
       - '.github/workflows/manual_ai_podcast_pipeline.yml'
       - '.github/workflows/ai_podcast_pipeline_v2.yml'
@@ -43,6 +44,7 @@ on:
       - 'test_scheduled_podcast.py'
       - 'requirements.txt'
       - '.github/workflows/audio-quality-checks.yml'
+      - '.github/scripts/install_ffmpeg.sh'
       - '.github/workflows/ai_podcast_pipeline.yml'
       - '.github/workflows/manual_ai_podcast_pipeline.yml'
       - '.github/workflows/ai_podcast_pipeline_v2.yml'
@@ -71,9 +73,8 @@ jobs:
           python-version: '3.12'
 
       - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
+        # Retries from archive.ubuntu.com if the default mirror stalls.
+        run: bash .github/scripts/install_ffmpeg.sh
 
       - name: Install pipeline dependencies
         run: |
