@@ -164,9 +164,54 @@ class PodcastV2ConfigTests(unittest.TestCase):
             self.assertIn("next flagship model is close", text)
             self.assertIn("a major election or other political shift", text)
         self.assertIn("then check the political landscape", research[0])
-        self.assertIn("Use at most ten search/open tool calls", research[1])
+        self.assertIn("Use at most twelve search/open tool calls", research[1])
         for name in ("P4.txt", "script_tuning.txt"):
             self.assertIn("what is reported, expected or analysis", (prompts / name).read_text())
+
+    def test_prompts_put_ai_leaders_first_and_handle_allegations_with_care(self):
+        import news_research
+
+        prompts = run_podcast.V2_DIR / "prompts"
+        research = [(prompts / "P10.txt").read_text(), news_research.RESEARCH_INSTRUCTIONS.replace("\n", " ")]
+        for text in research:
+            self.assertRegex(text, r"\(?2[.)] [Mm]ajor news about the leaders of AI technology companies")
+            self.assertIn("a major story about the leader of a frontier lab or big AI technology company", text)
+            self.assertIn("since the most recent episode was recorded", text)
+            self.assertIn("leave out salacious detail", text)
+            self.assertIn("public leaders such as heads of government and lawmakers", text)
+            self.assertIn("a sharp market reaction to major news belongs in that story", text)
+        self.assertIn("most-covered AI and technology-company headlines in major outlets", research[0])
+        for name in ("P4.txt", "script_tuning.txt"):
+            text = (prompts / name).read_text()
+            self.assertIn("major story about a leader of a frontier lab or big AI technology company", text)
+            self.assertIn("leave out salacious detail", text)
+        self.assertIn("major stories about AI company leaders", (prompts / "P8.txt").read_text())
+
+    def test_prior_coverage_says_when_the_last_episode_was_recorded(self):
+        from datetime import datetime, timedelta, timezone
+
+        now = datetime.now(timezone.utc)
+        thursday = now - timedelta(days=3)
+        names = [f"descriptions/{(now - timedelta(hours=2)):%Y%m%d_%H%M%S}_Earlier_Attempt_Today.txt",
+                 f"descriptions/{thursday:%Y%m%d_%H%M%S}_Thursday_Episode.txt",
+                 f"descriptions/{(now - timedelta(days=4)):%Y%m%d_%H%M%S}_Wednesday_Episode.txt",
+                 "descriptions/notes.txt"]
+        with tempfile.TemporaryDirectory() as directory:
+            legacy = FakeLegacy(directory)
+            legacy.list_files_in_gcs_folder = lambda folder: names
+            runner = run_podcast.Runner({"steps": []}, legacy)
+            self.assertEqual(runner.last_recorded(now=now), thursday.replace(microsecond=0))
+            feed = [{"title": "Thursday Episode", "short": "Short.", "published": now - timedelta(days=2)}]
+            with mock.patch.object(runner, "fetch_feed", return_value=feed), \
+                    mock.patch.object(runner, "generated_missing_from_feed", return_value=[]), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                text = runner.run_recent_episodes({"feed_url": "https://feed", "count": 5})
+        eastern = thursday.astimezone(run_podcast.ZoneInfo("America/New_York"))
+        self.assertTrue(text.startswith(f"Most recent episode recorded: {eastern:%A, %B %d, %Y, %I:%M %p} ET\n\n"
+                                        "Title: Thursday Episode\nDescription Short: Short."), text)
+        legacy.list_files_in_gcs_folder = mock.Mock(side_effect=RuntimeError("no creds"))
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertIsNone(runner.last_recorded())
 
     def test_recent_episodes_match_v1_format(self):
         text = run_podcast.format_recent_episodes(RSS, 2)

@@ -16,6 +16,7 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 V2_DIR = Path(__file__).resolve().parent
 REPO_ROOT = V2_DIR.parent
@@ -363,6 +364,23 @@ class Runner:
             print(f"  ⚠️ Could not check generated episodes in GCS: {error}")
         return missing
 
+    def last_recorded(self, folder="descriptions/", now=None):
+        """When the newest earlier episode was made, from its saved description's UTC timestamp.
+
+        Episodes made within PUBLISH_GRACE (such as an earlier attempt today) do not count."""
+        list_files = getattr(self.legacy, "list_files_in_gcs_folder", None)
+        if list_files is None:
+            return None
+        now = now or datetime.now(timezone.utc)
+        try:
+            names = [Path(name).name for name in list_files(folder) or []]
+        except Exception as error:  # informational; the run goes on without it
+            print(f"  ⚠️ Could not read when the last episode was made: {error}")
+            return None
+        made = [datetime.strptime(match.group(1), "%Y%m%d_%H%M%S").replace(tzinfo=timezone.utc)
+                for match in map(GENERATED_NAME.search, names) if match]
+        return max((when for when in made if when <= now - PUBLISH_GRACE), default=None)
+
     def run_recent_episodes(self, step):
         episodes = self.fetch_feed(step["feed_url"])
         # Research must see prior coverage; never continue without it.
@@ -373,7 +391,14 @@ class Runner:
               f"published {newest:%Y-%m-%d %H:%M UTC}" if newest else f"  Feed: {len(episodes)} episodes")
         missing = self.generated_missing_from_feed(episodes)
         combined = sorted(missing + episodes, key=lambda e: e["published"] or OLDEST, reverse=True)
-        return format_episodes(combined[:int(step["count"]) + len(missing)])
+        listed = format_episodes(combined[:int(step["count"]) + len(missing)])
+        # Tells research where today's coverage window starts (Thursday's episode, on a Sunday).
+        last = self.last_recorded()
+        if not last:
+            return listed
+        eastern = last.astimezone(ZoneInfo("America/New_York"))
+        print(f"  Most recent episode recorded {eastern:%Y-%m-%d %H:%M} ET.")
+        return f"Most recent episode recorded: {eastern:%A, %B %d, %Y, %I:%M %p} ET\n\n{listed}"
 
     def run_model(self, step):
         texts = [self.resolve(part) for part in step["parts"]]
