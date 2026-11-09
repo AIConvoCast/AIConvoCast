@@ -181,6 +181,8 @@ class PodcastV2ConfigTests(unittest.TestCase):
             self.assertIn("public leaders such as heads of government and lawmakers", text)
             self.assertIn("a sharp market reaction to major news belongs in that story", text)
         self.assertIn("most-covered AI and technology-company headlines in major outlets", research[0])
+        for text in research:
+            self.assertIn("what public leaders", text)
         for name in ("P4.txt", "script_tuning.txt"):
             text = (prompts / name).read_text()
             self.assertIn("major story about a leader of a frontier lab or big AI technology company", text)

@@ -164,9 +164,11 @@ votes, rulings or rules taking effect), and the fifth for a broad sweep of today
 news and open-source releases. Spend up to two on reactions: first
 to any new or upgraded model release among the candidates (what early users,
 developers, researchers and respected voices say it is strong at, standout use cases,
-hands-on or independent results, and notable criticism or limits), then what the
-people involved, outside experts and well-known voices in AI said about the other top
-story. Use the rest to verify the best candidates. Usually 7-12
+hands-on or independent results, and notable criticism or limits), and to any major
+story about an AI company leader or government action (what public leaders such as
+the President or lawmakers, the company and the people involved have said), then what
+the people involved, outside experts and well-known voices in AI said about the other
+top story. Use the rest to verify the best candidates. Usually 7-12
 source pages are enough; seek a second independent source for surprising or
 contested claims. Stop when supported candidates are ready. Omit unsupported details
 and weak stories instead of filling five slots. Do not spend further calls hunting
@@ -184,7 +186,9 @@ voices in AI, or public leaders such as heads of government and lawmakers, namin
 speaker, their role and the source link; skip
 boilerplate press-release lines. For a model release, include one or two verified quotes or
 attributed reactions on what it is strong at or where it falls short when any exist,
-and say plainly when early reaction is still thin. For the other top story, include
+and say plainly when early reaction is still thin. For a major story about an AI
+company leader or government action, include one or two verified reactions from
+public leaders, the company or the people involved when any exist. For the other top story, include
 one verified quote or attributed reaction when any exists, preferring outside
 experts, researchers, developers, a leader's stance or a public leader's reaction;
 other stories get one only
