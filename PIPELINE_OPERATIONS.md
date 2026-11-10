@@ -82,7 +82,8 @@ the existing Google voice fallback. Retries do not replenish ElevenLabs credits.
 
 Selecting Astra web research runs one bounded **GPT-5.6 Sol source-discovery pass**,
 then one **GPT-6 Astra editorial pass**. Sol uses at most twelve web tool calls, low
-search context, low reasoning, and 3,200 output tokens. The improved instructions
+search context, low reasoning, and 8,000 output tokens (hidden reasoning counts toward
+that cap as well as the brief). The improved instructions
 require event dates, primary evidence, useful technical implications, independent
 corroboration for disputed claims, source attribution, and meaningful new material
 for follow-ups. Five weak stories are never preferred to fewer well-supported ones.

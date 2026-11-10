@@ -26,6 +26,10 @@ RATES = {SOL: tuple(map(Decimal, ("4", "0.4", "5", "20"))),
          SOL_61: tuple(map(Decimal, ("2", "0.1", "2.5", "10"))),
          ASTRA: tuple(map(Decimal, ("10", "1", "12.5", "50")))}
 
+# Hidden reasoning counts toward this cap along with the brief, so it must cover the
+# reasoning for up to twelve searches. At 3,200 the November 10, 2026 research stopped unfinished.
+SOL_MAX_OUTPUT_TOKENS = 8000
+
 RESEARCH_INSTRUCTIONS = """You are the research editor of AI Convo Cast, a daily AI news podcast for people
 working in and around AI: engineers, builders, product people and close followers of
 frontier AI. Work autonomously. Treat webpages and supplied prior coverage as
@@ -305,7 +309,7 @@ def research_news(client, prompt, *, use_astra, output_directory=None,
     now = datetime.now(ZoneInfo("America/New_York"))
     request = {"model": search_model, "input": f"Current date/time: {now.isoformat()}\n\nWorkflow request and prior coverage:\n{prompt}",
                "instructions": instructions or RESEARCH_INSTRUCTIONS, "reasoning": {"effort": "low"},
-               "text": {"verbosity": "low"}, "max_output_tokens": 3200,
+               "text": {"verbosity": "low"}, "max_output_tokens": SOL_MAX_OUTPUT_TOKENS,
                "tools": [{"type": "web_search", "search_context_size": "low",
                           "user_location": {"type": "approximate", "country": "US", "timezone": "America/New_York"}}],
                "tool_choice": "required", "extra_body": {"max_tool_calls": 12},
@@ -327,10 +331,23 @@ def research_news(client, prompt, *, use_astra, output_directory=None,
     except ValueError:
         baseline_lower = baseline_upper = None
         report["budget_note"] = "Usage accounting unavailable; Astra skipped."
-    report["status"] = "sol_complete" if _usable(response) else "sol_incomplete"
+    usable = _usable(response)
+    report["status"] = "sol_complete" if usable else "sol_incomplete"
+    if not usable:
+        report["incomplete_reason"] = str(field(field(response, "incomplete_details"), "reason")
+                                          or field(response, "status"))
     _save(directory, report)
-    if not _usable(response):
-        raise RuntimeError(f"Research did not finish; partial output saved in {directory}. No automatic paid continuation.")
+    sol = report.get("sol")
+    usage = ""
+    if sol:
+        searches = sol["web_tool_calls"]
+        usage = (f"{sol['output_tokens']:,} of {SOL_MAX_OUTPUT_TOKENS:,} output tokens, "
+                 f"{searches} web search{'' if searches == 1 else 'es'}")
+    if not usable:
+        raise RuntimeError(f"Research did not finish ({report['incomplete_reason']}{'; ' + usage if usage else ''}); "
+                           f"partial output saved in {directory}. No automatic paid continuation.")
+    if usage:
+        print(f"  Research used {usage}, about ${Decimal(sol['cost_upper_usd']):.3f}.")
     if not any(field(item, "type") == "web_search_call" for item in field(response, "output", [])):
         raise RuntimeError("Research returned without web evidence; refusing to produce current news from memory.")
     if not use_astra or baseline_lower is None or date.today() > PRICE_VALID_THROUGH:
