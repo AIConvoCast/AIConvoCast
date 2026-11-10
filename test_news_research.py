@@ -63,6 +63,20 @@ class ResearchBudgetTests(unittest.TestCase):
         # 4,000 input at $2/M + 2,500 output at $10/M + one $0.01 search, with no cache.
         self.assertEqual(Decimal(report["sol"]["cost_lower_usd"]), Decimal("0.043"))
 
+    def test_unfinished_research_names_the_reason_and_usage_and_is_not_retried(self):
+        unfinished = response(SOL_61, text="1. Partial brief", outgoing=8000)
+        unfinished.status = "incomplete"
+        unfinished.incomplete_details = Obj(reason="max_output_tokens")
+        self.client.responses.create.side_effect = [unfinished]
+        with self.assertRaisesRegex(RuntimeError, r"Research did not finish \(max_output_tokens; 8,000 of 8,000 "
+                                                  r"output tokens, 1 web search\); partial output saved"):
+            research_news(self.client, "Current AI news", use_astra=False,
+                          output_directory=self.temp.name, search_model=SOL_61)
+        self.client.responses.create.assert_called_once()
+        self.assertEqual(self.client.responses.create.call_args.kwargs["max_output_tokens"], 8000)
+        report = self.report()
+        self.assertEqual((report["status"], report["incomplete_reason"]), ("sol_incomplete", "max_output_tokens"))
+
     def test_unpriced_search_model_is_refused_before_any_paid_call(self):
         with self.assertRaises(ValueError):
             research_news(self.client, "Current AI news", use_astra=False,
