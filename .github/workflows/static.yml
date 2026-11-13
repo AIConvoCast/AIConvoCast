@@ -40,7 +40,7 @@ jobs:
   deploy:
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.deployment.outputs.page_url || steps.deployment_retry.outputs.page_url }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -60,8 +60,22 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           path: 'public'
+      # GitHub's artifact list can lag just behind an upload. On November 13, 2026 the
+      # deploy looked 0.3 s after a slow upload and failed with "No artifacts named
+      # github-pages were found". So a failed deploy is tried once more after a pause.
+      # The upload is not repeated (a second github-pages artifact would itself fail).
       - name: Deploy to GitHub Pages
         id: deployment
+        continue-on-error: true
+        uses: actions/deploy-pages@v4
+      - name: Wait before retrying the deployment
+        if: steps.deployment.outcome == 'failure'
+        run: |
+          echo "::warning::The Pages deployment failed; trying once more in 30 seconds."
+          sleep 30
+      - name: Retry the deployment
+        id: deployment_retry
+        if: steps.deployment.outcome == 'failure'
         uses: actions/deploy-pages@v4
       - name: Check certificate provisioning and HTTPS enforcement
         env:
