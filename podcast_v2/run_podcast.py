@@ -53,6 +53,32 @@ def load_script_tuning(prompts_dir=PROMPTS_DIR):
     return (Path(prompts_dir) / "script_tuning.txt").read_text(encoding="utf-8").strip()
 
 
+def _day(value):
+    return f"{value:%A, %B} {value.day}"
+
+
+def episode_timing(prompts_dir=PROMPTS_DIR, now=None):
+    """prompts/episode_timing.txt with the recording time and the listeners' days filled in.
+
+    Episodes are posted the morning after they are made, so the script must call
+    the recording day "yesterday". A run after midnight Eastern still belongs to
+    that same morning's episode.
+    """
+    recorded = (now or datetime.now(timezone.utc)).astimezone(ZoneInfo("America/New_York"))
+    today = (recorded - timedelta(hours=6)).date() + timedelta(days=1)
+    fields = {
+        "recorded": f"on {_day(recorded)}, {recorded.year} at {recorded.hour % 12 or 12}:{recorded:%M %p}",
+        "published": f"{_day(today)}, {today.year}",
+        "today": _day(today),
+        "yesterday": _day(today - timedelta(days=1)),
+        "tomorrow": _day(today + timedelta(days=1)),
+    }
+    text = (Path(prompts_dir) / "episode_timing.txt").read_text(encoding="utf-8").strip()
+    for name, value in fields.items():
+        text = text.replace("{" + name + "}", value)
+    return text
+
+
 def validate_workflow(workflow, models, prompts_dir=PROMPTS_DIR):
     """Return a list of configuration problems; empty means the workflow can run."""
     problems = []
@@ -68,9 +94,9 @@ def validate_workflow(workflow, models, prompts_dir=PROMPTS_DIR):
         if "source" in step:
             refs.append(step["source"])
         for ref in refs:
-            if ref == "script_tuning":
-                if not (Path(prompts_dir) / "script_tuning.txt").is_file():
-                    problems.append(f"Step {step_id}: prompts/script_tuning.txt does not exist.")
+            if ref in ("script_tuning", "episode_timing"):
+                if not (Path(prompts_dir) / f"{ref}.txt").is_file():
+                    problems.append(f"Step {step_id}: prompts/{ref}.txt does not exist.")
                 continue
             if ref == "topic":
                 continue
@@ -301,6 +327,8 @@ class Runner:
     def resolve(self, ref):
         if ref == "script_tuning":
             return load_script_tuning(self.prompts_dir)
+        if ref == "episode_timing":
+            return episode_timing(self.prompts_dir)
         if ref == "topic":
             if not self.topic:
                 raise RuntimeError("This workflow needs a custom topic.")

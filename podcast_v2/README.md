@@ -12,6 +12,7 @@ action and its Google Sheet are unchanged but are now manual only.
 | `prompts/P20.txt`, `P21.txt`, `topic_*_system.txt` | Topic-episode research request, script prompt, and research/editor instructions. |
 | `prompts/P*.txt` | Prompt text, one file per prompt ID. |
 | `prompts/script_tuning.txt` | Claude script requirements (length, quotes, structure) added by the `script_tuning` part. |
+| `prompts/episode_timing.txt` | Episodes are posted the morning after they are made. The `episode_timing` part fills in the recording time and the listeners' today, yesterday and tomorrow, so the script says "yesterday" for the recording day. |
 | `models.json` | Known models by name, with web-search support and availability. |
 | `run_podcast.py` | The runner (`--check` validates only, `--no-email` skips the email). |
 | `eleven_v4.py` | Single-voice V4 narration through the Text to Dialogue REST API. |
@@ -154,7 +155,8 @@ and title/description it would write (still no audio, uploads or email).
 | `merge_audio` | Joins intro, narration and outro | `L1&L9&L2SL3T5` |
 
 Parts: `prompt:<id>`, `step:<step id>`, `script_tuning` (the contents of
-`prompts/script_tuning.txt`), `gcs_file:<path>`, `gcs_latest_text:<folder>`,
+`prompts/script_tuning.txt`), `episode_timing` (`prompts/episode_timing.txt`
+with the dates filled in), `gcs_file:<path>`, `gcs_latest_text:<folder>`,
 `gcs_latest_mp3:<folder>`. `title_from` names the step whose `Title:` line
 names the saved files.
 

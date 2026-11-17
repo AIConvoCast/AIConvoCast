@@ -27,6 +27,7 @@
       "parts": [
         "prompt:4",
         "script_tuning",
+        "episode_timing",
         "step:research",
         "text:Recent episodes, for reference only (never repeat their stories or details, and never mention them or say a story was covered before):",
         "step:recent_episodes"

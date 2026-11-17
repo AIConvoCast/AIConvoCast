@@ -230,6 +230,7 @@ class PodcastV2RunnerTests(unittest.TestCase):
             for pid in ("4", "8", "10", "12"):
                 (prompts / f"P{pid}.txt").write_text(f"P{pid} text\n")
             (prompts / "script_tuning.txt").write_text(TUNING)
+            (prompts / "episode_timing.txt").write_text("Heard on {today}.\n")
             legacy = FakeLegacy(directory)
             audio = FakeAudio()
             research_calls = []
@@ -251,8 +252,9 @@ class PodcastV2RunnerTests(unittest.TestCase):
         self.assertTrue(research_prompt.startswith("P10 text\n\nP8 text\n\nTitle: Newest & best"))
         script, title = legacy.calls
         self.assertEqual(script[1:], ("claude-opus-5-5", 0.7, True))
-        self.assertTrue(script[0].startswith("P4 text\n\nAdditional script requirements for this run:\n"
-                                             "- keep it tight\n\ngpt-6.1-sol output\n\nRecent episodes"))
+        # The timing comes after the requirements and before the research brief.
+        self.assertRegex(script[0], r"^P4 text\n\nAdditional script requirements for this run:\n"
+                                    r"- keep it tight\n\nHeard on \w+day, \w+ \d+\.\n\ngpt-6\.1-sol output\n\nRecent episodes")
         # The script writer sees prior coverage so follow-ups add only new details.
         self.assertTrue(script[0].endswith("Title: Oldest\nDescription Short: Short three."))
         self.assertEqual(title[1:], ("claude-opus-5-5", 0.7, False))
@@ -370,6 +372,66 @@ class PodcastV2GuardTests(unittest.TestCase):
         self.assertEqual(legacy.calls[0][0].count("Additional script requirements"), 1)
 
 
+class EpisodeTimingTests(unittest.TestCase):
+    """Episodes are posted the morning after they are made."""
+
+    def timing(self, utc):
+        return run_podcast.episode_timing(now=run_podcast.datetime.fromisoformat(utc))
+
+    def test_script_is_written_for_the_next_morning(self):
+        text = self.timing("2026-11-17T21:35:00+00:00")  # Tuesday, 4:35 PM Eastern
+        self.assertIn("recorded on Tuesday, November 17, 2026 at 4:35 PM ET and published on the "
+                      "morning of Wednesday, November 18, 2026", text)
+        self.assertIn('"Today" (and "tonight") means Wednesday, November 18, "yesterday" means '
+                      'Tuesday, November 17 and "tomorrow" means Thursday, November 19.', text)
+        self.assertIn("research brief were written when the episode was recorded", text)
+        self.assertNotIn("{", text)
+
+    def test_listeners_days_across_the_week_daylight_time_and_after_midnight(self):
+        cases = {
+            "2026-11-19T21:30:00+00:00": ("Friday, November 20", "Thursday, November 19"),  # Thursday's episode
+            "2026-11-22T21:30:00+00:00": ("Monday, November 23", "Sunday, November 22"),  # Sunday's episode
+            "2026-07-14T20:00:00+00:00": ("Wednesday, July 15", "Tuesday, July 14"),  # 4 PM daylight time
+            "2026-11-18T05:30:00+00:00": ("Wednesday, November 18", "Tuesday, November 17"),  # 12:30 AM run
+        }
+        for utc, (today, yesterday) in cases.items():
+            with self.subTest(utc=utc):
+                self.assertIn(f'"Today" (and "tonight") means {today}, "yesterday" means {yesterday}',
+                              self.timing(utc))
+
+    def test_both_script_steps_read_the_timing_before_the_research(self):
+        for path in (run_podcast.WORKFLOW_PATH, run_podcast.TOPIC_WORKFLOW_PATH):
+            with self.subTest(path=path.name):
+                steps = {s["id"]: s for s in run_podcast.load_json(path)["steps"]}
+                parts = steps["script"]["parts"]
+                self.assertLess(parts.index("episode_timing"), parts.index("step:research"))
+
+    def test_script_prompt_carries_the_filled_in_timing(self):
+        legacy = FakeLegacy(tempfile.gettempdir())
+        runner = run_podcast.Runner({"steps": []}, legacy)
+        runner.outputs["research"] = "brief"
+        runner.run_model({"id": "script", "model": "claude-opus-5-5", "web_search": True,
+                          "parts": ["episode_timing", "step:research"]})
+        prompt = legacy.calls[0][0]
+        self.assertTrue(prompt.startswith("Episode timing: this episode is recorded on "))
+        self.assertTrue(prompt.endswith("\n\nbrief"))
+        self.assertNotIn("{", prompt)
+
+    def test_missing_timing_prompt_is_reported(self):
+        workflow = {"steps": [{"id": "s", "type": "model", "model": "m", "parts": ["episode_timing"]}]}
+        models = {"models": [{"name": "m", "web_search": False, "available": True}]}
+        with tempfile.TemporaryDirectory() as directory:
+            problems = run_podcast.validate_workflow(workflow, models, prompts_dir=directory)
+        self.assertEqual(problems, ["Step s: prompts/episode_timing.txt does not exist."])
+
+    def test_research_and_description_prompts_know_about_the_next_morning(self):
+        research = run_podcast.load_prompt("10")
+        self.assertIn("published the morning after this research runs", research)
+        self.assertIn("say when one falls on that publication day", research)
+        description = run_podcast.load_prompt("12")
+        self.assertIn("published the morning after it is made", description)
+
+
 class SyncFromSheetTests(unittest.TestCase):
     def test_sync_copies_active_workflow_prompts_and_eleven_settings(self):
         tabs = {
@@ -436,6 +498,7 @@ class TopicEpisodeTests(unittest.TestCase):
                 (prompts / f"{name}.txt").write_text(f"{name} text\n")
             (prompts / "topic_research_system.txt").write_text("TOPIC RESEARCH")
             (prompts / "topic_editor_system.txt").write_text("TOPIC EDITOR")
+            (prompts / "episode_timing.txt").write_text("Heard on {today}.\n")
             legacy = FakeLegacy(directory)
             legacy.client = object()
             legacy.LOCAL_ARTIFACTS.directory = Path(directory)
@@ -453,7 +516,7 @@ class TopicEpisodeTests(unittest.TestCase):
         self.assertIn("Title: Newest & best", prompt)  # prior episodes still inform the research
         (script, *script_settings), (title, *_) = legacy.calls
         self.assertEqual(script_settings, ["claude-opus-5-5", 0.7, True])
-        self.assertTrue(script.startswith("P21 text\n\nTopic for this episode:\n\nMeta Muse"))
+        self.assertRegex(script, r"^P21 text\n\nHeard on \w+day, \w+ \d+\.\n\nTopic for this episode:\n\nMeta Muse")
         self.assertTrue(script.endswith("topic brief"))
         self.assertNotIn("Additional script requirements", script + title)
         self.assertEqual([b.split("/")[0] for b in legacy.uploads],
