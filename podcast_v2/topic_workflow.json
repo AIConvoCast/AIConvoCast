@@ -30,6 +30,7 @@
       "web_search": true,
       "parts": [
         "prompt:21",
+        "episode_timing",
         "text:Topic for this episode:",
         "topic",
         "text:Research material to base the script on:",
