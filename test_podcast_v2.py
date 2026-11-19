@@ -13,7 +13,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from podcast_v2 import eleven_v4, intro_outro, run_podcast, sync_from_sheet, update_models
+from podcast_v2 import eleven_v4, google_voice, intro_outro, run_podcast, sync_from_sheet, update_models
 
 _SUMMARY_ENV = mock.patch.dict(os.environ, {"GITHUB_STEP_SUMMARY": ""})
 
@@ -449,6 +449,124 @@ class EpisodeTimingTests(unittest.TestCase):
         self.assertIn("say when one falls on that publication day", research)
         description = run_podcast.load_prompt("12")
         self.assertIn("published the morning after it is made", description)
+
+
+class GoogleVoiceTests(unittest.TestCase):
+    """The Google fallback: Gemini-TTS with a style prompt, and Chirp 3 HD behind it."""
+
+    @staticmethod
+    def wav(seconds=0.2):
+        import wave
+
+        buffer = io.BytesIO()
+        with wave.open(buffer, "wb") as out:
+            out.setnchannels(1)
+            out.setsampwidth(2)
+            out.setframerate(24000)
+            out.writeframes(b"\0\0" * int(24000 * seconds))
+        return buffer.getvalue()
+
+    def legacy(self, directory, chunks, client):
+        legacy = FakeLegacy(directory)
+        legacy.split_text_into_chunks = mock.Mock(return_value=chunks)
+        legacy.google_tts_client = client
+        legacy.texttospeech = SimpleNamespace(
+            VoiceSelectionParams=lambda **kwargs: ("voice", kwargs), AudioConfig=lambda **kwargs: ("config", kwargs),
+            SynthesisInput=lambda **kwargs: ("input", kwargs), AudioEncoding=SimpleNamespace(LINEAR16="LINEAR16"))
+        legacy.DEFAULT_MP3_EXPORT_BITRATE = "192k"
+
+        def merge(paths, output):
+            legacy.merged = [Path(path).read_bytes() for path in paths]
+            Path(output).write_bytes(b"joined")
+            return output
+        legacy.merge_multiple_audio_files = merge
+        legacy.export_audio = lambda audio, output, bitrate: Path(output).write_bytes(b"one part")
+        legacy.generate_google_voice_audio = mock.Mock(
+            side_effect=lambda text, voice, output: Path(output).write_bytes(b"chirp") and output)
+        return legacy
+
+    def test_settings_come_from_the_voice_step_over_the_defaults(self):
+        settings = google_voice.settings({"google_voice": {"voice": "Charon"}})
+        self.assertEqual((settings["model"], settings["voice"]), ("gemini-2.5-pro-tts", "Charon"))
+        self.assertIn("host of a daily AI news podcast", settings["prompt"])
+        for path in (run_podcast.WORKFLOW_PATH, run_podcast.TOPIC_WORKFLOW_PATH):
+            step = next(s for s in run_podcast.load_json(path)["steps"] if s["type"] == "voice")
+            self.assertEqual(google_voice.settings(step), google_voice.DEFAULTS)
+
+    def test_gemini_reads_each_part_with_the_style_prompt_and_joins_them(self):
+        client = mock.Mock()
+        client.synthesize_speech.return_value = SimpleNamespace(audio_content=self.wav())
+        with tempfile.TemporaryDirectory() as directory:
+            legacy = self.legacy(directory, ["Part one.", "Part two."], client)
+            path, label = google_voice.narrate(legacy, "Part one. Part two.", {}, Path(directory) / "out.mp3")
+            self.assertEqual(Path(path).read_bytes(), b"joined")
+        self.assertEqual(label, "Google Alnilam (gemini-2.5-pro-tts)")
+        legacy.split_text_into_chunks.assert_called_once_with("Part one. Part two.", max_length=3000, preserve_words=True)
+        first, second = client.synthesize_speech.call_args_list
+        self.assertEqual(first.kwargs["input"][1]["text"], "Part one.")
+        self.assertEqual(second.kwargs["input"][1]["text"], "Part two.")
+        self.assertIn("pause briefly between paragraphs", first.kwargs["input"][1]["prompt"])
+        self.assertEqual(first.kwargs["voice"][1],
+                         {"language_code": "en-US", "name": "Alnilam", "model_name": "gemini-2.5-pro-tts"})
+        self.assertEqual(first.kwargs["audio_config"][1], {"audio_encoding": "LINEAR16", "sample_rate_hertz": 24000})
+        self.assertEqual(len(legacy.merged), 2)
+        legacy.generate_google_voice_audio.assert_not_called()
+
+    def test_a_single_part_is_exported_as_it_is(self):
+        client = mock.Mock()
+        client.synthesize_speech.return_value = SimpleNamespace(audio_content=self.wav())
+        with tempfile.TemporaryDirectory() as directory:
+            legacy = self.legacy(directory, ["Only part."], client)
+            path, _ = google_voice.narrate(legacy, "Only part.", {}, Path(directory) / "out.mp3")
+            self.assertEqual(Path(path).read_bytes(), b"one part")
+
+    def test_a_gemini_failure_reads_the_whole_script_with_chirp_3(self):
+        client = mock.Mock()
+        client.synthesize_speech.side_effect = [SimpleNamespace(audio_content=self.wav()), RuntimeError("404 model")]
+        with tempfile.TemporaryDirectory() as directory:
+            legacy = self.legacy(directory, ["Part one.", "Part two."], client)
+            path, label = google_voice.narrate(legacy, "Part one. Part two.", {"google_fallback_voice_id": "1"},
+                                               Path(directory) / "out.mp3")
+            self.assertEqual(Path(path).read_bytes(), b"chirp")
+        self.assertEqual(label, "Google Alnilam (Chirp 3 HD)")
+        self.assertEqual(legacy.generate_google_voice_audio.call_args.args[:2], ("Part one. Part two.", "Alnilam"))
+
+    def test_an_empty_model_uses_chirp_3_only(self):
+        client = mock.Mock()
+        with tempfile.TemporaryDirectory() as directory:
+            legacy = self.legacy(directory, ["Part one."], client)
+            _, label = google_voice.narrate(legacy, "Part one.", {"google_voice": {"model": ""}}, Path(directory) / "out.mp3")
+        client.synthesize_speech.assert_not_called()
+        self.assertEqual(label, "Google Alnilam (Chirp 3 HD)")
+
+    def test_an_elevenlabs_quota_error_reads_the_episode_with_gemini(self):
+        client = mock.Mock()
+        client.synthesize_speech.return_value = SimpleNamespace(audio_content=self.wav())
+        with tempfile.TemporaryDirectory() as directory:
+            legacy = self.legacy(directory, ["A short script."], client)
+            runner = run_podcast.Runner({"steps": []}, legacy, audio=FakeAudio())
+            step = next(s for s in run_podcast.load_json(run_podcast.WORKFLOW_PATH)["steps"] if s["type"] == "voice")
+            with mock.patch.object(runner, "resolve", return_value="A short script."):
+                result = runner.run_voice(step)
+            self.assertTrue(result.endswith("v2_narration_google.mp3"))
+        self.assertEqual(runner.narration, "Google Alnilam (gemini-2.5-pro-tts) (ElevenLabs credit/quota error)")
+        legacy.generate_google_voice_audio.assert_not_called()
+
+    def test_google_voice_sample_counts_every_failed_voice(self):
+        client = mock.Mock()
+        client.synthesize_speech.side_effect = RuntimeError("PERMISSION_DENIED")
+        with tempfile.TemporaryDirectory() as directory:
+            sample = Path(directory) / "sample.txt"
+            sample.write_text("A short sample.")
+            legacy = self.legacy(directory, ["A short sample."], client)
+            legacy.generate_google_voice_audio = mock.Mock(return_value=None)
+            workflow = run_podcast.load_json(run_podcast.WORKFLOW_PATH)
+            with mock.patch.dict(os.environ, {"GITHUB_STEP_SUMMARY": str(Path(directory) / "summary.md")}):
+                failures = run_podcast.google_voice_sample(workflow, legacy, text_path=sample)
+            summary = (Path(directory) / "summary.md").read_text()
+        self.assertEqual(failures, 3)  # Gemini in Alnilam and Charon, then Chirp 3 HD
+        self.assertIn("Gemini-TTS gemini-2.5-pro-tts, Alnilam (the episode setting): FAILED (RuntimeError: PERMISSION_DENIED)", summary)
+        self.assertIn("Chirp 3 HD, Alnilam (the backup, and the voice used before): FAILED", summary)
 
 
 class SyncFromSheetTests(unittest.TestCase):

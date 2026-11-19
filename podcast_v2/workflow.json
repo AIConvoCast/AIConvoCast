@@ -71,6 +71,11 @@
         "Stability": 0.39,
         "Similarity Boost": 0.7
       },
+      "google_voice": {
+        "model": "gemini-2.5-pro-tts",
+        "voice": "Alnilam",
+        "prompt": "Read this as the host of a daily AI news podcast: warm, confident and conversational, at a brisk but unhurried pace with clear diction. Stress names and numbers naturally, pause briefly between paragraphs, and keep the same voice and energy from start to finish. Say NVIDIA as en-VID-ee-uh, OpenAI as Open A I, and xAI as X A I."
+      },
       "google_fallback_voice_id": "1"
     },
     {

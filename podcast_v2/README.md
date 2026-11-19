@@ -40,17 +40,30 @@ match it, so there is no jump in volume after the intro.
 
 V4 does not support Speed or Style, so those fields are omitted. V3 also did not
 support the former Speed setting; no audio speed adjustment is added. The same
-voice ID can sound different on V4. Google fallback still uses Alnilam at 1.08
-on ElevenLabs credit/quota errors. If V4 fails for any other reason, the same
-voice is retried once on Eleven v3 so the episode still ships; the log and the
-run page's **Narration** line say which model and voice were used.
+voice ID can sound different on V4. If V4 fails for any reason other than
+credits or quota, the same voice is retried once on Eleven v3 so the episode
+still ships; the log and the run page's **Narration** line say which model and
+voice were used.
+
+When ElevenLabs is out of credits or quota, the Google voice reads the episode
+(`google_voice.py`). It uses Gemini-TTS (`gemini-2.5-pro-tts`) in the Alnilam
+voice, steered by a podcast-host style prompt, which sounds more natural than
+the plain Chirp 3 HD read. The model, voice and prompt are in the voice step's
+`google_voice` entry in both workflow files. If Google refuses the Gemini
+request (an unknown model, no access, an unsupported field), the whole script
+is read with Chirp 3 HD Alnilam at 1.08, as before. To use Chirp 3 HD only, set
+`google_voice.model` to `""`.
 
 To hear the voice before an episode uses it, run **Preview V2 Research** with
 `voice_sample` on. It narrates `voice_sample.txt` (two V4 requests, about 2,200
 characters, with no fallback so a V4 problem shows as a failure), attaches the
 MP3 (leveled to the intro, as in an episode) to the run as the `voice-sample`
 artifact, reports its pace and loudness next to the intro, outro and latest
-saved audio, and uploads or emails nothing.
+saved audio, and uploads or emails nothing. With `google_voice_sample` on, it
+instead reads the same text with Gemini-TTS in the episode's Google voice and in
+Charon, and with Chirp 3 HD, and attaches all three MP3s (a few cents of Google
+Text-to-Speech). A voice that fails is listed on the run page and marks the run
+as failed.
 
 To roll back narration, set `elevenlabs.Model` to `eleven_v3` in both workflow
 files. V2 still supports the existing Text to Speech helper for that model.
