@@ -81,7 +81,9 @@ Company-reported benchmarks alone are not enough. When one qualifies, say in one
 line who the company is and rank it after the major-lab and government stories
 unless it is clearly the day's biggest story. Deprioritize routine funding,
 valuations and stock moves (a sharp market reaction to major news belongs in that
-story), routine partnerships, enterprise integrations, minor point releases, research
+story; an IPO, listing or major acquisition involving a frontier lab or major AI
+company is not routine), routine partnerships, enterprise integrations, minor point
+releases, research
 curiosities with no near-term practical impact, generic predictions and promotional
 listicles. Use a click test: would an AI engineer or product lead find this
 intriguing enough to click on today? Prefer stories with surprise, tension or real
@@ -112,14 +114,19 @@ legislation, or an investigation, lawsuit or ruling against a frontier lab; and 
 a major story about the leader of a frontier lab or big AI technology company, such
 as a scandal, investigation, legal or national-security allegation, board action or
 sudden departure, especially one that moves markets or draws comment from heads of
-government or lawmakers. Do not drop any of these for a smaller story; the
-most-covered of them in major outlets normally leads. Also make candidates of these,
-unless prior coverage already includes them, though they need not lead: (4) credible
-new reporting
-that a frontier lab's next flagship model is close, such as a reputable outlet
-reporting a release window or the model's name appearing in the lab's own products,
-with what it is expected to bring; and (5) a major election or other political shift
-with clear consequences for AI policy or AI infrastructure, with what it may mean.
+government or lawmakers. So must (4) a major event set for the day this episode is
+published, the day after this research runs, that involves a frontier lab or major AI
+company, such as an IPO or first day of trading, a flagship launch event or keynote, a
+vote, hearing or ruling, a rule taking effect, or earnings from a company central to
+AI. Include the latest reporting around it (terms, expectations and what to watch),
+even when earlier episodes covered the plans; it can lead. Do not drop any of these
+for a smaller story; the most-covered of them in major outlets normally leads. Also
+make candidates of these, unless prior coverage already includes them, though they
+need not lead: (5) credible new reporting that a frontier lab's next flagship model
+is close, such as a reputable outlet reporting a release window or the model's name
+appearing in the lab's own products, with what it is expected to bring; and (6) a
+major election or other political shift with clear consequences for AI policy or AI
+infrastructure, with what it may mean.
 
 Prior coverage: do not return a story whose main event appears in the supplied prior
 coverage. A follow-up qualifies only with substantial new evidence reported after
@@ -163,8 +170,10 @@ major news about the leaders of the companies above and the day's most-covered A
 technology-company headlines in major outlets (such as Reuters, Bloomberg, AP, CNBC,
 The Wall Street Journal and The New York Times), the third for government, policy and
 political developments affecting AI (including elections and their consequences), the
-fourth for what is coming (upcoming or rumored frontier models, scheduled launches,
-votes, rulings or rules taking effect), and the fifth for a broad sweep of today's AI
+fourth for what is coming, starting with what is set for tomorrow, the publication day
+(IPOs and first trading days, launch events and keynotes, votes, hearings, rulings,
+rules taking effect and earnings), then upcoming or rumored frontier models, and the
+fifth for a broad sweep of today's AI
 news and open-source releases. Spend up to two on reactions: first
 to any new or upgraded model release among the candidates (what early users,
 developers, researchers and respected voices say it is strong at, standout use cases,
