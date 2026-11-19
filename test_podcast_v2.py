@@ -168,6 +168,25 @@ class PodcastV2ConfigTests(unittest.TestCase):
         for name in ("P4.txt", "script_tuning.txt"):
             self.assertIn("what is reported, expected or analysis", (prompts / name).read_text())
 
+    def test_prompts_cover_big_events_on_the_day_the_episode_is_published(self):
+        # The November 18 episode missed Anthropic's IPO, which began trading the morning it was posted.
+        import news_research
+
+        prompts = run_podcast.V2_DIR / "prompts"
+        for text in [(prompts / "P10.txt").read_text(), news_research.RESEARCH_INSTRUCTIONS.replace("\n", " ")]:
+            self.assertIn("So must (4) a major event set for the day this episode is published", text)
+            self.assertIn("such as an IPO or first day of trading", text)
+            self.assertIn("even when earlier episodes covered the plans; it can lead", text)
+            self.assertIn("an IPO, listing or major acquisition involving a frontier lab or major AI company is not routine", text)
+            self.assertIn("starting with what is set for tomorrow, the publication day", text)
+        self.assertIn("major event happening on the day listeners hear the episode", (prompts / "P4.txt").read_text())
+        tuning = (prompts / "script_tuning.txt").read_text()
+        self.assertIn("major event happening on the day listeners hear the episode", tuning)
+        self.assertIn("never describe how it went", tuning)
+        timing = run_podcast.episode_timing(now=run_podcast.datetime.fromisoformat("2026-11-18T22:00:00+00:00"))
+        self.assertIn("Anything set for Thursday, November 19, such as an IPO, launch event or vote, had not happened "
+                      "when the episode was recorded.", timing)
+
     def test_prompts_put_ai_leaders_first_and_handle_allegations_with_care(self):
         import news_research
 
