@@ -27,6 +27,18 @@ DEFAULTS = {
 # dashes take three bytes each, so stay well under it.
 CHUNK_CHARS = 3000
 TIMEOUT_SECONDS = 300
+# Narration runs about 13-17 characters a second. A part far outside this range
+# means Gemini skipped or dragged out text, so the script goes to Chirp 3 HD.
+PACE_RANGE = (8.0, 24.0)
+
+
+def seconds(wav_bytes):
+    """Length of a WAV file held in memory."""
+    import io
+    import wave
+
+    with wave.open(io.BytesIO(wav_bytes)) as audio:
+        return audio.getnframes() / audio.getframerate()
 
 
 def settings(step):
@@ -57,6 +69,11 @@ def gemini(legacy, text, google, output_path):
                 voice=voice, audio_config=config, timeout=TIMEOUT_SECONDS)
             if not response.audio_content:
                 raise RuntimeError(f"Gemini-TTS returned no audio for part {index} of {len(chunks)}.")
+            length = seconds(response.audio_content)
+            pace = len(chunk) / length if length else float("inf")
+            if not PACE_RANGE[0] <= pace <= PACE_RANGE[1]:
+                raise RuntimeError(f"Gemini-TTS part {index} read {len(chunk)} characters in {length:.1f} "
+                                   f"seconds ({pace:.1f} a second), outside normal speech.")
             part = Path(folder) / f"part_{index}.wav"
             part.write_bytes(response.audio_content)  # LINEAR16 arrives as a complete WAV file
             parts.append(part)

@@ -455,7 +455,7 @@ class GoogleVoiceTests(unittest.TestCase):
     """The Google fallback: Gemini-TTS with a style prompt, and Chirp 3 HD behind it."""
 
     @staticmethod
-    def wav(seconds=0.2):
+    def wav(seconds=0.6):
         import wave
 
         buffer = io.BytesIO()
@@ -531,6 +531,15 @@ class GoogleVoiceTests(unittest.TestCase):
         self.assertEqual(label, "Google Alnilam (Chirp 3 HD)")
         self.assertEqual(legacy.generate_google_voice_audio.call_args.args[:2], ("Part one. Part two.", "Alnilam"))
 
+    def test_a_part_read_far_too_fast_or_slow_goes_to_chirp_3(self):
+        for seconds in (0.05, 30.0):  # 17 characters: 340 or 0.6 characters a second
+            with self.subTest(seconds=seconds), tempfile.TemporaryDirectory() as directory:
+                client = mock.Mock()
+                client.synthesize_speech.return_value = SimpleNamespace(audio_content=self.wav(seconds))
+                legacy = self.legacy(directory, ["Seventeen chars.."], client)
+                _, label = google_voice.narrate(legacy, "Seventeen chars..", {}, Path(directory) / "out.mp3")
+                self.assertEqual(label, "Google Alnilam (Chirp 3 HD)")
+
     def test_an_empty_model_uses_chirp_3_only(self):
         client = mock.Mock()
         with tempfile.TemporaryDirectory() as directory:
@@ -541,7 +550,7 @@ class GoogleVoiceTests(unittest.TestCase):
 
     def test_an_elevenlabs_quota_error_reads_the_episode_with_gemini(self):
         client = mock.Mock()
-        client.synthesize_speech.return_value = SimpleNamespace(audio_content=self.wav())
+        client.synthesize_speech.return_value = SimpleNamespace(audio_content=self.wav(1.0))  # 15 characters
         with tempfile.TemporaryDirectory() as directory:
             legacy = self.legacy(directory, ["A short script."], client)
             runner = run_podcast.Runner({"steps": []}, legacy, audio=FakeAudio())
