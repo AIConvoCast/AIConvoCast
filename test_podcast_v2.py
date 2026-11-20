@@ -605,6 +605,73 @@ class GoogleVoiceTests(unittest.TestCase):
                                 model="gemini-x-tts", report=report)
         self.assertEqual(report["parts_lufs"], [-20.0, -21.0])
 
+    @staticmethod
+    def response(status, payload):
+        return SimpleNamespace(status_code=status, json=lambda: payload, text=json.dumps(payload))
+
+    def test_a_model_cloud_tts_does_not_offer_is_read_through_agent_platform(self):
+        client = mock.Mock()
+        client.synthesize_speech.side_effect = RuntimeError("400 The model 'gemini-3.8-flash-tts' is not supported.")
+        readers = []
+
+        def reader(google, model, credentials_file):
+            readers.append((model, credentials_file))
+            return lambda chunk: self.wav()
+        step = {"google_voice": {"models": ["gemini-3.8-flash-tts"]}}
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.object(google_voice, "agent_platform_reader", side_effect=reader):
+            legacy = self.legacy(directory, ["Part one.", "Part two."], client)
+            path, label = google_voice.narrate(legacy, "Part one. Part two.", step, Path(directory) / "out.mp3")
+            self.assertEqual(Path(path).read_bytes(), b"joined")
+        self.assertEqual(label, "Google Alnilam (gemini-3.8-flash-tts)")
+        self.assertEqual(readers, [("gemini-3.8-flash-tts", "jmio-google-api.json")])
+        self.assertEqual(client.synthesize_speech.call_count, 1)  # refused on the first part
+        self.assertEqual(self.leveled, [("part_1.wav", -21.0), ("part_2.wav", -21.0)])
+        legacy.generate_google_voice_audio.assert_not_called()
+
+    def test_agent_platform_sends_the_voice_and_style_and_keeps_the_form_google_accepts(self):
+        import base64
+        import wave
+
+        audio = {"inlineData": {"mimeType": "audio/L16;codec=pcm;rate=24000",
+                                "data": base64.b64encode(b"\x01\x00" * 2400).decode()}}
+        accepted = {"candidates": [{"content": {"parts": [audio]}}]}
+        session = mock.Mock()
+        session.post.side_effect = [
+            self.response(400, {"error": {"status": "INVALID_ARGUMENT", "message": 'Unknown name "voice"'}}),
+            self.response(200, accepted), self.response(200, accepted)]
+        read_part = google_voice.agent_platform_reader(google_voice.settings({}), "gemini-3.8-flash-tts",
+                                                       session=session, project="demo")
+        first = read_part("Part one.")
+        read_part("Part two.")
+        with wave.open(io.BytesIO(first)) as wav:
+            self.assertEqual((wav.getframerate(), wav.getnchannels(), wav.getnframes()), (24000, 1, 2400))
+        url = ("https://aiplatform.googleapis.com/v1/projects/demo/locations/global/publishers/google/models/"
+               "gemini-3.8-flash-tts:generateContent")
+        self.assertEqual([call.args[0] for call in session.post.call_args_list], [url] * 3)
+        bodies = [call.kwargs["json"] for call in session.post.call_args_list]
+        self.assertEqual(bodies[0]["generationConfig"]["speechConfig"]["voiceConfig"], {"voice": "Alnilam"})
+        self.assertEqual(bodies[1]["generationConfig"]["speechConfig"]["voiceConfig"],
+                         {"prebuiltVoiceConfig": {"voiceName": "Alnilam"}})
+        self.assertEqual(bodies[2]["generationConfig"], bodies[1]["generationConfig"])  # the accepted form is kept
+        self.assertEqual(bodies[2]["generationConfig"]["responseModalities"], ["AUDIO"])
+        part = bodies[2]["contents"][0]["parts"][0]
+        self.assertEqual(part["text"], "Part two.")
+        self.assertIn("professional podcast newsreader", part["speechMetadata"]["style"])
+
+    def test_agent_platform_access_refusals_are_raised_with_googles_reason(self):
+        session = mock.Mock()
+        session.post.return_value = self.response(403, {"error": {
+            "status": "PERMISSION_DENIED", "message": "Vertex AI API has not been used in project 1 before or it is disabled."}})
+        read_part = google_voice.agent_platform_reader(google_voice.settings({}), "gemini-3.8-flash-tts",
+                                                       session=session, project="1")
+        with self.assertRaises(RuntimeError) as raised:
+            read_part("Part one.")
+        self.assertIn("v1: 403 PERMISSION_DENIED: Vertex AI API has not been used", str(raised.exception))
+        self.assertEqual(session.post.call_count, 1)  # no other request form is tried
+        with self.assertRaisesRegex(RuntimeError, "no audio"):
+            google_voice.wav_from_response({"candidates": [{"finishReason": "SAFETY", "content": {"parts": []}}]})
+
     def test_google_voice_sample_counts_only_the_models_in_use_and_chirp_3(self):
         client = mock.Mock()
         client.synthesize_speech.side_effect = RuntimeError("NOT_FOUND")
