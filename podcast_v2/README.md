@@ -50,7 +50,9 @@ When ElevenLabs is out of credits or quota, the Google voice reads the episode
 files lists the Gemini-TTS models to use, newest first, the voice (Alnilam) and
 a short newsreader style prompt. The first model Google accepts reads the whole
 script; if none works, or a part comes back at an odd pace (skipped or dragged
-text), the whole script is read with Chirp 3 HD Alnilam at 1.08 instead.
+text), the whole script is read with Chirp 3 HD Alnilam at 1.08 instead. The
+list holds `gemini-3.1-flash-tts-preview`, the newest model the project could
+use on November 20, 2026 (the 3.5 and 3.8 names and 3.1 Pro were not supported).
 Gemini 2.5 Pro TTS is not in the list: the November 19 episode it read sounded
 worse than Chirp 3 HD. Gemini reads the script in parts and does not read every
 part at the same volume (one episode's two parts were 1.7 LU apart), so each

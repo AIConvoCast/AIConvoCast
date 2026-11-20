@@ -79,7 +79,7 @@
       },
       "google_voice": {
         "models": [
-          "gemini-3.8-flash-tts"
+          "gemini-3.1-flash-tts-preview"
         ],
         "voice": "Alnilam",
         "prompt": "Read this news script as a professional podcast newsreader: clear, natural and even, at a steady conversational pace, with the same tone and volume from start to finish. Say NVIDIA as en-VID-ee-uh, OpenAI as Open A I, and xAI as X A I."

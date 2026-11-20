@@ -287,9 +287,10 @@ def voice_sample(workflow, legacy, text_path=VOICE_SAMPLE_PATH):
     return path
 
 
-# Gemini-TTS models to compare, newest first. Names Google does not know are listed as unavailable.
-SAMPLE_MODELS = ("gemini-3.8-flash-tts", "gemini-3.8-flash-tts-preview", "gemini-3.1-flash-tts",
-                 "gemini-3.1-flash-tts-preview", "gemini-2.5-pro-tts", "gemini-2.5-flash-tts")
+# Gemini-TTS models to compare, newest first. Names Google does not know yet are listed as not
+# used, so a sample run shows when a newer model becomes available to the project.
+SAMPLE_MODELS = ("gemini-3.8-flash-tts", "gemini-3.1-flash-tts", "gemini-3.1-flash-tts-preview",
+                 "gemini-2.5-pro-tts", "gemini-2.5-flash-tts")
 
 
 def brightness(path):
