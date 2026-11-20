@@ -452,7 +452,21 @@ class EpisodeTimingTests(unittest.TestCase):
 
 
 class GoogleVoiceTests(unittest.TestCase):
-    """The Google fallback: Gemini-TTS with a style prompt, and Chirp 3 HD behind it."""
+    """The Google fallback: the newest Gemini-TTS model that works, each part leveled, Chirp 3 HD behind it."""
+
+    def setUp(self):
+        # Leveling and loudness need ffmpeg; their effect is checked in the audio-finishing tests.
+        self.leveled = []
+        patcher = mock.patch.object(google_voice, "level", side_effect=self.fake_level)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        patcher = mock.patch.object(google_voice, "loudness", side_effect=lambda path: -20.0 - len(self.leveled))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def fake_level(self, path, destination, target=google_voice.PART_LUFS):
+        self.leveled.append((Path(path).name, target))
+        return path
 
     @staticmethod
     def wav(seconds=0.6):
@@ -485,30 +499,36 @@ class GoogleVoiceTests(unittest.TestCase):
             side_effect=lambda text, voice, output: Path(output).write_bytes(b"chirp") and output)
         return legacy
 
-    def test_settings_come_from_the_voice_step_over_the_defaults(self):
+    def test_settings_list_models_newest_first_over_the_defaults(self):
         settings = google_voice.settings({"google_voice": {"voice": "Charon"}})
-        self.assertEqual((settings["model"], settings["voice"]), ("gemini-2.5-pro-tts", "Charon"))
-        self.assertIn("host of a daily AI news podcast", settings["prompt"])
+        self.assertEqual((settings["models"], settings["voice"]), (google_voice.DEFAULTS["models"], "Charon"))
+        self.assertIn("professional podcast newsreader", settings["prompt"])
+        self.assertEqual(google_voice.settings({"google_voice": {"model": "gemini-x-tts"}})["models"], ["gemini-x-tts"])
+        self.assertEqual(google_voice.settings({"google_voice": {"model": ""}})["models"], [])
+        self.assertNotIn("model", settings)
         for path in (run_podcast.WORKFLOW_PATH, run_podcast.TOPIC_WORKFLOW_PATH):
             step = next(s for s in run_podcast.load_json(path)["steps"] if s["type"] == "voice")
             self.assertEqual(google_voice.settings(step), google_voice.DEFAULTS)
+        # The model the November 19 episode found worse than Chirp 3 HD is not a fallback.
+        self.assertNotIn("gemini-2.5-pro-tts", google_voice.DEFAULTS["models"])
 
-    def test_gemini_reads_each_part_with_the_style_prompt_and_joins_them(self):
+    def test_each_part_is_read_with_the_prompt_leveled_and_joined(self):
         client = mock.Mock()
         client.synthesize_speech.return_value = SimpleNamespace(audio_content=self.wav())
+        model = google_voice.DEFAULTS["models"][0]
         with tempfile.TemporaryDirectory() as directory:
             legacy = self.legacy(directory, ["Part one.", "Part two."], client)
             path, label = google_voice.narrate(legacy, "Part one. Part two.", {}, Path(directory) / "out.mp3")
             self.assertEqual(Path(path).read_bytes(), b"joined")
-        self.assertEqual(label, "Google Alnilam (gemini-2.5-pro-tts)")
+        self.assertEqual(label, f"Google Alnilam ({model})")
         legacy.split_text_into_chunks.assert_called_once_with("Part one. Part two.", max_length=3000, preserve_words=True)
         first, second = client.synthesize_speech.call_args_list
         self.assertEqual(first.kwargs["input"][1]["text"], "Part one.")
         self.assertEqual(second.kwargs["input"][1]["text"], "Part two.")
-        self.assertIn("pause briefly between paragraphs", first.kwargs["input"][1]["prompt"])
-        self.assertEqual(first.kwargs["voice"][1],
-                         {"language_code": "en-US", "name": "Alnilam", "model_name": "gemini-2.5-pro-tts"})
+        self.assertIn("same tone and volume from start to finish", first.kwargs["input"][1]["prompt"])
+        self.assertEqual(first.kwargs["voice"][1], {"language_code": "en-US", "name": "Alnilam", "model_name": model})
         self.assertEqual(first.kwargs["audio_config"][1], {"audio_encoding": "LINEAR16", "sample_rate_hertz": 24000})
+        self.assertEqual(self.leveled, [("part_1.wav", -21.0), ("part_2.wav", -21.0)])
         self.assertEqual(len(legacy.merged), 2)
         legacy.generate_google_voice_audio.assert_not_called()
 
@@ -520,9 +540,22 @@ class GoogleVoiceTests(unittest.TestCase):
             path, _ = google_voice.narrate(legacy, "Only part.", {}, Path(directory) / "out.mp3")
             self.assertEqual(Path(path).read_bytes(), b"one part")
 
-    def test_a_gemini_failure_reads_the_whole_script_with_chirp_3(self):
+    def test_a_model_that_fails_hands_the_whole_script_to_the_next_one(self):
         client = mock.Mock()
-        client.synthesize_speech.side_effect = [SimpleNamespace(audio_content=self.wav()), RuntimeError("404 model")]
+        client.synthesize_speech.side_effect = [SimpleNamespace(audio_content=self.wav()), RuntimeError("404 model"),
+                                                SimpleNamespace(audio_content=self.wav()),
+                                                SimpleNamespace(audio_content=self.wav())]
+        step = {"google_voice": {"models": ["gemini-new-tts", "gemini-older-tts"]}}
+        with tempfile.TemporaryDirectory() as directory:
+            legacy = self.legacy(directory, ["Part one.", "Part two."], client)
+            path, label = google_voice.narrate(legacy, "Part one. Part two.", step, Path(directory) / "out.mp3")
+        self.assertEqual(label, "Google Alnilam (gemini-older-tts)")
+        models = [call.kwargs["voice"][1]["model_name"] for call in client.synthesize_speech.call_args_list]
+        self.assertEqual(models, ["gemini-new-tts", "gemini-new-tts", "gemini-older-tts", "gemini-older-tts"])
+
+    def test_when_no_model_works_chirp_3_reads_the_whole_script(self):
+        client = mock.Mock()
+        client.synthesize_speech.side_effect = RuntimeError("PERMISSION_DENIED")
         with tempfile.TemporaryDirectory() as directory:
             legacy = self.legacy(directory, ["Part one.", "Part two."], client)
             path, label = google_voice.narrate(legacy, "Part one. Part two.", {"google_fallback_voice_id": "1"},
@@ -540,11 +573,11 @@ class GoogleVoiceTests(unittest.TestCase):
                 _, label = google_voice.narrate(legacy, "Seventeen chars..", {}, Path(directory) / "out.mp3")
                 self.assertEqual(label, "Google Alnilam (Chirp 3 HD)")
 
-    def test_an_empty_model_uses_chirp_3_only(self):
+    def test_an_empty_model_list_uses_chirp_3_only(self):
         client = mock.Mock()
         with tempfile.TemporaryDirectory() as directory:
             legacy = self.legacy(directory, ["Part one."], client)
-            _, label = google_voice.narrate(legacy, "Part one.", {"google_voice": {"model": ""}}, Path(directory) / "out.mp3")
+            _, label = google_voice.narrate(legacy, "Part one.", {"google_voice": {"models": []}}, Path(directory) / "out.mp3")
         client.synthesize_speech.assert_not_called()
         self.assertEqual(label, "Google Alnilam (Chirp 3 HD)")
 
@@ -558,24 +591,38 @@ class GoogleVoiceTests(unittest.TestCase):
             with mock.patch.object(runner, "resolve", return_value="A short script."):
                 result = runner.run_voice(step)
             self.assertTrue(result.endswith("v2_narration_google.mp3"))
-        self.assertEqual(runner.narration, "Google Alnilam (gemini-2.5-pro-tts) (ElevenLabs credit/quota error)")
+        model = google_voice.DEFAULTS["models"][0]
+        self.assertEqual(runner.narration, f"Google Alnilam ({model}) (ElevenLabs credit/quota error)")
         legacy.generate_google_voice_audio.assert_not_called()
 
-    def test_google_voice_sample_counts_every_failed_voice(self):
+    def test_part_loudness_is_reported_before_leveling(self):
         client = mock.Mock()
-        client.synthesize_speech.side_effect = RuntimeError("PERMISSION_DENIED")
+        client.synthesize_speech.return_value = SimpleNamespace(audio_content=self.wav())
+        report = {}
+        with tempfile.TemporaryDirectory() as directory:
+            legacy = self.legacy(directory, ["Part one.", "Part two."], client)
+            google_voice.gemini(legacy, "Part one. Part two.", google_voice.settings({}), Path(directory) / "out.mp3",
+                                model="gemini-x-tts", report=report)
+        self.assertEqual(report["parts_lufs"], [-20.0, -21.0])
+
+    def test_google_voice_sample_counts_only_the_models_in_use_and_chirp_3(self):
+        client = mock.Mock()
+        client.synthesize_speech.side_effect = RuntimeError("NOT_FOUND")
         with tempfile.TemporaryDirectory() as directory:
             sample = Path(directory) / "sample.txt"
             sample.write_text("A short sample.")
             legacy = self.legacy(directory, ["A short sample."], client)
             legacy.generate_google_voice_audio = mock.Mock(return_value=None)
             workflow = run_podcast.load_json(run_podcast.WORKFLOW_PATH)
-            with mock.patch.dict(os.environ, {"GITHUB_STEP_SUMMARY": str(Path(directory) / "summary.md")}):
-                failures = run_podcast.google_voice_sample(workflow, legacy, text_path=sample)
+            with mock.patch.dict(os.environ, {"GITHUB_STEP_SUMMARY": str(Path(directory) / "summary.md")}), \
+                    mock.patch("podcast_v2.audio_polish.measure_loudness", side_effect=RuntimeError("no ffmpeg")):
+                failures = run_podcast.google_voice_sample(workflow, legacy, text_path=sample,
+                                                           models=["gemini-x-tts", "gemini-y-tts"])
             summary = (Path(directory) / "summary.md").read_text()
-        self.assertEqual(failures, 3)  # Gemini in Alnilam and Charon, then Chirp 3 HD
-        self.assertIn("Gemini-TTS gemini-2.5-pro-tts, Alnilam (the episode setting): FAILED (RuntimeError: PERMISSION_DENIED)", summary)
-        self.assertIn("Chirp 3 HD, Alnilam (the backup, and the voice used before): FAILED", summary)
+        self.assertEqual(failures, len(google_voice.DEFAULTS["models"]) + 1)  # the models in use and Chirp 3 HD
+        self.assertIn(f"- {google_voice.DEFAULTS['models'][0]} (the episode setting): not used (RuntimeError: NOT_FOUND)", summary)
+        self.assertIn("- gemini-x-tts: not used (RuntimeError: NOT_FOUND)", summary)
+        self.assertIn("- Chirp 3 HD Alnilam: FAILED", summary)
 
 
 class SyncFromSheetTests(unittest.TestCase):
@@ -1080,7 +1127,7 @@ class AudioPolishTests(unittest.TestCase):
             self.dir / "intro_music.wav", format="wav")
         Sine(300, sample_rate=44100).to_audio_segment(duration=4000).apply_gain(-28).export(
             self.dir / "narration.wav", format="wav")
-        Sine(500, sample_rate=44100).to_audio_segment(duration=3000).apply_gain(-18.5).export(
+        Sine(500, sample_rate=44100).to_audio_segment(duration=3000).apply_gain(-18.2).export(
             self.dir / "outro_music.wav", format="wav")
         paths = [self.dir / "intro_music.wav", self.dir / "narration.wav", self.dir / "outro_music.wav"]
         with contextlib.redirect_stdout(io.StringIO()) as log:
@@ -1091,6 +1138,19 @@ class AudioPolishTests(unittest.TestCase):
         self.assertEqual(leveled[2], paths[2])  # within tolerance: untouched
         self.assertIn("Clip 2 leveled", log.getvalue())
         self.assertEqual(self.polish.probe(leveled[1]), (44100, 1))
+
+    def test_narration_a_little_quieter_than_the_intro_is_matched_too(self):
+        # Chirp 3 HD narration sat about 1.3 LU under the intro and used to be left there.
+        from pydub.generators import Sine
+        Sine(440, sample_rate=44100).to_audio_segment(duration=3000).apply_gain(-18).export(
+            self.dir / "intro_music.wav", format="wav")
+        Sine(440, sample_rate=44100).to_audio_segment(duration=3000).apply_gain(-19.3).export(
+            self.dir / "narration.wav", format="wav")
+        paths = [self.dir / "intro_music.wav", self.dir / "narration.wav"]
+        with contextlib.redirect_stdout(io.StringIO()) as log:
+            leveled = self.polish.level_to_first(paths, self.dir)
+        self.assertIn("Clip 2 leveled", log.getvalue())
+        self.assertAlmostEqual(self.loudness(leveled[1]), self.loudness(paths[0]), delta=0.3)
 
     def test_leveling_problems_keep_the_clip(self):
         with contextlib.redirect_stdout(io.StringIO()):

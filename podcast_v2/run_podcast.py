@@ -287,47 +287,87 @@ def voice_sample(workflow, legacy, text_path=VOICE_SAMPLE_PATH):
     return path
 
 
-def google_voice_sample(workflow, legacy, text_path=VOICE_SAMPLE_PATH, compare=("Charon",)):
-    """Read the sample text the ways the Google fallback can: Gemini-TTS with the
-    workflow's settings, Gemini-TTS in each `compare` voice, and Chirp 3 HD.
-    No upload or email. Returns how many of them failed."""
+# Gemini-TTS models to compare, newest first. Names Google does not know are listed as unavailable.
+SAMPLE_MODELS = ("gemini-3.8-flash-tts", "gemini-3.8-flash-tts-preview", "gemini-3.1-flash-tts",
+                 "gemini-3.1-flash-tts-preview", "gemini-2.5-pro-tts", "gemini-2.5-flash-tts")
+
+
+def brightness(path):
+    """Loudness above 4 kHz relative to the whole clip, in dB: higher means brighter, more sibilant."""
+    import json as _json
+    import subprocess
+
+    def measure(filters):
+        err = subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", "-i", str(path), "-af",
+                              f"{filters}loudnorm=print_format=json", "-f", "null", "-"],
+                             check=True, capture_output=True, text=True).stderr
+        return float(_json.loads(re.findall(r"\{[^{}]*\}", err)[-1])["input_i"])
+
+    return measure("highpass=f=4000,") - measure("")
+
+
+def google_voice_sample(workflow, legacy, text_path=VOICE_SAMPLE_PATH, models=None, latest_script=False):
+    """Read the same text with each Gemini-TTS model in the episode's Google voice, and with
+    Chirp 3 HD. Each reading is leveled to the intro, as in an episode, and reported with its
+    length, pace, the loudness of each part before leveling and its brightness. No upload or
+    email. Returns how many of the models the workflow uses, plus Chirp 3 HD, failed."""
     from podcast_v2 import google_voice
-    from podcast_v2.audio_polish import measure_loudness
+    from podcast_v2.audio_polish import measure_loudness, normalize_loudness
     from pydub import AudioSegment
 
-    text = Path(text_path).read_text(encoding="utf-8").strip()
+    if latest_script:
+        text, source = (legacy.download_latest_text_file_from_gcs("scripts/") or ""), "the latest episode script"
+    else:
+        text, source = Path(text_path).read_text(encoding="utf-8"), Path(text_path).name
+    text = text.strip()
+    if not text:
+        raise RuntimeError(f"No text to read from {source}.")
     step = next(step for step in workflow["steps"] if step["type"] == "voice")
     google = google_voice.settings(step)
     out = Path(legacy.MP3_OUTPUT_DIR)
+    intro_file, _ = episode_clips(workflow)
+    try:
+        intro_lufs = float(measure_loudness(legacy.download_mp3_file_from_gcs(intro_file))["input_i"])
+    except Exception as error:
+        intro_lufs = None
+        print(f"  Intro loudness unavailable ({error}); samples are not leveled.")
     lines = ["## Google voice samples", "",
-             f"{len(text):,} characters of {Path(text_path).name}. Download the voice-sample "
-             "artifact below to listen.", ""]
+             f"{len(text):,} characters of {source}, read in the {google['voice']} voice. Each sample is "
+             + (f"leveled to the intro ({intro_lufs:.1f} LUFS), as in an episode. " if intro_lufs is not None else "")
+             + "Download the voice-sample artifact below to listen.", ""]
     failures = 0
+    used = set(google["models"])
 
-    def report(name, make):
-        nonlocal failures
+    def finish(name, path, extra=""):
+        audio_seconds = AudioSegment.from_file(path).duration_seconds
+        if intro_lufs is not None:
+            wav = normalize_loudness(path, Path(path).with_suffix(".leveled.wav"), intro_lufs)
+            legacy.export_audio(AudioSegment.from_wav(wav), path, bitrate=legacy.DEFAULT_MP3_EXPORT_BITRATE)
+        final = float(measure_loudness(path)["input_i"])
+        lines.append(f"- {name}: {Path(path).name}, {audio_seconds:.0f} seconds ({len(text) / audio_seconds:.1f} "
+                     f"characters per second){extra}, {final:.1f} LUFS after leveling, "
+                     f"brightness {brightness(path):.1f} dB.")
+
+    for model in list(dict.fromkeys(google["models"] + list(models or SAMPLE_MODELS))):
+        report = {}
+        tag = " (the episode setting)" if model in used else ""
         try:
-            path = make()
-            if not path or not Path(path).is_file():
-                raise RuntimeError("no audio was produced")
-            seconds = AudioSegment.from_file(path).duration_seconds
-            stats = measure_loudness(path)
-            lines.append(f"- {name}: {Path(path).name}, {seconds:.0f} seconds ({len(text) / seconds:.1f} "
-                         f"characters per second), {float(stats['input_i']):.1f} LUFS.")
+            path = google_voice.gemini(legacy, text, google, out / f"voice_sample_google_{model}.mp3",
+                                       model=model, report=report)
+            parts = ", ".join(f"{value} LUFS" if value is not None else "?" for value in report.get("parts_lufs", []))
+            finish(f"{model}{tag}", path, f"; {len(report.get('parts_lufs', []))} part(s) read at {parts} before leveling")
         except Exception as error:
-            failures += 1
-            lines.append(f"- {name}: FAILED ({type(error).__name__}: {str(error)[:300]}).")
-
-    variants = [google["voice"]] + [voice for voice in compare if voice != google["voice"]]
-    if google.get("model"):
-        for voice in variants:
-            settings = dict(google, voice=voice)
-            report(f"Gemini-TTS {google['model']}, {voice}" + (" (the episode setting)" if voice == google["voice"] else ""),
-                   lambda settings=settings: google_voice.gemini(
-                       legacy, text, settings, out / f"voice_sample_google_gemini_{settings['voice']}.mp3"))
+            failures += model in used
+            lines.append(f"- {model}{tag}: not used ({type(error).__name__}: {str(error)[:200]}).")
     chirp = legacy.get_google_chirp3_voice_name_by_id(step.get("google_fallback_voice_id", "1"))
-    report(f"Chirp 3 HD, {chirp} (the backup, and the voice used before)",
-           lambda: legacy.generate_google_voice_audio(text, chirp, out / f"voice_sample_google_chirp3_{chirp}.mp3"))
+    try:
+        path = legacy.generate_google_voice_audio(text, chirp, out / f"voice_sample_google_chirp3_{chirp}.mp3")
+        if not path or not Path(path).is_file():
+            raise RuntimeError("no audio was produced")
+        finish(f"Chirp 3 HD {chirp} (the backup, and the voice before Gemini)", path)
+    except Exception as error:
+        failures += 1
+        lines.append(f"- Chirp 3 HD {chirp}: FAILED ({type(error).__name__}: {str(error)[:200]}).")
     lines += ["", f"Style prompt: {google['prompt']}"]
     print("\n".join(lines))
     summary = os.getenv("GITHUB_STEP_SUMMARY")
@@ -641,8 +681,9 @@ def main(argv=None):
                         help="Narrate podcast_v2/voice_sample.txt with the workflow's ElevenLabs settings "
                              "(no fallback, upload or email).")
     parser.add_argument("--google-voice-sample", action="store_true",
-                        help="Read podcast_v2/voice_sample.txt with the Google fallback voices "
-                             "(Gemini-TTS and Chirp 3 HD) to compare them (no upload or email).")
+                        help="Read podcast_v2/voice_sample.txt (or, with GOOGLE_VOICE_TEXT=latest_script, the "
+                             "latest episode script) with each Gemini-TTS model and Chirp 3 HD to compare "
+                             "them; GOOGLE_VOICE_MODELS lists the models (no upload or email).")
     parser.add_argument("--preview-script", action="store_true",
                         help="Run through the script and title/description and show them "
                              "(no audio, uploads or email).")
@@ -680,7 +721,9 @@ def main(argv=None):
         voice_sample(workflow, legacy)
         return 0
     if args.google_voice_sample:
-        return 1 if google_voice_sample(workflow, legacy) else 0
+        models = [m.strip() for m in os.getenv("GOOGLE_VOICE_MODELS", "").split(",") if m.strip()]
+        latest = os.getenv("GOOGLE_VOICE_TEXT", "sample").strip() == "latest_script"
+        return 1 if google_voice_sample(workflow, legacy, models=models or None, latest_script=latest) else 0
     stop_after = "title" if args.preview_script else "research" if args.research_only else None
     # A preview must never reach the upload, audio or email steps.
     if stop_after and stop_after not in [step["id"] for step in workflow["steps"]]:
