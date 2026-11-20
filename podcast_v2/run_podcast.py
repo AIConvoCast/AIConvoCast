@@ -287,9 +287,10 @@ def voice_sample(workflow, legacy, text_path=VOICE_SAMPLE_PATH):
     return path
 
 
-# Gemini-TTS models to compare, newest first. Names Google does not know yet are listed as not
-# used, so a sample run shows when a newer model becomes available to the project.
-SAMPLE_MODELS = ("gemini-3.8-flash-tts", "gemini-3.1-flash-tts", "gemini-3.1-flash-tts-preview",
+# Gemini-TTS models to compare, newest first. The 3.8 models are read through Agent Platform,
+# since Cloud Text-to-Speech does not offer them; a model the project cannot use is listed with
+# Google's reason.
+SAMPLE_MODELS = ("gemini-3.8-flash-tts", "gemini-3.8-flash-lite-tts", "gemini-3.1-flash-tts-preview",
                  "gemini-2.5-pro-tts", "gemini-2.5-flash-tts")
 
 
@@ -353,13 +354,14 @@ def google_voice_sample(workflow, legacy, text_path=VOICE_SAMPLE_PATH, models=No
         report = {}
         tag = " (the episode setting)" if model in used else ""
         try:
-            path = google_voice.gemini(legacy, text, google, out / f"voice_sample_google_{model}.mp3",
-                                       model=model, report=report)
+            path, service = google_voice.read(legacy, text, google, out / f"voice_sample_google_{model}.mp3",
+                                              model, report=report)
             parts = ", ".join(f"{value} LUFS" if value is not None else "?" for value in report.get("parts_lufs", []))
-            finish(f"{model}{tag}", path, f"; {len(report.get('parts_lufs', []))} part(s) read at {parts} before leveling")
+            via = " through Agent Platform" if service == "Agent Platform" else ""
+            finish(f"{model}{tag}{via}", path, f"; {len(report.get('parts_lufs', []))} part(s) read at {parts} before leveling")
         except Exception as error:
             failures += model in used
-            lines.append(f"- {model}{tag}: not used ({type(error).__name__}: {str(error)[:200]}).")
+            lines.append(f"- {model}{tag}: not used ({type(error).__name__}: {str(error)[:600]}).")
     chirp = legacy.get_google_chirp3_voice_name_by_id(step.get("google_fallback_voice_id", "1"))
     try:
         path = legacy.generate_google_voice_audio(text, chirp, out / f"voice_sample_google_chirp3_{chirp}.mp3")
