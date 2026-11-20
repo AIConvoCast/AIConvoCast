@@ -35,7 +35,7 @@ The output format stays MP3 at 44.1 kHz/128 kbps, avoiding new subscription-tier
 requirements; existing chunk assembly and final episode finishing still apply.
 V4 audio arrives at about -26 LUFS, about 3.5 LU quieter than V3 narration and
 5 LU below the intro (-20.8 LUFS). When the episode is assembled, any clip more
-than 2 LU from the intro's loudness (V4 or Google narration) is leveled to
+than 0.5 LU from the intro's loudness (V4 or Google narration) is leveled to
 match it, so there is no jump in volume after the intro.
 
 V4 does not support Speed or Style, so those fields are omitted. V3 also did not
@@ -46,13 +46,21 @@ still ships; the log and the run page's **Narration** line say which model and
 voice were used.
 
 When ElevenLabs is out of credits or quota, the Google voice reads the episode
-(`google_voice.py`). It uses Gemini-TTS (`gemini-2.5-pro-tts`) in the Alnilam
-voice, steered by a podcast-host style prompt, which sounds more natural than
-the plain Chirp 3 HD read. The model, voice and prompt are in the voice step's
-`google_voice` entry in both workflow files. If Google refuses the Gemini
-request (an unknown model, no access, an unsupported field), the whole script
-is read with Chirp 3 HD Alnilam at 1.08, as before. To use Chirp 3 HD only, set
-`google_voice.model` to `""`.
+(`google_voice.py`). The voice step's `google_voice` entry in both workflow
+files lists the Gemini-TTS models to use, newest first, the voice (Alnilam) and
+a short newsreader style prompt. The first model Google accepts reads the whole
+script; if none works, or a part comes back at an odd pace (skipped or dragged
+text), the whole script is read with Chirp 3 HD Alnilam at 1.08 instead. The
+list holds `gemini-3.1-flash-tts-preview`, the newest model the project could
+use on November 20, 2026 (the 3.5 and 3.8 names and 3.1 Pro were not supported).
+Gemini 2.5 Pro TTS is not in the list: the November 19 episode it read sounded
+worse than Chirp 3 HD. Gemini reads the script in parts and does not read every
+part at the same volume (one episode's two parts were 1.7 LU apart), so each
+part is leveled to -21 LUFS before joining. To use Chirp 3 HD only, set
+`google_voice.models` to `[]`.
+
+When the episode is assembled, narration more than 0.5 LU from the intro's
+loudness is matched to it, whichever voice read it.
 
 To hear the voice before an episode uses it, run **Preview V2 Research** with
 `voice_sample` on. It narrates `voice_sample.txt` (two V4 requests, about 2,200
@@ -60,10 +68,15 @@ characters, with no fallback so a V4 problem shows as a failure), attaches the
 MP3 (leveled to the intro, as in an episode) to the run as the `voice-sample`
 artifact, reports its pace and loudness next to the intro, outro and latest
 saved audio, and uploads or emails nothing. With `google_voice_sample` on, it
-instead reads the same text with Gemini-TTS in the episode's Google voice and in
-Charon, and with Chirp 3 HD, and attaches all three MP3s (a few cents of Google
-Text-to-Speech). A voice that fails is listed on the run page and marks the run
-as failed.
+instead reads the short sample (or, with `google_voice_text` set to
+`latest_script`, the latest episode script) with each Gemini-TTS model in the
+episode's Google voice and with Chirp 3 HD. `google_voice_models` can name the
+models to try; blank tries the newest known names. Each reading is leveled to
+the intro as in an episode. The run page lists each part's loudness before
+leveling, the pace and the brightness (loudness above 4 kHz relative to the
+whole, in dB), and the MP3s are attached. Model names Google does not know are
+listed as not used. The run fails only if a model the workflow uses, or
+Chirp 3 HD, fails.
 
 To roll back narration, set `elevenlabs.Model` to `eleven_v3` in both workflow
 files. V2 still supports the existing Text to Speech helper for that model.

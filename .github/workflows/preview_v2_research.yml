@@ -6,8 +6,9 @@ name: Preview V2 Research
 # title/description. With voice_sample it instead narrates
 # podcast_v2/voice_sample.txt with the workflow's ElevenLabs voice and attaches
 # the MP3 to the run (no research). With google_voice_sample it instead reads
-# that text with the Google fallback voices (Gemini-TTS in the episode voice and
-# in Charon, and Chirp 3 HD) and attaches the MP3s to compare. No uploads or
+# that text (or the latest episode script) with each Gemini-TTS model in the
+# episode's Google voice, and with Chirp 3 HD, levels each like an episode and
+# attaches the MP3s to compare. No uploads or
 # email, and it does not count as the day's episode. Costs one research call
 # (a few tens of cents), plus the script and title calls when include_script is
 # on, about 2,200 ElevenLabs characters for a voice sample, or a few cents of
@@ -35,10 +36,21 @@ on:
         type: boolean
         default: false
       google_voice_sample:
-        description: 'Instead, read the sample with the Google fallback voices and attach the MP3s (no research)'
+        description: 'Instead, read sample text with each Google voice model and attach the MP3s (no research)'
         required: false
         type: boolean
         default: false
+      google_voice_text:
+        description: 'Google voice samples read: the short voice sample, or the latest episode script'
+        required: false
+        type: choice
+        options: [sample, latest_script]
+        default: sample
+      google_voice_models:
+        description: 'Google voice samples: Gemini-TTS models to compare, comma-separated (blank: newest known)'
+        required: false
+        type: string
+        default: ''
 
 jobs:
   preview:
@@ -97,6 +109,8 @@ jobs:
           # The shared pipeline module checks for both keys when it loads.
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          GOOGLE_VOICE_TEXT: ${{ inputs.google_voice_text }}
+          GOOGLE_VOICE_MODELS: ${{ inputs.google_voice_models }}
 
       - name: Attach voice sample
         if: ${{ always() && (inputs.voice_sample || inputs.google_voice_sample) }}

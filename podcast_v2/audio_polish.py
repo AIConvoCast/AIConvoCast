@@ -18,9 +18,10 @@ from pathlib import Path
 TARGET_LUFS = -16.0
 TRUE_PEAK_DB = -1.5
 LOUDNESS_RANGE = 11.0
-# Clips within this many LU of the intro keep their own level (Eleven v3 narration
-# sat about 1.5 LU below the intro, so it is left as it was).
-LEVEL_TOLERANCE_LU = 2.0
+# Clips within this many LU of the intro keep their own level. Anything further
+# off, including narration only 1-2 LU quieter, is matched to the intro so the
+# volume does not change when the narration starts or the outro begins.
+LEVEL_TOLERANCE_LU = 0.5
 
 
 def _ffmpeg(*args):
