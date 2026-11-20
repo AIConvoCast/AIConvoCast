@@ -51,9 +51,13 @@ files lists the Gemini-TTS models to use, newest first, the voice (Alnilam) and
 a short newsreader style prompt. The first model Google accepts reads the whole
 script; if none works, or a part comes back at an odd pace (skipped or dragged
 text), the whole script is read with Chirp 3 HD Alnilam at 1.08 instead. The
-list holds `gemini-3.1-flash-tts-preview`, the newest model the project could
-use on November 20, 2026 (the 3.5 and 3.8 names and 3.1 Pro were not supported).
-Gemini 2.5 Pro TTS is not in the list: the November 19 episode it read sounded
+list holds `gemini-3.8-flash-tts`, Google's newest TTS model (September 2026),
+then `gemini-3.1-flash-tts-preview` until Google retires that preview. The
+Cloud Text-to-Speech API does not offer the 3.8 models, so a model it reports as
+not supported is read through Google Cloud's Agent Platform (formerly Vertex
+AI) generateContent instead, with the same service account, voice and prompt;
+the project the service account belongs to already allows that. Gemini 2.5 Pro
+TTS is not in the list: the November 19 episode it read sounded
 worse than Chirp 3 HD. Gemini reads the script in parts and does not read every
 part at the same volume (one episode's two parts were 1.7 LU apart), so each
 part is leveled to -21 LUFS before joining. To use Chirp 3 HD only, set

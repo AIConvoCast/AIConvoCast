@@ -26,9 +26,9 @@ from pathlib import Path
 
 DEFAULTS = {
     # Newest first. A model Google rejects is skipped; Chirp 3 HD reads the script if none works.
-    # On November 20, 2026 this was the newest Gemini-TTS model the project could use: the
-    # 3.5 and 3.8 names, and 3.1 Pro, were "not supported" (see SAMPLE_MODELS in run_podcast.py).
-    "models": ["gemini-3.1-flash-tts-preview"],
+    # Gemini 3.8 Flash TTS (September 2026) is read through Agent Platform. The 3.1 preview,
+    # read through Cloud Text-to-Speech, backs it up until Google retires it.
+    "models": ["gemini-3.8-flash-tts", "gemini-3.1-flash-tts-preview"],
     "voice": "Alnilam",
     "prompt": (
         "Read this news script as a professional podcast newsreader: clear, natural and even, "
